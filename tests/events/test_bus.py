@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from fakeredis import aioredis
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -32,7 +32,7 @@ def test_stream_keys() -> None:
 
 # (g) publish → outbox → relay → XADD + published_at/stream_id
 async def test_publish_outbox_relay(
-    factory: async_sessionmaker[AsyncSession], redis: aioredis.FakeRedis
+    factory: async_sessionmaker[AsyncSession], redis: Redis
 ) -> None:
     bus = EventBus(redis)
     async with factory() as s:
@@ -63,7 +63,7 @@ async def test_publish_outbox_relay(
 
 
 async def test_publish_tool_called_streams_directly(
-    factory: async_sessionmaker[AsyncSession], redis: aioredis.FakeRedis
+    factory: async_sessionmaker[AsyncSession], redis: Redis
 ) -> None:
     bus = EventBus(redis)
     async with factory() as s:
@@ -78,7 +78,7 @@ async def test_publish_tool_called_streams_directly(
 # (h) at-least-once: mark 실패 → 다시 XADD
 async def test_relay_is_at_least_once(
     factory: async_sessionmaker[AsyncSession],
-    redis: aioredis.FakeRedis,
+    redis: Redis,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bus = EventBus(redis)
@@ -101,7 +101,7 @@ async def test_relay_is_at_least_once(
 
 # (i) subscribe: group, ack, 재전달, attempt 증가
 async def test_subscribe_ack_and_reclaim(
-    factory: async_sessionmaker[AsyncSession], redis: aioredis.FakeRedis
+    factory: async_sessionmaker[AsyncSession], redis: Redis
 ) -> None:
     bus = EventBus(redis)
     async with factory() as s:
@@ -143,7 +143,7 @@ async def test_subscribe_ack_and_reclaim(
 
 
 async def test_subscribe_all_projects_via_scan(
-    factory: async_sessionmaker[AsyncSession], redis: aioredis.FakeRedis
+    factory: async_sessionmaker[AsyncSession], redis: Redis
 ) -> None:
     bus = EventBus(redis)
     async with factory() as s:
@@ -162,7 +162,7 @@ async def test_subscribe_all_projects_via_scan(
 
 
 async def test_subscribe_loop_stops(
-    factory: async_sessionmaker[AsyncSession], redis: aioredis.FakeRedis
+    factory: async_sessionmaker[AsyncSession], redis: Redis
 ) -> None:
     bus = EventBus(redis)
 
@@ -182,7 +182,7 @@ async def test_subscribe_loop_stops(
 
 # (j) replay: DB seq 순, tool_called 제외, since_seq
 async def test_replay_from_db(
-    factory: async_sessionmaker[AsyncSession], redis: aioredis.FakeRedis
+    factory: async_sessionmaker[AsyncSession], redis: Redis
 ) -> None:
     bus = EventBus(redis)
     async with factory() as s:
@@ -202,7 +202,7 @@ async def test_replay_from_db(
 
 
 # (l) retry 스트림
-async def test_schedule_and_due_retries(redis: aioredis.FakeRedis) -> None:
+async def test_schedule_and_due_retries(redis: Redis) -> None:
     bus = EventBus(redis)
     assert RETRY_DELAYS == {1: 5, 2: 30, 3: 300, 4: 1800, 5: 7200}
     now = datetime(2026, 9, 13, 12, 0, 0, tzinfo=UTC)

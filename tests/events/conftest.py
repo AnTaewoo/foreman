@@ -1,14 +1,20 @@
-"""P1 이벤트 테스트 공용 픽스처: aiosqlite 파일 DB + fakeredis."""
+"""P1 이벤트 테스트 공용 픽스처: aiosqlite 파일 DB + **진짜 Redis** (D-32).
+
+Redis는 ``FOREMAN_TEST_REDIS_URL``(기본 ``redis://localhost:6379/15``, 테스트 전용 DB 번호).
+연결이 안 되면 skip이 아니라 **fail** — ``make test`` 전에 ``make docker-up``(또는 redis만).
+"""
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
-from fakeredis import aioredis
+from redis.asyncio import Redis
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from control_plane.config import Settings
@@ -38,10 +44,19 @@ async def session(factory: async_sessionmaker[AsyncSession]) -> AsyncIterator[As
         yield s
 
 
+TEST_REDIS_URL = os.environ.get("FOREMAN_TEST_REDIS_URL", "redis://localhost:6379/15")
+
+
 @pytest.fixture
-async def redis() -> AsyncIterator[aioredis.FakeRedis]:
-    r = aioredis.FakeRedis(decode_responses=True)
+async def redis() -> AsyncIterator[Redis]:
+    r: Redis = Redis.from_url(TEST_REDIS_URL, decode_responses=True)
+    try:
+        await r.ping()
+    except (RedisError, OSError) as exc:
+        pytest.fail(f"Redis not reachable at {TEST_REDIS_URL}: {exc} — run `make docker-up`")
+    await r.flushdb()
     yield r
+    await r.flushdb()
     await r.aclose()
 
 
