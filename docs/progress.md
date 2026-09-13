@@ -60,3 +60,4 @@
 | 2026-09-13T13:59 | P2.4 | Gate | make check pass (229), pre-commit pass, 시도 3/3 (E501 표 폭) | |
 | 2026-09-13T13:59 | P2.4 | 완료 | 보드 done | 726252f |
 | 2026-09-13T13:59 | P2.5 | 착수 | dry_run.py + 팩토리 | |
+| 2026-09-13T14:00 | P2.5 | Red | test_dry_run 10, ImportError dry_run/팩토리 | |
