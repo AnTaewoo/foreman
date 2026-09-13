@@ -77,3 +77,4 @@
 | 2026-09-13T14:19 | P3.2 | Gate | make check pass (260), pre-commit pass, 시도 2/3 | |
 | 2026-09-13T14:19 | P3.2 | 완료 | 보드 done | 034f9ff |
 | 2026-09-13T14:19 | P3.3 | 착수 | prompts/*.md + drafts.py | |
+| 2026-09-13T14:19 | P3.3 | Red | test_drafts 10, ModuleNotFoundError drafts | |
