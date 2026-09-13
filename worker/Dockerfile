@@ -7,7 +7,7 @@ RUN apt-get update \
     && pip install --no-cache-dir uv
 
 WORKDIR /app
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock CLAUDE.md ./
 # 대상 repo의 pytest/ruff를 돌려야 하므로 dev 그룹까지 설치한다
 RUN uv sync --frozen --all-groups --no-install-project
 COPY control_plane ./control_plane

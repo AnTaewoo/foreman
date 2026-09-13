@@ -154,8 +154,15 @@ def test_timeout_exit_3(tmp_path: Path, worktree: Path, remote: Path) -> None:
 async def test_file_publisher_matches_stream_fields(tmp_path: Path) -> None:
     from control_plane.events.schema import Actor, EventType, Subject
 
-    e = Event(project_id="P1", actor=Actor(type="agent", id="w"), type=EventType.TASK_STARTED,
-              subject=Subject(entity="task", id="T"), payload={"run_id": "R"}, correlation_id="G", causation_id=None)  # fmt: skip
+    e = Event(
+        project_id="P1",
+        actor=Actor(type="agent", id="w"),
+        type=EventType.TASK_STARTED,
+        subject=Subject(entity="task", id="T"),
+        payload={"run_id": "R"},
+        correlation_id="G",
+        causation_id=None,
+    )
     pub = FilePublisher(tmp_path / "ev.jsonl")
     out = await pub(e)
     assert out.id == e.id

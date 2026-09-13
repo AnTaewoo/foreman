@@ -1,4 +1,4 @@
-"""P4.4 (e) — 워커 컨테이너: docker build → sample_repo bare remote 볼륨 → 브랜치 push → exit 0. Docker 없으면 skip."""
+"""P4.4 (e) — 워커 컨테이너: build → bare remote 볼륨 → 브랜치 push → exit 0. Docker 없으면 skip."""
 
 from __future__ import annotations
 
@@ -45,7 +45,8 @@ def test_worker_container_pushes_branch(tmp_path: Path) -> None:
         ["git", "push", "-q", "origin", "main"],
     ):
         subprocess.run(cmd, cwd=seed, check=True, capture_output=True, env=env)
-    (tmp_path / "remote.git").chmod(0o777)
+    for path in [remote, *remote.rglob("*")]:  # 컨테이너 uid(10001)가 objects/에 쓸 수 있어야 한다
+        path.chmod(0o777 if path.is_dir() else 0o666)
     subprocess.run(
         ["docker", "build", "-q", "-t", "foreman-worker:test", "-f", "worker/Dockerfile", "."],
         cwd=ROOT,
@@ -79,16 +80,41 @@ def test_worker_container_pushes_branch(tmp_path: Path) -> None:
         "agent_id": "coding-1",
     }
     res = subprocess.run(
-        ["docker", "run", "--rm",
-         "-v", f"{remote}:/remote.git", "-v", f"{events_dir}:/events",
-         "-v", f"{FIXTURES / 'coding_scripts'}:/scripts:ro",
-         "-e", "WORKER_REPO_URL=/remote.git", "-e", "WORKER_BRANCH=ai/users-api/12-add-users-module",
-         "-e", f"WORKER_TASK_JSON={json.dumps(task)}", "-e", "WORKER_REDIS_URL=redis://none",
-         "-e", "WORKER_TOKEN=", "-e", "WORKER_TIMEOUT_MIN=5", "-e", "WORKER_LLM_PROVIDER=fake",
-         "-e", "WORKER_FAKE_SCRIPT=/scripts/pass.json",
-         "foreman-worker:test", "01TASK", "--publish-file", "/events/events.jsonl"],
-        capture_output=True, text=True, cwd=ROOT,
-    )  # fmt: skip
+        [
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{remote}:/remote.git",
+            "-v",
+            f"{events_dir}:/events",
+            "-v",
+            f"{FIXTURES / 'coding_scripts'}:/scripts:ro",
+            "-e",
+            "WORKER_REPO_URL=/remote.git",
+            "-e",
+            "WORKER_BRANCH=ai/users-api/12-add-users-module",
+            "-e",
+            f"WORKER_TASK_JSON={json.dumps(task)}",
+            "-e",
+            "WORKER_REDIS_URL=redis://none",
+            "-e",
+            "WORKER_TOKEN=",
+            "-e",
+            "WORKER_TIMEOUT_MIN=5",
+            "-e",
+            "WORKER_LLM_PROVIDER=fake",
+            "-e",
+            "WORKER_FAKE_SCRIPT=/scripts/pass.json",
+            "foreman-worker:test",
+            "01TASK",
+            "--publish-file",
+            "/events/events.jsonl",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
     assert res.returncode == 0, res.stdout[-2000:] + res.stderr[-2000:]
     heads = subprocess.run(
         ["git", "branch", "--list"], cwd=remote, capture_output=True, text=True, env=env

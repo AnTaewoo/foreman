@@ -1,4 +1,4 @@
-"""워커 entrypoint: ``python -m worker <task_id> [--publish-file P] [--workdir D]`` (설계 §10.3, §15.1).
+"""워커 entrypoint: ``python -m worker <task_id> [--publish-file P] [--workdir D]`` (§10.3, §15.1).
 
 설정은 **환경변수뿐** (Settings 클래스를 import하지 않는다 — 워커는 secrets를 받지 않는다, §12):
 
@@ -8,11 +8,11 @@
     WORKER_REDIS_URL      이벤트 XADD 대상 (--publish-file이 없을 때)
     WORKER_TOKEN          옵션(빈 값). MVP 1은 GitHub 쓰기가 Dry라 필요 없다
     WORKER_TIMEOUT_MIN    기본 45
-    WORKER_LLM_PROVIDER   fake | openai_compat | anthropic (D-33) + WORKER_LLM_BASE_URL/MODEL/API_KEY,
-                          fake는 WORKER_FAKE_SCRIPT(JSON 스크립트 파일)
+    WORKER_LLM_PROVIDER   fake | openai_compat | anthropic (D-33)
+    WORKER_LLM_BASE_URL / WORKER_LLM_MODEL / WORKER_LLM_API_KEY / WORKER_FAKE_SCRIPT(fake용 JSON)
 
 종료 코드: 0 done / 1 failed / 2 needs_decision·blocked / 3 timeout / 64 설정 오류.
-타임아웃이면 WIP 커밋+push 후 ``task.failed(reason=timeout)``·``run.finished(outcome=timeout)`` (D-28).
+타임아웃이면 WIP 커밋+push 후 ``task.failed(timeout)``·``run.finished(outcome=timeout)`` (D-28).
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ from agents.llm.anthropic import AnthropicProvider
 from agents.llm.base import ModelProvider
 from agents.llm.fake import FakeProvider
 from agents.llm.ollama import OllamaCompatProvider
-from control_plane.events.schema import Actor, Event, EventType, Subject
+from control_plane.events.schema import Actor, EntityType, Event, EventType, Subject
 from github_adapter.dry_run import DryRunGitHubClient
 from worker.publish import FilePublisher, RedisPublisher
 
@@ -114,29 +114,42 @@ def _wip_push(repo: Path, branch: str, env: Mapping[str, str]) -> None:
 async def _publish_timeout_events(
     publish: Publish, agent: CodingAgent, input: AgentInput, started: float
 ) -> None:
-    def ev(type_: EventType, entity: str, id_: str, payload: dict[str, Any]) -> Event:
+    def ev(type_: EventType, entity: EntityType, id_: str, payload: dict[str, Any]) -> Event:
         return Event(
             project_id=input.project_context.project_id,
             actor=Actor(type="agent", id=input.agent_id),
             type=type_,
-            subject=Subject(entity=entity, id=id_),  # type: ignore[arg-type]  # entity ∈ Literal
+            subject=Subject(entity=entity, id=id_),
             payload=payload,
             correlation_id=input.project_context.goal_id,
             causation_id=agent.last_event_id,
         )
 
     failed = await publish(
-        ev(EventType.TASK_FAILED, "task", input.task.id,
-           {"run_id": input.run_id, "reason": "timeout", "attempt": input.task.attempt})
-    )  # fmt: skip
+        ev(
+            EventType.TASK_FAILED,
+            "task",
+            input.task.id,
+            {"run_id": input.run_id, "reason": "timeout", "attempt": input.task.attempt},
+        )
+    )
     agent.last_event_id = failed.id
     await publish(
-        ev(EventType.RUN_FINISHED, "run", input.run_id, {
-            "outcome": "timeout", "agent_outcome": "timeout", "tokens_in": 0, "tokens_out": 0,
-            "cost_usd": 0.0, "duration_s": round(time.monotonic() - started, 3),
-            "error": f"timeout after {input.budget.max_seconds}s",
-        })
-    )  # fmt: skip
+        ev(
+            EventType.RUN_FINISHED,
+            "run",
+            input.run_id,
+            {
+                "outcome": "timeout",
+                "agent_outcome": "timeout",
+                "tokens_in": 0,
+                "tokens_out": 0,
+                "cost_usd": 0.0,
+                "duration_s": round(time.monotonic() - started, 3),
+                "error": f"timeout after {input.budget.max_seconds}s",
+            },
+        )
+    )
 
 
 async def _run(
