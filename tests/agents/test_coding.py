@@ -209,3 +209,31 @@ async def test_event_order(worktree: Path, spy: Spy) -> None:
         if prev is not None:
             assert e.causation_id == prev
         prev = e.id
+
+
+# PC-4 (기록): 새 파일만 owned면 기존 API를 못 본다 → spec 언급 경로 + 같은 디렉토리 파일
+async def test_related_files_include_spec_and_siblings(worktree: Path, spy: Spy) -> None:
+    from agents.coding import related_files
+    from agents.tools.base import ToolContext
+    from agents.tools.fs import FsTool
+
+    ctx = ToolContext(
+        worktree=worktree,
+        owned_paths=["src/app/users.py", "tests/test_users.py"],
+        run_id="01RUN",
+        task_id="01TASK",
+        project_id="P1",
+        goal_id="G1",
+        publish=spy.publish,
+        default_branch="main",
+        agent_id="coding-1",
+        last_event_id="EV0",
+    )
+    files = await related_files(
+        FsTool(ctx), ctx, spec="Import UserStore from `src/app/models.py`; see README.md."
+    )
+    assert "src/app/models.py" in files  # spec 언급
+    assert "src/app/main.py" in files and "tests/test_main.py" in files  # owned 디렉토리 형제
+    assert "README.md" in files
+    assert not any(p.startswith((".venv", "node_modules", ".ai-platform")) for p in files)
+    assert not any(k.endswith("users.py") for k in files)  # 아직 없는 파일은 제외

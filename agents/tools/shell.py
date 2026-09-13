@@ -47,6 +47,7 @@ class ShellTool:
         async with guarded(self._ctx, "shell", {"cmd": cmd, "timeout": timeout}):
             argv = _check(cmd)
             env = {k: v for k, v in os.environ.items() if k in SAFE_ENV_KEYS}
+            env["PYTHONDONTWRITEBYTECODE"] = "1"  # __pycache__가 커밋되지 않게 (PC-4 기록)
             proc = await asyncio.create_subprocess_exec(
                 *argv,
                 cwd=self._ctx.worktree,

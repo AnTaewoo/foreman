@@ -48,7 +48,11 @@ DEPENDENCY_FILES = re.compile(
 SYSTEM_PROMPT = """You are a Coding Agent working inside a git worktree of a real repository.
 Rules: modify only files under owned_paths; never add a dependency or change pyproject/package
 manifests; keep the existing conventions; make the smallest change that satisfies the task and
-its tests. Verification command: {test_command}."""
+its tests. Verification command: {test_command}.
+File paths are relative to the repository root. Copy the import style of the existing files shown
+(e.g. if existing tests import `app.x`, do the same — never invent a package prefix). Only call
+functions and attributes that exist in the files shown. When you change an existing file, return
+its complete content with every existing line preserved unless the task says to change it."""
 
 
 def is_dependency_file(path: str) -> bool:
@@ -184,7 +188,7 @@ class CodingAgent(BaseAgent):
                 input.model_copy(update={"project_context": pc}),
                 token_budget=self._token_budget,
                 system=system,
-                related_files=await _owned_files(fs, ctx),
+                related_files=await related_files(fs, ctx, spec=input.task.spec),
             )
             c = await llm(
                 [
@@ -204,7 +208,7 @@ class CodingAgent(BaseAgent):
                     input,
                     token_budget=self._token_budget,
                     system=system,
-                    related_files=await _owned_files(fs, ctx),
+                    related_files=await related_files(fs, ctx, spec=input.task.spec),
                 ).user_message(),
                 f"## Plan\n{state.get('plan', '')}",
             ]
@@ -455,13 +459,34 @@ class CodingAgent(BaseAgent):
         )
 
 
-async def _owned_files(fs: FsTool, ctx: ToolContext, limit: int = 12) -> dict[str, str]:
-    """owned_paths에 걸리는 기존 파일 내용(최대 limit개) — 편집 프롬프트의 관련 파일."""
+SKIP_DIRS = (".venv", "node_modules", ".git", ".ai-platform", "__pycache__", ".pytest_cache")
+_SPEC_PATH = re.compile(r"([\w./-]+\.[A-Za-z0-9]+)")  # 확장자 있는 경로 토큰(백틱 유무 무관)
+
+
+async def related_files(
+    fs: FsTool, ctx: ToolContext, *, spec: str = "", limit: int = 12
+) -> dict[str, str]:
+    """편집 프롬프트의 관련 파일 (PC-4 기록): owned_paths에 걸리는 기존 파일 → spec에 백틱으로
+    언급된 경로 → owned 파일과 같은 디렉토리의 기존 파일(import 관례·기존 API). 최대 limit개."""
+    listed = [
+        rel
+        for rel in await fs.list(".")
+        if not rel.startswith(SKIP_DIRS) and "/__pycache__/" not in rel
+    ]
+    owned = [rel for rel in listed if ctx.is_owned(rel)]
+    mentioned = [
+        p.strip("/") for p in _SPEC_PATH.findall(spec) if (ctx.worktree / p.strip("/")).is_file()
+    ]
+    owned_dirs = {Path(p).parent.as_posix() for p in ctx.owned_paths} | {
+        Path(p).parent.as_posix() for p in owned
+    }
+    siblings = [rel for rel in listed if Path(rel).parent.as_posix() in owned_dirs]
     out: dict[str, str] = {}
-    for rel in await fs.list("."):
-        if ctx.is_owned(rel) and len(out) < limit:
-            try:
-                out[rel] = await fs.read(rel)
-            except (ToolDenied, FileNotFoundError, UnicodeDecodeError):
-                continue
+    for rel in [*owned, *mentioned, *siblings]:
+        if rel in out or len(out) >= limit:
+            continue
+        try:
+            out[rel] = await fs.read(rel)
+        except (ToolDenied, FileNotFoundError, UnicodeDecodeError):
+            continue
     return out

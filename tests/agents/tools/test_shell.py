@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from agents.tools.base import ToolContext, ToolDenied, ToolTimeout
@@ -64,3 +66,9 @@ async def test_timeout(shell: ShellTool, worktree: object) -> None:
     )
     with pytest.raises(ToolTimeout):
         await shell.run("pytest -q tests/test_slow.py", timeout=1)
+
+
+# PC-4 (기록): pytest 실행 후 __pycache__가 생기면 `git add -A`가 .pyc를 커밋한다
+async def test_no_bytecode_written(shell: ShellTool, worktree: Path) -> None:
+    await shell.run("pytest -q", timeout=120)
+    assert not list(worktree.rglob("__pycache__"))
