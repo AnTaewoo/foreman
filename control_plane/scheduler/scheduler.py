@@ -86,6 +86,7 @@ class Scheduler:
         self.in_flight: set[str] = set()  # task_id
         self.activated_epics: set[str] = set()
         self._run_to_task: dict[str, str] = {}
+        self._task_run: dict[str, str] = {}  # task_id → 현재 run_id (오래된 run의 종료를 무시)
 
     # ------------------------------------------------------------------ 이벤트 입력
     async def handle(self, delivery: Delivery) -> None:
@@ -113,14 +114,23 @@ class Scheduler:
             await self._projection.apply(event)
 
     def _release(self, event: Event) -> None:
+        """슬롯 반환. 재배정 뒤에 도착한 **이전 run**의 종료 이벤트는 무시한다 (PC-4 기록)."""
         if event.type is EventType.RUN_FINISHED:
-            task_id = self._run_to_task.pop(event.subject.id, None) or str(
-                event.payload.get("task_id", "")
-            )
+            run_id = event.subject.id
+            task_id = self._run_to_task.pop(run_id, None) or str(event.payload.get("task_id", ""))
         else:
             task_id = event.subject.id
-        if task_id:
-            self.in_flight.discard(task_id)
+            run_id = str(event.payload.get("run_id") or "")
+            if run_id:
+                self._run_to_task.pop(run_id, None)
+        if not task_id:
+            return
+        current = self._task_run.get(task_id)
+        if run_id and current is not None and current != run_id:
+            log.debug("scheduler.release_stale", task_id=task_id, run_id=run_id, current=current)
+            return
+        self._task_run.pop(task_id, None)
+        self.in_flight.discard(task_id)
 
     # ------------------------------------------------------------------ 배정
     async def tick(self, project_id: str) -> list[str]:
@@ -148,6 +158,7 @@ class Scheduler:
             run_id = self._new_run_id()
             self.in_flight.add(cand.id)
             self._run_to_task[run_id] = cand.id
+            self._task_run[cand.id] = run_id
             prev = await self._publish(
                 project_id,
                 cand,
@@ -176,6 +187,7 @@ class Scheduler:
                 log.error("scheduler.launch_failed", task_id=cand.id, error=str(exc))
                 self.in_flight.discard(cand.id)
                 self._run_to_task.pop(run_id, None)
+                self._task_run.pop(cand.id, None)
                 await self._publish(
                     project_id,
                     cand,

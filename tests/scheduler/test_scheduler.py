@@ -329,3 +329,56 @@ async def test_ingest_worker_events(
         from control_plane.events.chain import verify_chain_db
 
         assert await verify_chain_db(s, PID) is True
+
+
+# PC-4 (기록): task.failed(attempt<max) 재배정 뒤 **이전 run**의 run.finished가 와도 슬롯을 돌려주면
+# 안 된다 — 돌려주면 DB가 아직 ready(새 task.assigned 미반영)라 세 번째 배정이 난다
+async def test_stale_run_finished_does_not_release_new_run(
+    factory: async_sessionmaker[AsyncSession], redis: Redis
+) -> None:
+    from worker.publish import RedisPublisher
+
+    h = Harness(factory, redis, max_workers=1)
+    await h.publish(*BOOTSTRAP, task_created("T1", [], ["src/a/**"]))
+    await h.pump()
+    run1 = h.launcher.specs[0].run_id
+    worker = RedisPublisher(redis)
+    agent = Actor(type="agent", id="coding-1")
+    await worker(ev(E.TASK_STARTED, "task", "T1", {"run_id": run1}, actor=agent))
+    await worker(
+        ev(E.RUN_STARTED, "run", run1, {"task_id": "T1", "agent_id": "coding-1", "model": "fake"})
+    )
+    await worker(
+        ev(
+            E.TASK_FAILED,
+            "task",
+            "T1",
+            {"run_id": run1, "reason": "scope_violation", "attempt": 1, "files": ["x"]},
+            actor=agent,
+        )
+    )
+    # 워커의 마지막 이벤트(run.finished)는 재배정 뒤에 소비된다
+    await worker(
+        ev(
+            E.RUN_FINISHED,
+            "run",
+            run1,
+            {
+                "outcome": "failed",
+                "agent_outcome": "failed",
+                "tokens_in": 1,
+                "tokens_out": 1,
+                "cost_usd": 0.0,
+                "duration_s": 1.0,
+                "error": "scope",
+            },
+            actor=agent,
+        )
+    )
+    await h.pump()
+    assigned = await h.events("task.assigned")
+    assert [e.subject_id for e in assigned] == ["T1", "T1"]  # 재배정 1회뿐
+    run2 = h.launcher.specs[1].run_id
+    assert h.scheduler.in_flight == {"T1"} and run2 != run1
+    assert (await h.task("T1")).status is TaskStatus.ASSIGNED
+    assert not any(e.projection_error for e in await h.events("task.assigned"))
