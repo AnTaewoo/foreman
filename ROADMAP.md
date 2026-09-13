@@ -178,7 +178,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 | P2.3 | `discussions.py` — GraphQL create/list/comment | P2.1 | done | b8bc6e7 |
 | P2.4 | `webhooks.py` — HMAC 검증 + 6종 이벤트 → 내부 Event 변환 + 슬래시 명령 훅 | P1.5 | done | 726252f |
 | P2.5 | `dry_run.py` + `__init__.py` — DryRun client 2개 + 팩토리 | P2.2, P2.3 | done | 2069ef5 |
-| **PC-2** | 어댑터 전 메서드 mock 통과, 실 네트워크 0 | P2.4, P2.5 | pending | |
+| **PC-2** | 어댑터 전 메서드 mock 통과, 실 네트워크 0 | P2.4, P2.5 | pass | docs/pc/PC-2.md |
 
 ### P3 — Orchestrator (`docs/prompts.md` P3)
 
@@ -219,6 +219,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 
 | 일시 | Task | 사유 | 옵션 / 필요한 조치 |
 |---|---|---|---|
+| 2026-09-13 | (기록) P2 | 구현 조정 | (1) `WebhookHandler(resolve_goal=, bot_login=)` 선택 인자 — correlation goal 해석, 앱 봇만 무시(github-actions는 처리) (2) `check_suite` 이벤트는 task_id 없음(PR 본문 부재) (3) P2.3 문서 확인은 공개 SDL 파일로 (reference 페이지는 fetch 시 색인만) — `docs/pc/PC-2.md` |
 | 2026-09-13 | (기록) PC-1 | 발견·조치 | run.tool_called이 relay보다 먼저 도착(D-31 직접 XADD) → Run 미존재 시 건너뛰고 run.started/finished가 재계산, 체인 밖 이벤트는 retry 대상 아님. `tool_call_count`는 replay로 복원 안 됨(설계). 상세 `docs/pc/PC-1.md` |
 | 2026-09-13 | (기록) P1.5 | scope_expand + 구현 조정 | scope_expand: `control_plane/events/schema.py`·`tests/events/test_schema.py` — `required_payload_keys`가 PEP 563(문자열 어노테이션) 아래에서 `NotRequired`를 못 보던 버그 수정 + 회귀 테스트(스키마 필드 변경 없음). 조정: (1) 엔티티 미존재(선행 이벤트 미도착)는 `OrderingError`로 `InvalidTransition`과 같은 retry 경로 (2) `run.tool_called` projection은 `tool_calls` 행 수 재계산(멱등) (3) `epic.created`/`task.created`/`run.started`는 force replay를 위해 upsert |
 | 2026-09-13 | (기록) P1.4 | scope_expand + 구현 조정 | scope_expand: `pyproject.toml`(fakeredis 제거)·`uv.lock` — 사용자 결정 D-32. 조정: (1) sqlite 경로 락은 루프별 `WeakKeyDictionary` + 세션 재진입 통과 + commit/rollback 훅 해제 (2) `run.tool_called`는 publish가 outbox 없이 바로 XADD(D-31, 감사 대상 아님) (3) `subscribe`는 `poll_once` 반복, XAUTOCLAIM attempt는 XPENDING `times_delivered` |

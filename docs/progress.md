@@ -64,3 +64,4 @@
 | 2026-09-13T14:01 | P2.5 | Green | dry_run.py 2 client + 팩토리, 238 passed | |
 | 2026-09-13T14:01 | P2.5 | Gate | make check pass (238), pre-commit pass, 시도 2/3 | |
 | 2026-09-13T14:01 | P2.5 | 완료 | 보드 done | 2069ef5 |
+| 2026-09-13T14:02 | PC-2 | 결과 | adapter 59 passed, grep 상수 1건, factory Dry → pass | |
