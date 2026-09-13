@@ -139,3 +139,8 @@
 | 2026-09-13T17:30 | P5.2 | Green | GoalRunner/ApprovalService/app wiring, members 키, 396 passed | 6742383 |
 | 2026-09-13T17:31 | P5.2 | Gate | make check pass (396), mypy clean, 시도 3/3 | |
 | 2026-09-13T17:31 | P5.2 | 완료 | 보드 done | 6742383 |
+| 2026-09-13T17:35 | P5.3 | 착수 | api/stream.py WS | |
+| 2026-09-13T17:37 | P5.3 | Red | test_stream 3건, WebSocketDisconnect | bd30f07 |
+| 2026-09-13T17:42 | P5.3 | Green | 연결당 group($)+replay(seq)+dedupe, 399 passed | 5681505 |
+| 2026-09-13T17:43 | P5.3 | Gate | make check pass (399), mypy clean, 시도 3/3 | |
+| 2026-09-13T17:43 | P5.3 | 완료 | 보드 done | 5681505 |
