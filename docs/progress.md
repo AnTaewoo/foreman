@@ -52,3 +52,6 @@
 | 2026-09-13T13:52 | P2.3 | 착수 | discussions.py GraphQL (D-09 문서 재확인) | |
 | 2026-09-13T13:54 | P2.3 | Red | test_discussions 7, ModuleNotFoundError discussions | |
 | 2026-09-13T13:55 | P2.3 | Green | discussions.py GraphQL(create/list/comment, 스키마 SDL로 확인), 212 passed | |
+| 2026-09-13T13:55 | P2.3 | Gate | make check pass (212), 시도 2/3 | |
+| 2026-09-13T13:55 | P2.3 | 완료 | 보드 done | b8bc6e7 |
+| 2026-09-13T13:55 | P2.4 | 착수 | webhooks.py HMAC + 6종 변환 + slash 훅 | |
