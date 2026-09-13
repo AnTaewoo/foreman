@@ -64,6 +64,7 @@ async def test_fake_full_flow(e2e: Any, tmp_path: Path, capsys: pytest.CaptureFi
     for b in summary.branches:
         assert b in out
     assert summary.tokens["calls"] == 2 + 3 * 2  # orchestrator 2 + Task당 3
+    assert "(dry-merge)" in out and "(auto-merge)" not in out  # P6.3: 머지는 플랫폼 컴포넌트(D-36)
     assert summary.tokens["tokens_in"] > 0 and summary.tokens["tokens_out"] > 0
     assert "Understanding" in out  # Plan 마크다운 6섹션 중 하나
 
