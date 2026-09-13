@@ -72,3 +72,4 @@
 | 2026-09-13T14:16 | P3.1 | Gate | make check pass (250), pre-commit pass, 시도 3/3 (E501·mypy omit) | |
 | 2026-09-13T14:16 | P3.1 | 완료 | 보드 done | 4815b4a |
 | 2026-09-13T14:16 | P3.2 | 착수 | context.py RepoSummary + sample_repo | |
+| 2026-09-13T14:17 | P3.2 | Red | test_context 9 + sample_repo 픽스처(자체 pytest 2 passed), ModuleNotFoundError context | |

@@ -1,0 +1,13 @@
+[project]
+name = "sample-app"
+version = "0.1.0"
+description = "A tiny FastAPI-flavored description that should NOT influence framework detection (we use flask)."
+requires-python = ">=3.12"
+dependencies = ["flask>=3.0", "pydantic>=2"]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
