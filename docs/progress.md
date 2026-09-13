@@ -129,3 +129,8 @@
 | 2026-09-13T16:45 | PC-4 | 판정 | pending — docs/pc/PC-4.md, 사용자 선택지 3개 | |
 | 2026-09-13T16:55 | PC-4 | 자동 | D-35 간단 Task 3개로 Ollama 3/3 PASS ×2 (Task당 1회차, 10–16s) | |
 | 2026-09-13T16:56 | PC-4 | 판정 | pass (조건부, D-35) — 사용자 결정, P5 진행 | |
+| 2026-09-13T17:00 | P5.1 | 착수 | api/ 라우터 4 파일 + deps + Idempotency 미들웨어 | |
+| 2026-09-13T17:02 | P5.1 | Red | tests/api 7건, create_app(factory=) TypeError | 1d3cde9 |
+| 2026-09-13T17:08 | P5.1 | Green | projects/goals/tasks/events + idempotency, 390 passed | 83b8ae0 |
+| 2026-09-13T17:09 | P5.1 | Gate | make check pass (390), mypy clean, 시도 2/3 | |
+| 2026-09-13T17:09 | P5.1 | 완료 | 보드 done | 83b8ae0 |

@@ -209,7 +209,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 
 | ID | 제목 | depends_on | status | commit |
 |---|---|---|---|---|
-| P5.1 | `api/` — 라우터 6개 + Idempotency-Key | PC-4 | todo | |
+| P5.1 | `api/` — 라우터 6개 + Idempotency-Key | PC-4 | done | 83b8ae0 |
 | P5.2 | Goal → Orchestrator 백그라운드, `/approve` 웹훅 → resume, 권한 검사 | P5.1 | todo | |
 | P5.3 | `WS /projects/{id}/stream` | P5.1 | todo | |
 | P5.4 | `scripts/e2e_dry_run.py` | P5.2 | todo | |
