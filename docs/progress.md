@@ -15,3 +15,4 @@
 | 2026-09-13T11:24 | PC-0 | 결과 | 3 서비스 healthy, /health 200, make check pass → pass | |
 | 2026-09-13T11:55 | P1.1 | 착수 | schema.py: EventType 44, 봉투, canonical/sign/verify, PAYLOAD_TYPES | |
 | 2026-09-13T11:56 | P1.1 | Red | test_schema.py 26케이스+파라미터, ImportError control_plane.events.schema | |
+| 2026-09-13T11:57 | P1.1 | Green | schema.py: EventType 44, Event/Actor/Subject, canonical/sign/verify, PAYLOAD_TYPES 14, 110 passed | |

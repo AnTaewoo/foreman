@@ -1,0 +1,346 @@
+"""이벤트 스키마 (설계 §4.1 Event, §4.2). PC-1 이후 **추가만** 가능 — 필드·이름 삭제/변경 금지.
+
+봉투 규약 (D-25, D-26, D-29):
+- ``correlation_id`` 필수. Goal 스코프 이벤트는 goal_id, Goal 밖(project/policy/budget/agent/control)은 project_id.
+- ``causation_id``는 직전 원인 이벤트 id. 루트 이벤트(사람·API 명령이 원인)는 ``None``. 필드 누락은 오류.
+- ``signature``는 발행자가 아니라 **저장 시점**에 ``events/chain.py``가 채운다. 발행자는 ``None``으로 만든다.
+  서명 대상은 ``canonical_json()`` 텍스트이며, 체인 순서는 DB append 순번(``seq``)이다.
+- payload 값은 JSON 원시형(str/int/float/bool/None/list/dict)만. NaN/Infinity/Decimal/datetime 금지 —
+  JSONB 왕복 후에도 canonical 텍스트가 안정적이어야 한다.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+from collections.abc import Sequence
+from datetime import UTC, datetime
+from enum import StrEnum
+from typing import Any, Literal, NotRequired, TypedDict, get_type_hints
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from ulid import ULID
+
+# --------------------------------------------------------------------------- EventType
+
+
+class EventType(StrEnum):
+    """``<domain>.<name>``. 설계 §4.2 표 + D-19 + D-27 + D-31 = 44개. 표의 행은 그룹, 프리픽스가 도메인."""
+
+    # goal
+    GOAL_CREATED = "goal.created"
+    GOAL_PLAN_PROPOSED = "goal.plan_proposed"
+    GOAL_ACTIVATED = "goal.activated"
+    GOAL_BLOCKED = "goal.blocked"
+    GOAL_COMPLETED = "goal.completed"
+    GOAL_CANCELLED = "goal.cancelled"
+    # epic (D-27)
+    EPIC_CREATED = "epic.created"
+    EPIC_ACTIVATED = "epic.activated"
+    EPIC_COMPLETED = "epic.completed"
+    # task
+    TASK_CREATED = "task.created"
+    TASK_ASSIGNED = "task.assigned"
+    TASK_STARTED = "task.started"
+    TASK_BLOCKED = "task.blocked"
+    TASK_COMPLETED = "task.completed"
+    TASK_FAILED = "task.failed"
+    TASK_RETRIED = "task.retried"
+    TASK_ESCALATED = "task.escalated"
+    TASK_CANCELLED = "task.cancelled"  # D-27
+    # run
+    RUN_STARTED = "run.started"
+    RUN_TOOL_CALLED = "run.tool_called"  # 감사 체인 밖 (D-31)
+    RUN_TOOL_DENIED = "run.tool_denied"  # D-31
+    RUN_ARTIFACT_PRODUCED = "run.artifact_produced"
+    RUN_FINISHED = "run.finished"
+    # decision
+    DECISION_OPENED = "decision.opened"
+    DECISION_AGENT_VOTED = "decision.agent_voted"
+    DECISION_HUMAN_RESPONDED = "decision.human_responded"
+    DECISION_RESOLVED = "decision.resolved"
+    DECISION_EXPIRED = "decision.expired"
+    # pr
+    PR_OPENED = "pr.opened"
+    PR_CHECKS_PASSED = "pr.checks_passed"
+    PR_CHECKS_FAILED = "pr.checks_failed"
+    PR_REVIEW_SUBMITTED = "pr.review_submitted"
+    PR_MERGED = "pr.merged"
+    PR_CLOSED = "pr.closed"
+    # policy / budget
+    POLICY_UPDATED = "policy.updated"
+    POLICY_TIER_OVERRIDDEN = "policy.tier_overridden"
+    BUDGET_WARNING = "budget.warning"
+    BUDGET_EXCEEDED = "budget.exceeded"
+    # control (project / agent / control)
+    PROJECT_CREATED = "project.created"
+    PROJECT_UPDATED = "project.updated"
+    PROJECT_PAUSED = "project.paused"
+    PROJECT_RESUMED = "project.resumed"
+    AGENT_KILLED = "agent.killed"
+    CONTROL_EMERGENCY_STOP = "control.emergency_stop"
+
+    @property
+    def domain(self) -> str:
+        """프리픽스 = 도메인 (예: ``budget.warning`` → ``budget``)."""
+        return self.value.partition(".")[0]
+
+
+# 감사 체인 밖 타입: events 테이블이 아니라 tool_calls 테이블에만 저장, 서명 없음 (D-31)
+UNCHAINED: frozenset[EventType] = frozenset({EventType.RUN_TOOL_CALLED})
+
+# --------------------------------------------------------------------------- 값 집합
+
+ActorType = Literal["agent", "human", "system", "github"]
+EntityType = Literal["project", "goal", "epic", "task", "run", "decision", "pr", "agent", "policy"]
+
+# Run.outcome (설계 §4.1) / AgentOutput.outcome (§5.1) — D-28. store/enums.py(P1.2)가 이 값을 미러한다.
+RUN_OUTCOMES: tuple[str, ...] = ("success", "failed", "timeout", "cancelled", "escalated")
+AGENT_OUTCOMES: tuple[str, ...] = ("done", "needs_decision", "blocked", "failed", "timeout")
+RunOutcomeValue = Literal["success", "failed", "timeout", "cancelled", "escalated"]
+AgentOutcomeValue = Literal["done", "needs_decision", "blocked", "failed", "timeout"]
+
+# --------------------------------------------------------------------------- 봉투
+
+
+class Actor(BaseModel):
+    """누가 일으켰나. id 규약: agent=agent_id, human=platform user id, system=컴포넌트명, github=login."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    type: ActorType
+    id: str
+
+
+class Subject(BaseModel):
+    """무엇에 대한 이벤트인가. ``pr``의 id는 PR 번호 문자열이고 payload에 ``task_id``를 동반한다."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    entity: EntityType
+    id: str
+
+
+_JSON_SCALARS = (str, int, float, bool, type(None))
+
+
+def _check_json_value(value: object, path: str) -> None:
+    """JSON 원시형만 허용. bool은 int의 서브클래스지만 type() 비교라 별도 처리 불필요."""
+    t = type(value)
+    if t is float:
+        if not math.isfinite(value):  # type: ignore[arg-type]  # t is float 확인됨
+            raise ValueError(f"payload{path}: non-finite float not allowed")
+        return
+    if t in _JSON_SCALARS:
+        return
+    if t is list:
+        for i, item in enumerate(value):  # type: ignore[attr-defined]  # t is list 확인됨
+            _check_json_value(item, f"{path}[{i}]")
+        return
+    if t is dict:
+        for k, item in value.items():  # type: ignore[attr-defined]  # t is dict 확인됨
+            if type(k) is not str:
+                raise ValueError(f"payload{path}: non-str key {k!r}")
+            _check_json_value(item, f"{path}.{k}")
+        return
+    raise ValueError(f"payload{path}: {t.__name__} is not a JSON value")
+
+
+def _new_ulid() -> str:
+    return str(ULID())
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+class Event(BaseModel):
+    """append-only 이벤트 (설계 §4.1). 불변. 서명은 ``signed()``로 새 객체를 만든다."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str = Field(default_factory=_new_ulid)
+    project_id: str
+    ts: datetime = Field(default_factory=_utc_now)
+    actor: Actor
+    type: EventType
+    subject: Subject
+    # payload 형태는 PAYLOAD_TYPES의 TypedDict로 문서화 (D-04). 값 타입은 JSON 원시형으로 제한.
+    payload: dict[str, Any] = Field(default_factory=dict)  # Any: 이벤트 타입별 형태가 다름
+    correlation_id: str
+    causation_id: str | None
+    signature: str | None = None
+
+    @field_validator("ts")
+    @classmethod
+    def _normalize_utc(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
+        return v.astimezone(UTC)
+
+    @field_validator("payload")
+    @classmethod
+    def _json_only(cls, v: dict[str, Any]) -> dict[str, Any]:
+        _check_json_value(v, "")
+        return v
+
+
+# --------------------------------------------------------------------------- canonical / sign / verify
+
+
+def canonical_json(event: Event) -> str:
+    """서명 대상 텍스트. 키 정렬, 공백 없음, 비ASCII 유지, ``signature`` 제외, NaN 금지."""
+    body = event.model_dump(mode="json", exclude={"signature"})
+    return json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+
+
+def sign(prev_signature: str | None, canonical: str) -> str:
+    """SHA-256(prev ‖ "\\n" ‖ canonical). 루트는 prev=None(빈 문자열)."""
+    data = (prev_signature or "") + "\n" + canonical
+    return hashlib.sha256(data.encode("utf-8")).hexdigest()
+
+
+def signed(event: Event, signature: str) -> Event:
+    """서명이 채워진 사본."""
+    return event.model_copy(update={"signature": signature})
+
+
+def verify_chain(events: Sequence[Event]) -> bool:
+    """주어진 순서대로 체인을 재계산해 전부 일치하면 True. 미서명 이벤트가 있으면 False."""
+    prev: str | None = None
+    for event in events:
+        if event.signature is None:
+            return False
+        if sign(prev, canonical_json(event)) != event.signature:
+            return False
+        prev = event.signature
+    return True
+
+
+# --------------------------------------------------------------------------- payload 형태 (D-04)
+# TypedDict는 문서화 + append 시 필수 키 검사에만 쓴다. 값 타입은 강제하지 않는다 (동결 후 강타입화는 "추가").
+
+
+class ProjectCreatedPayload(TypedDict):
+    name: str
+    repo: str  # repo_full_name 또는 로컬 경로
+    default_branch: str
+
+
+class GoalCreatedPayload(TypedDict):
+    title: str
+    description: str
+
+
+class GoalPlanProposedPayload(TypedDict):
+    plan_discussion_number: int
+    revision: int  # /changes 재제출이면 2 이상 (B6)
+
+
+class EpicCreatedPayload(TypedDict):
+    goal_id: str
+    title: str
+    order: int
+    milestone_number: int | None
+
+
+class TaskCreatedPayload(TypedDict):
+    epic_id: str
+    epic_title: str
+    title: str
+    spec: str
+    kind: str
+    role_required: str
+    depends_on: list[str]  # task id (제목이 아님)
+    owned_paths: list[str]
+    risk_tier: str
+    issue_number: int | None  # 있으면 draft→ready (D-20)
+    issue_url: str | None
+    max_attempts: NotRequired[int]
+
+
+class TaskAssignedPayload(TypedDict):
+    agent_id: str
+    run_id: str
+
+
+class TaskStartedPayload(TypedDict):
+    run_id: str
+
+
+class TaskCompletedPayload(TypedDict):
+    run_id: str
+    pr_number: NotRequired[int]
+
+
+class TaskFailedPayload(TypedDict):
+    run_id: str | None  # 기동 실패도 run_id를 가진다(Scheduler가 발급) — 없을 때만 None
+    reason: str  # launch_failed | scope_violation | tests_failed | timeout | ...
+    attempt: int
+    files: NotRequired[list[str]]
+
+
+class RunStartedPayload(TypedDict):
+    task_id: str
+    agent_id: str
+    model: str
+
+
+class RunToolCalledPayload(TypedDict):
+    tool: str
+    args_digest: str  # 인자 sha256 — 비밀값·파일 내용은 싣지 않는다
+    duration_ms: NotRequired[int]
+
+
+class RunToolDeniedPayload(TypedDict):
+    tool: str
+    reason: str
+    args_digest: str
+
+
+class RunFinishedPayload(TypedDict):
+    outcome: RunOutcomeValue  # Run.outcome (D-28)
+    agent_outcome: AgentOutcomeValue  # AgentOutput.outcome 원값
+    tokens_in: int
+    tokens_out: int
+    cost_usd: float
+    duration_s: float
+    error: str | None
+
+
+class PrOpenedPayload(TypedDict):
+    task_id: str
+    run_id: str
+    pr_number: int
+    head: str
+    base: str
+    draft: NotRequired[bool]
+    url: NotRequired[str]
+
+
+PAYLOAD_TYPES: dict[EventType, type] = {
+    EventType.PROJECT_CREATED: ProjectCreatedPayload,
+    EventType.GOAL_CREATED: GoalCreatedPayload,
+    EventType.GOAL_PLAN_PROPOSED: GoalPlanProposedPayload,
+    EventType.EPIC_CREATED: EpicCreatedPayload,
+    EventType.TASK_CREATED: TaskCreatedPayload,
+    EventType.TASK_ASSIGNED: TaskAssignedPayload,
+    EventType.TASK_STARTED: TaskStartedPayload,
+    EventType.TASK_COMPLETED: TaskCompletedPayload,
+    EventType.TASK_FAILED: TaskFailedPayload,
+    EventType.RUN_STARTED: RunStartedPayload,
+    EventType.RUN_TOOL_CALLED: RunToolCalledPayload,
+    EventType.RUN_TOOL_DENIED: RunToolDeniedPayload,
+    EventType.RUN_FINISHED: RunFinishedPayload,
+    EventType.PR_OPENED: PrOpenedPayload,
+}
+
+
+def required_payload_keys(event_type: EventType) -> frozenset[str]:
+    """등록된 TypedDict의 필수 키. 미등록 타입은 빈 집합(검사 안 함)."""
+    td = PAYLOAD_TYPES.get(event_type)
+    if td is None:
+        return frozenset()
+    get_type_hints(td)  # forward ref 해소 (from __future__ import annotations)
+    return frozenset(td.__required_keys__)
