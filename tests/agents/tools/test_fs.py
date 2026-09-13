@@ -84,7 +84,7 @@ async def test_events_for_allowed_and_denied(fs: FsTool, spy: Spy) -> None:
     assert ok.subject.entity == "run" and ok.subject.id == "01RUN"
     assert ok.payload["tool"] == "fs.read" and len(ok.payload["args_digest"]) == 64
     assert ok.correlation_id == "G1" and ok.causation_id == "EV0"
-    assert denied.causation_id == ok.id  # causation 체인
+    assert denied.causation_id == "EV0"  # tool_called는 체인 밖 → causation 커서를 안 옮긴다 (D-31)
     assert denied.payload["tool"] == "fs.read" and "secret" in denied.payload["reason"]
     assert ".env" not in denied.payload["args_digest"]
     for e in spy.events:

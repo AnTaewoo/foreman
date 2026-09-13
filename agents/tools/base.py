@@ -147,7 +147,8 @@ class ToolContext:
             causation_id=self.last_event_id,
         )
         out = await self.publish(event)
-        self.last_event_id = out.id
+        if type_ is not EventType.RUN_TOOL_CALLED:  # 체인 밖 이벤트는 causation 커서를 옮기지 않는다 (D-31)
+            self.last_event_id = out.id
         return out
 
 

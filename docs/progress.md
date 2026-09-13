@@ -108,3 +108,4 @@
 | 2026-09-13T15:44 | P4.2 | 완료 | 보드 done | 6be7531 |
 | 2026-09-13T15:44 | P4.3 | 착수 | agents/coding.py LangGraph 루프 + 스크립트 픽스처 | |
 | 2026-09-13T15:44 | P4.3 | Red | test_coding 7 + coding_scripts 5, ModuleNotFoundError agents.coding | |
+| 2026-09-13T15:47 | P4.3 | Green | agents/coding.py LangGraph 루프(pass/retry/fail/scope/dependency), 363 passed | |
