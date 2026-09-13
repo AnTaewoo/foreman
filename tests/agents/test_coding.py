@@ -337,4 +337,5 @@ async def test_retry_prompt_asks_for_diagnosis(worktree: Path, remote: Path, spy
     assert out.outcome == "done"
     retry = calls[2][-1].content  # plan, edit 1, edit 2(재시도)
     assert "Previous attempt 1 failed" in retry
-    assert "test you wrote" in retry and "expectation" in retry
+    flat = " ".join(retry.split())  # 프롬프트 파일의 줄바꿈 무시
+    assert "test you wrote" in flat and "same object the code uses" in flat  # 진단 1(a)

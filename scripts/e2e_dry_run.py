@@ -114,14 +114,26 @@ FAKE_DECOMPOSE: dict[str, Any] = {
 
 
 class Counting:
-    def __init__(self, inner: ModelProvider) -> None:
+    def __init__(self, inner: ModelProvider, dump: Path | None = None) -> None:
         self.inner, self.calls, self.tin, self.tout = inner, 0, 0, 0
+        self.dump = dump
 
     async def complete(self, messages: Any, **kw: Any) -> Completion:
         c = await self.inner.complete(messages, **kw)
         self.calls += 1
         self.tin += c.tokens_in
         self.tout += c.tokens_out
+        if self.dump is not None:
+            self.dump.parent.mkdir(parents=True, exist_ok=True)
+            with self.dump.open("a", encoding="utf-8") as fh:
+                rec = {
+                    "call": self.calls,
+                    "schema": getattr(kw.get("schema"), "__name__", None),
+                    "system": kw.get("system"),
+                    "prompt": [m.content for m in messages],
+                    "text": c.text,
+                }
+                fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
         return c
 
 
@@ -170,6 +182,7 @@ async def run(argv: list[str]) -> Summary:
     ap.add_argument(
         "--model", default=None, help="openai_compat 모델 덮어쓰기 (예: qwen2.5-coder:14b)"
     )
+    ap.add_argument("--dump", default=None, help="LLM 요청/응답 JSON-lines 디렉토리 (X.2 판정용)")
     args = ap.parse_args(argv)
     structlog.configure(
         processors=[
@@ -248,7 +261,8 @@ async def run(argv: list[str]) -> Summary:
     orch_base: ModelProvider = (
         FakeProvider(script=[FAKE_PLAN, FAKE_DECOMPOSE]) if args.fake else get_provider(settings)
     )
-    orch = Counting(orch_base)
+    dump_dir = Path(args.dump) if args.dump else None
+    orch = Counting(orch_base, dump_dir / "orchestrator.jsonl" if dump_dir else None)
 
     async def do_emit(state: OrchestratorState) -> dict[str, Any]:
         return await emit_mod.emit(state, github=github, publish=publish)
@@ -327,7 +341,8 @@ async def run(argv: list[str]) -> Summary:
             if args.fake
             else get_provider(settings)
         )
-        counting = Counting(base)
+        issue = spec.task_json["task"].get("issue_number") or spec.task_id
+        counting = Counting(base, dump_dir / f"{issue}.jsonl" if dump_dir else None)
         coding_counts.append(counting)
         agent = CodingAgent(
             publish=RedisPublisher(redis),

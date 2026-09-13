@@ -21,7 +21,8 @@ Task Graph / Decisions Expected / Budget Estimate):
 - "understanding": 3–8 sentences. What the repository is, where the change goes, constraints you see.
 - "acceptance_criteria": list of testable statements (each becomes a checkbox "AC-n").
 - "epics": list of {{"title", "order", "summary", "task_count", "risk_tier"}} — 1 to 4 epics,
-  risk_tier one of T0/T1/T2/T3 (T2+ means a human decision is expected).
+  risk_tier one of T0/T1/T2/T3 (T2+ means a human decision is expected). Tests belong to the
+  feature they verify: no separate "tests" epic.
 - "task_graph": numbered tasks "T-1: <short title>" one per line, then dependency arrows using
   those numbers, e.g. "T-1 → T-2, T-1 → T-3, T-2 → T-4". Tasks that touch different files should
   not depend on each other. The decomposition step will follow this numbering.

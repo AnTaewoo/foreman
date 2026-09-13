@@ -47,10 +47,12 @@ Rules:
 - "depends_on" refers to other Task titles in this same list. No cycles, no self reference.
 - Titles must be unique. Every "epic" must be one of the titles in "epics".
 - "spec" must state, for the tests the Task adds: the test file, each test name, and the exact
-  expected values it asserts (e.g. `add_user("ann") == {{"id": 1, "name": "ann"}}`). Tests must build
-  fresh state inside each test (new store/app per test) — never assume ids left by other tests.
-  Use the import style of the existing tests (see pytest `pythonpath` in the config).
+  expected values it asserts (e.g. `add_user("ann") == {{"id": 1, "name": "ann"}}`). Tests start
+  from fresh state of the same objects the code uses (clear the module-level store the app reads,
+  or build the app fresh) — never assume ids left by other tests, never fill a separate object the
+  code does not read. Use the import style of the existing tests (see pytest `pythonpath`).
 - A Task that would add a dependency or change a schema/public API gets estimated_tier "T2" and
   says so in its spec.
 - Only Tasks that serve the Acceptance Criteria. No "optional", "refactor" or "nice to have" Tasks.
-- Put tests inside the same Task as the code they verify unless the plan says otherwise.
+- Tests live in the same Task as the code they verify. Never make separate "write tests for X"
+  Tasks.
