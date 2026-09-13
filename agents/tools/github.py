@@ -1,4 +1,4 @@
-"""github 툴: Coding Agent가 쓸 수 있는 GitHub 동작은 ``open_pr``와 ``comment``뿐 (§5.2). base는 default 브랜치만."""
+"""github 툴: Coding Agent의 GitHub 동작은 ``open_pr``·``comment``뿐 (§5.2). base는 default만."""
 
 from __future__ import annotations
 

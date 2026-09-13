@@ -1,4 +1,4 @@
-"""shell 툴: 허용된 명령 프리픽스만, 셸 없이 ``create_subprocess_exec`` (CLAUDE.md, §5.2 sandbox)."""
+"""shell 툴: 허용된 명령 프리픽스만, 셸 없이 ``create_subprocess_exec`` (CLAUDE.md, §5.2)."""
 
 from __future__ import annotations
 

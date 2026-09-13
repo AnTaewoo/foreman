@@ -1,7 +1,7 @@
 """Agent 툴 공통 (설계 §5.2 Coding Agent 도구, §10.3, §12). **거부 > 허용.**
 
-- ``ToolContext``: worktree 경계, owned_paths, Run/Task 식별자, 이벤트 발행. 비밀값·파일 내용은 이벤트에
-  싣지 않는다 — 인자는 sha256 digest만 (D-31).
+- ``ToolContext``: worktree 경계, owned_paths, Run/Task 식별자, 이벤트 발행. 비밀값·파일 내용은
+  이벤트에 싣지 않는다 — 인자는 sha256 digest만 (D-31).
 - 허용된 호출 → ``run.tool_called``(subject=run, 체인 밖). 거부 → ``run.tool_denied``(감사 체인).
 - ``guarded(ctx, tool, args)``: 호출을 감싸 시간을 재고 결과에 따라 두 이벤트 중 하나를 발행한다.
 """

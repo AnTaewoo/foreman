@@ -1,4 +1,4 @@
-"""fs 툴: worktree 안에서만 read / write / list. secrets 읽기·쓰기 금지, write는 owned_paths 안에서만 (§12)."""
+"""fs 툴: worktree 안에서만 read/write/list. secrets 금지, write는 owned_paths 안 (§12)."""
 
 from __future__ import annotations
 

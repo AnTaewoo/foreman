@@ -1,4 +1,4 @@
-"""git 툴: 브랜치 규약 ``ai/<epic-slug>/<issue>-<task-slug>``(§7.3), 기본 브랜치 push 거부(CLAUDE.md), 트레일러(§6.3).
+"""git 툴: 브랜치 규약 ``ai/<epic>/<issue>-<slug>``(§7.3), 기본 브랜치 push 거부, 트레일러(§6.3).
 
 push 대상은 로컬 bare remote(D-14)든 실 GitHub든 ``origin``. 커밋 작성자는 에이전트 고정.
 """
@@ -69,7 +69,8 @@ class GitTool:
             await _git(self._wt, "add", "-A")
             if not await _git(self._wt, "status", "--porcelain"):
                 return None
-            trailer = f"Task #{issue_number if issue_number is not None else '?'} / Run {self._ctx.run_id}"
+            n = issue_number if issue_number is not None else "?"
+            trailer = f"Task #{n} / Run {self._ctx.run_id}"
             await _git(self._wt, "commit", "-q", "-m", f"{message}\n\n{trailer}")
             return (await _git(self._wt, "rev-parse", "HEAD")).strip()
 

@@ -43,8 +43,16 @@ async def test_write_outside_owned_paths_denied(fs: FsTool) -> None:
 
 
 async def test_secret_write_denied_even_if_owned(worktree: Path, spy: Spy) -> None:
-    ctx = ToolContext(worktree=worktree, owned_paths=["**"], run_id="R", task_id="T", project_id="P",
-                      goal_id="G", publish=spy.publish, last_event_id=None)  # fmt: skip
+    ctx = ToolContext(
+        worktree=worktree,
+        owned_paths=["**"],
+        run_id="R",
+        task_id="T",
+        project_id="P",
+        goal_id="G",
+        publish=spy.publish,
+        last_event_id=None,
+    )
     fs = FsTool(ctx)
     for p in (".env", "src/app/secret.pem", "src/app/id_rsa"):
         with pytest.raises(ToolDenied, match="secret"):
@@ -66,7 +74,7 @@ async def test_read_write_list(fs: FsTool, worktree: Path) -> None:
         await fs.read("src/app/nope.py")
 
 
-# (m) 이벤트: 허용 → run.tool_called(subject=run, args_digest), 거부 → run.tool_denied; 비밀값·내용 없음
+# (m) 허용 → run.tool_called(subject=run, args_digest), 거부 → run.tool_denied; 비밀값·내용 없음
 async def test_events_for_allowed_and_denied(fs: FsTool, spy: Spy) -> None:
     await fs.read("src/app/main.py")
     with pytest.raises(ToolDenied):

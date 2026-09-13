@@ -1,4 +1,4 @@
-"""P4 공용 픽스처: bare remote(D-14), sample_repo 사본 worktree(미끼 secret 포함), publish spy, ToolContext."""
+"""P4 공용 픽스처: bare remote(D-14), sample_repo 사본 worktree(미끼 secret), spy, ToolContext."""
 
 from __future__ import annotations
 
