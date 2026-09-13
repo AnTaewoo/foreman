@@ -86,6 +86,7 @@ async def test_idempotent_writes(dry: DryRunGitHubClient) -> None:
     assert c3.id != c1.id and c3.created is True
     assert (await dry.create_branch(REPO, "b", "main")).created is True
     assert (await dry.create_branch(REPO, "b", "main")).created is False
+    assert len(await dry.ensure_labels(REPO)) == 22
     assert await dry.ensure_labels(REPO) == []  # 두 번째는 없음
     assert await dry.update_issue_status_label(REPO, a.number, "ready") is True
     assert await dry.update_issue_status_label(REPO, a.number, "ready") is False

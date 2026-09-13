@@ -61,3 +61,4 @@
 | 2026-09-13T13:59 | P2.4 | 완료 | 보드 done | 726252f |
 | 2026-09-13T13:59 | P2.5 | 착수 | dry_run.py + 팩토리 | |
 | 2026-09-13T14:00 | P2.5 | Red | test_dry_run 10, ImportError dry_run/팩토리 | |
+| 2026-09-13T14:01 | P2.5 | Green | dry_run.py 2 client + 팩토리, 238 passed | |
