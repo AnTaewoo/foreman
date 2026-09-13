@@ -1,4 +1,4 @@
-"""P2.4 — webhooks (red a~e): HMAC, 6종 변환, 슬래시 훅, 중복 delivery, 미등록 repo, 봇 자기 루프(B10)."""
+"""P2.4 — webhooks (red a~e): HMAC, 6종 변환, slash 훅, 중복 delivery, 미등록 repo, B10."""
 
 from __future__ import annotations
 
@@ -101,7 +101,11 @@ def test_bad_signature_401(app: TestClient, spy: Spy) -> None:
     body = _fixture("issues_opened")
     res = app.post(
         "/webhooks/github", content=body,
-        headers={"X-GitHub-Event": "issues", "X-GitHub-Delivery": "x", "Content-Type": "application/json"},
+        headers={
+            "X-GitHub-Event": "issues",
+            "X-GitHub-Delivery": "x",
+            "Content-Type": "application/json",
+        },
     )  # fmt: skip
     assert res.status_code == 401
     assert spy.events == []
@@ -222,7 +226,12 @@ def test_unknown_repo_204(app: TestClient, spy: Spy) -> None:
     raw = json.dumps(body).encode()
     res = app.post(
         "/webhooks/github", content=raw,
-        headers={"X-GitHub-Event": "pull_request", "X-GitHub-Delivery": "u", "X-Hub-Signature-256": _sig(raw), "Content-Type": "application/json"},
+        headers={
+            "X-GitHub-Event": "pull_request",
+            "X-GitHub-Delivery": "u",
+            "X-Hub-Signature-256": _sig(raw),
+            "Content-Type": "application/json",
+        },
     )  # fmt: skip
     assert res.status_code == 204 and spy.events == []
 

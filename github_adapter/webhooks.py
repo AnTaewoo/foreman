@@ -5,18 +5,19 @@
 | 웹훅 | 조건 | 결과 |
 |---|---|---|
 | issues.* | — | 무시 204 (Issue는 플랫폼이 만든다) |
-| issue_comment.created | 본문이 ``/approve`` · ``/reject <r>`` · ``/changes <t>`` | ``on_slash_command(SlashCommand)`` 훅, 이벤트 없음, 202 |
+| issue_comment.created | ``/approve`` ``/reject <r>`` ``/changes <t>`` | slash 훅, 202 |
 | issue_comment.created | 그 외 | 204 |
 | pull_request.opened | 본문에 §7.3 메타 블록 | ``pr.opened`` 202 (메타 없으면 사람 PR → 204) |
 | pull_request.closed | ``merged`` true / false | ``pr.merged`` / ``pr.closed`` 202 |
 | pull_request_review.submitted | 메타 블록 | ``pr.review_submitted`` 202 |
-| check_suite.completed | ``pull_requests`` 비어 있지 않음 | ``pr.checks_passed`` (conclusion success) / ``pr.checks_failed`` 202; PR 없으면 204 |
+| check_suite.completed | PR 있음 | ``pr.checks_passed`` / ``pr.checks_failed`` 202 |
+| check_suite.completed | PR 없음 | 204 |
 | push | — | 로그만 204 |
 | 그 외 타입 | — | 204 |
 
 공통: 서명 불일치/누락 → 401. 같은 ``X-GitHub-Delivery`` 두 번째 → 200 ``{"status":"duplicate"}``.
 ``resolve_project(repo)``가 None → 204. sender가 앱 봇 자신(``bot_login``) → 204 (B10 자기 루프).
-correlation_id는 ``resolve_goal(project_id, task_id)``가 goal을 알려주면 goal_id, 아니면 project_id (D-25).
+correlation_id는 ``resolve_goal``이 goal을 주면 goal_id, 아니면 project_id (D-25).
 causation_id는 None(GitHub에서 온 루트 이벤트). 서명은 publish 측(chain.append_signed)이 채운다.
 MVP 1 dev에서는 테스트가 서명된 가짜 웹훅을 직접 POST 한다 (D-13).
 """
@@ -104,7 +105,7 @@ def parse_slash_command(body: str) -> tuple[SlashName, str] | None:
     name = head.strip().lower()
     if name not in SLASH_COMMANDS:
         return None
-    return name, rest.strip()  # type: ignore[return-value]  # name은 SLASH_COMMANDS 검사됨
+    return name, rest.strip()
 
 
 _IGNORED = Response(status_code=204)
