@@ -228,7 +228,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P6.1 | `runtime.py` — 상주 control plane(relay+projection+scheduler+retry), 프로젝트별 repo, launcher 설정 | P5.5 | done | 8309e7e |
 | P6.2 | `runner.py` — 승인 대기 복원(startup) | P6.1 | done | 725422e |
 | P6.3 | `dry_merge.py` — Dry 자동 머지 (D-36) | P6.1 | done | c6c9e88 |
-| P6.4 | `webhooks.py`·`approvals.py` — discussion_comment + Discussion 번호 매칭 | P6.2 | todo | |
+| P6.4 | `webhooks.py`·`approvals.py` — discussion_comment + Discussion 번호 매칭 | P6.2 | done | bb757c8 |
 | P6.5 | `llm/pricing.py` — cost_usd (D-39) | P6.1 | todo | |
 | P6.6 | `repo_cache.py` — repo 확보 (D-38) | P6.1 | todo | |
 | P6.7 | `pr_opener.py` — PR 생성 control plane으로 (D-37) | P6.3, P6.6 | todo | |

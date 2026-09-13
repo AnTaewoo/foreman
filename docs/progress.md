@@ -168,3 +168,7 @@
 | 2026-09-13T20:15 | P6.3 | Green | control_plane/dry_merge.py, Runtime 체인, e2e 자체 머지 제거, 419 passed | c6c9e88 |
 | 2026-09-13T20:16 | P6.3 | Gate | make check pass (419), 시도 3/3 | |
 | 2026-09-13T20:16 | P6.3 | 완료 | 보드 done | c6c9e88 |
+| 2026-09-13T20:20 | P6.4 | Red | test_webhooks 2 + test_goal_flow 2, discussion_comment 204 | 870726a |
+| 2026-09-13T20:28 | P6.4 | Green | _discussion_comment 핸들러(문서 확인), SlashCommand.source/number, 매칭 규칙, 423 passed | bb757c8 |
+| 2026-09-13T20:29 | P6.4 | Gate | make check pass (423), 시도 2/3 | |
+| 2026-09-13T20:29 | P6.4 | 완료 | 보드 done | bb757c8 |
