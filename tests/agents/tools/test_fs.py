@@ -90,3 +90,22 @@ async def test_events_for_allowed_and_denied(fs: FsTool, spy: Spy) -> None:
     for e in spy.events:
         dumped = e.model_dump_json()
         assert "hunter2" not in dumped and "def greet" not in dumped
+
+
+# PC-6 발견: 분해가 owned_paths를 디렉토리("src/math/")로 주면 그 아래 파일이 owned여야 한다
+def test_owned_directory_prefix(worktree: Path, spy: Spy) -> None:
+    ctx = ToolContext(
+        worktree=worktree,
+        owned_paths=["src/math/", "tests/math"],
+        run_id="01RUN",
+        task_id="01TASK",
+        project_id="P1",
+        goal_id="G1",
+        publish=spy.publish,
+        default_branch="main",
+        agent_id="coding-1",
+        last_event_id="EV0",
+    )
+    assert ctx.is_owned("src/math/helpers.py") and ctx.is_owned("src/math/deep/x.py")
+    assert ctx.is_owned("tests/math/test_add.py")  # 확장자 없는 경로 = 디렉토리로 본다
+    assert not ctx.is_owned("src/mathx/helpers.py") and not ctx.is_owned("src/main.py")

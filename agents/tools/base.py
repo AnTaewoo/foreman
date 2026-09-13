@@ -50,6 +50,14 @@ def args_digest(args: dict[str, Any]) -> str:
     return hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
+def _normalize_owned(pattern: str) -> str:
+    """디렉토리 소유(``src/math/``, 확장자·와일드카드 없는 ``tests/math``)는 ``…/**`` (PC-6)."""
+    p = pattern.strip("/")
+    if pattern.endswith("/") or ("*" not in p and "." not in p.rsplit("/", 1)[-1]):
+        return f"{p}/**"
+    return p
+
+
 def _glob_to_regex(pattern: str) -> re.Pattern[str]:
     """``**`` = 여러 디렉토리, ``*`` = 한 구성요소 안."""
     out = "^"
@@ -98,7 +106,7 @@ class ToolContext:
 
     def __post_init__(self) -> None:
         self.worktree = Path(self.worktree).resolve()
-        self._owned = [_glob_to_regex(p.strip("/")) for p in self.owned_paths]
+        self._owned = [_glob_to_regex(_normalize_owned(p)) for p in self.owned_paths]
 
     # ------------------------------------------------------------------ 경계
     def resolve(self, path: str) -> Path:

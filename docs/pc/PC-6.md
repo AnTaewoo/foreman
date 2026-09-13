@@ -24,7 +24,8 @@
 2. API 201/202 직후 GET 404 — 읽기 지연(§17 3). 스크립트가 projection 반영을 폴링.
 3. 같은 repo 경로로 프로젝트 2개 → 웹훅 `resolve_project`가 첫 행 → 실행마다 고유 workdir.
 4. API 재시작 시 `runner.restored_waiting`이 이전 Goal을 복원(P6.2 실증).
-5. 환경: 이 머신의 Ollama는 다른 워크로드의 27GB 모델과 공유 → 백그라운드 작업이 메모리 부족으로 두 번 종료. 7b로 실행.
+5. 환경: 이 머신의 Ollama는 다른 워크로드의 27GB 모델과 공유 → 백그라운드 작업이 메모리 부족으로 두 번 종료. 7b로, 하네스 밖(setsid)에서 실행.
+6. **ingest 순서 역전이 컨슈머를 죽임**: 프로세스 내 워커가 `task.started`를 즉시 XADD 하는데 `task.assigned`는 아직 relay·projection 전 → `Scheduler.ingest`의 `ready→running` 불허 전이가 예외로 새어 체인 전체 실패(ack 없음, 30초마다 재전달). `Projection.apply_or_retry`(D-30 재시도 큐)로 감쌈. 스크립트 pump에서는 relay를 먼저 돌려 숨어 있던 경쟁.
 
 ## 사람 항목
 
