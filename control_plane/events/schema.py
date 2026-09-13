@@ -18,7 +18,7 @@ import math
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any, Literal, NotRequired, TypedDict, get_type_hints
+from typing import Any, Literal, NotRequired, TypedDict, get_origin, get_type_hints
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from ulid import ULID
@@ -337,9 +337,13 @@ PAYLOAD_TYPES: dict[EventType, type[Any]] = {  # Any: TypedDict 클래스들
 
 
 def required_payload_keys(event_type: EventType) -> frozenset[str]:
-    """등록된 TypedDict의 필수 키. 미등록 타입은 빈 집합(검사 안 함)."""
+    """등록된 TypedDict의 필수 키. 미등록 타입은 빈 집합(검사 안 함).
+
+    ``from __future__ import annotations`` 때문에 클래스 생성 시점의 ``__required_keys__``는
+    ``NotRequired``를 못 본다. 힌트를 실제로 해석해 ``NotRequired``를 골라낸다.
+    """
     td = PAYLOAD_TYPES.get(event_type)
     if td is None:
         return frozenset()
-    get_type_hints(td)  # forward ref 해소 (from __future__ import annotations)
-    return frozenset(td.__required_keys__)
+    hints = get_type_hints(td, include_extras=True)
+    return frozenset(k for k, h in hints.items() if get_origin(h) is not NotRequired)

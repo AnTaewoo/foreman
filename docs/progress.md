@@ -35,3 +35,4 @@
 | 2026-09-13T13:18 | P1.4 | 완료 | 보드 done, D-32 기록 | 4c244bd |
 | 2026-09-13T13:27 | P1.5 | 착수 | projection.py 44 핸들러 + D-30 + guard | |
 | 2026-09-13T13:29 | P1.5 | Red | test_projection 12 + guard 2, ImportError events.projection | |
+| 2026-09-13T13:31 | P1.5 | Green | projection.py 44 핸들러 + D-30 handle/apply_retries + schema NotRequired 수정, 178 passed | |

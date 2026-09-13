@@ -243,6 +243,14 @@ def test_required_payload_keys_unregistered_type_is_empty() -> None:
     assert required_payload_keys(EventType.DECISION_OPENED) == frozenset()
 
 
+def test_not_required_keys_are_optional() -> None:
+    # from __future__ import annotations 아래에서도 NotRequired가 인식돼야 한다 (P1.5에서 발견)
+    assert "max_attempts" not in required_payload_keys(EventType.TASK_CREATED)
+    assert "duration_ms" not in required_payload_keys(EventType.RUN_TOOL_CALLED)
+    assert "pr_number" not in required_payload_keys(EventType.TASK_COMPLETED)
+    assert {"draft", "url"}.isdisjoint(required_payload_keys(EventType.PR_OPENED))
+
+
 # ---------------------------------------------------------------- (g) payload 값 제한
 @pytest.mark.parametrize(
     "bad",
