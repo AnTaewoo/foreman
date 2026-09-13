@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import httpx
 import httpx2
 import pytest
 from pydantic import BaseModel, SecretStr

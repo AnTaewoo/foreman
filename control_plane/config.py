@@ -26,7 +26,12 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://hitl:hitl@localhost:5432/hitl"
     redis_url: str = "redis://localhost:6379/0"
 
-    # --- LLM ---
+    # --- LLM (D-33: provider 선택) ---
+    # anthropic = 최종 판정(PC-5) / openai_compat = 로컬 Ollama 등 OpenAI 호환 엔드포인트 / fake = 테스트
+    llm_provider: Literal["anthropic", "openai_compat", "fake"] = "anthropic"
+    llm_base_url: str = "http://localhost:11434/v1"  # openai_compat일 때
+    llm_model: str = "qwen2.5-coder:7b"  # openai_compat일 때
+    llm_api_key: SecretStr = SecretStr("ollama")  # Ollama는 아무 값이나 받는다
     anthropic_api_key: SecretStr = SecretStr("")
     anthropic_model: str = "claude-opus-5"
 
