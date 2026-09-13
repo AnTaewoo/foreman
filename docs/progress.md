@@ -119,3 +119,5 @@
 | 2026-09-13T15:58 | P4.5 | 착수 | scheduler queue/graph/launcher/scheduler + ingest | |
 | 2026-09-13T15:59 | P4.5 | Red | test_scheduler 6 (a~i), ModuleNotFoundError scheduler.graph | |
 | 2026-09-13T16:03 | P4.5 | Green | scheduler graph/launcher/queue/scheduler + ingest, projection unsigned skip, 378 passed | |
+| 2026-09-13T16:04 | P4.5 | Gate | make check pass (378), pre-commit pass, 시도 3/3 | |
+| 2026-09-13T16:04 | P4.5 | 완료 | 보드 done | 2ad0f2e |
