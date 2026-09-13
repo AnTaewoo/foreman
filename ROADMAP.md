@@ -174,8 +174,8 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 | ID | 제목 | depends_on | status | commit |
 |---|---|---|---|---|
 | P2.1 | `auth.py` — App JWT → installation token 발급/캐시/갱신 | PC-1 | done | 187bc62 |
-| P2.2 | `client.py` + `protocol.py` + `markers.py` — REST 멱등 메서드 7개 + `ensure_labels` | P2.1 | running | |
-| P2.3 | `discussions.py` — GraphQL create/list/comment | P2.1 | todo | |
+| P2.2 | `client.py` + `protocol.py` + `markers.py` — REST 멱등 메서드 7개 + `ensure_labels` | P2.1 | done | 9e15cd3 |
+| P2.3 | `discussions.py` — GraphQL create/list/comment | P2.1 | running | |
 | P2.4 | `webhooks.py` — HMAC 검증 + 6종 이벤트 → 내부 Event 변환 + 슬래시 명령 훅 | P1.5 | todo | |
 | P2.5 | `dry_run.py` + `__init__.py` — DryRun client 2개 + 팩토리 | P2.2, P2.3 | todo | |
 | **PC-2** | 어댑터 전 메서드 mock 통과, 실 네트워크 0 | P2.4, P2.5 | pending | |
