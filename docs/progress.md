@@ -42,3 +42,6 @@
 | 2026-09-13T13:47 | P2.1 | 착수 | auth.py JWT/installation token/InstallationAuth | |
 | 2026-09-13T13:47 | P2.1 | Red | test_auth 7, ModuleNotFoundError github_adapter.auth | |
 | 2026-09-13T13:48 | P2.1 | Green | auth.py app_jwt/InstallationTokenProvider/InstallationAuth, 186 passed | |
+| 2026-09-13T13:49 | P2.1 | Gate | make check pass (186), 시도 2/3 | |
+| 2026-09-13T13:49 | P2.1 | 완료 | 보드 done | 187bc62 |
+| 2026-09-13T13:49 | P2.2 | 착수 | client/protocol/markers | |
