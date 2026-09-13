@@ -9,3 +9,4 @@
 | 2026-09-13T11:18 | P0.2 | 착수 | 설계 § 참조 확인 | |
 | 2026-09-13T11:18 | P0.2 | 완료 | § 8개 전부 존재 | 5fcebdd |
 | 2026-09-13T11:18 | P0.3 | 착수 | compose/.env.example/pre-commit/structlog/health | |
+| 2026-09-13T11:18 | P0.3 | Red | test_infra.py 10케이스, .env.example/compose/logging 부재로 실패 | |
