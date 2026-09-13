@@ -1,4 +1,4 @@
-"""컨텍스트 조립 (설계 §5.3): system → policy → CONTEXT.md → Role 노트 → Task spec → 관련 요약 → 관련 파일.
+"""컨텍스트 조립 (설계 §5.3): system → policy → CONTEXT.md → Role 노트 → Task spec → 요약 → 파일.
 
 토큰 예산(``len/4`` 추정)을 넘으면 **뒤에서부터** 섹션을 비운다. system은 절대 비우지 않는다.
 CONTEXT.md가 없으면 경고만 남기고 계속한다 (§5.1 "읽기 전에 쓰지 않는다"의 최소 형태).
@@ -16,8 +16,14 @@ from agents.llm.base import estimate_tokens
 log = structlog.get_logger(__name__)
 
 SECTION_ORDER = (
-    "system", "policy", "context_md", "role_notes", "task_spec", "related_summaries", "related_files"
-)  # fmt: skip
+    "system",
+    "policy",
+    "context_md",
+    "role_notes",
+    "task_spec",
+    "related_summaries",
+    "related_files",
+)
 
 
 @dataclass(frozen=True)

@@ -1,9 +1,9 @@
 """공통 Agent 계약 (설계 §5.1) + BaseAgent 실행 루프.
 
-``BaseAgent.run(input)``: ``task.started {run_id}`` → ``run.started`` → ``execute`` → ``run.finished``.
-``run.finished.payload.outcome``은 RunOutcome, ``agent_outcome``은 AgentOutput.outcome 원값 (D-28):
-done→success, failed→failed, needs_decision/blocked→escalated, timeout→timeout. ``execute``가 예외를 던지면
-``agent_outcome=failed, outcome=failed``. 이 모듈은 ``control_plane.config``를 import하지 않는다 (D-23).
+``BaseAgent.run(input)``: ``task.started`` → ``run.started`` → ``execute`` → ``run.finished``.
+``run.finished.payload.outcome``은 RunOutcome, ``agent_outcome``은 원값 (D-28): done→success,
+failed→failed, needs_decision/blocked→escalated, timeout→timeout. ``execute`` 예외 → 둘 다 failed.
+이 모듈은 ``control_plane.config``를 import하지 않는다 (D-23).
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import structlog
 from pydantic import BaseModel, ConfigDict, Field
 
 from agents.llm.base import ModelProvider
-from control_plane.events.schema import Actor, Event, EventType, Subject
+from control_plane.events.schema import Actor, EntityType, Event, EventType, Subject
 
 log = structlog.get_logger(__name__)
 
@@ -131,13 +131,18 @@ class BaseAgent(ABC):
         self.last_event_id: str | None = None
 
     async def publish(
-        self, input: AgentInput, type_: EventType, entity: str, id_: str, payload: dict[str, Any]
+        self,
+        input: AgentInput,
+        type_: EventType,
+        entity: EntityType,
+        id_: str,
+        payload: dict[str, Any],
     ) -> Event:
         event = Event(
             project_id=input.project_context.project_id,
             actor=Actor(type="agent", id=input.agent_id),
             type=type_,
-            subject=Subject(entity=entity, id=id_),  # type: ignore[arg-type]  # entity ∈ Literal
+            subject=Subject(entity=entity, id=id_),
             payload=payload,
             correlation_id=input.project_context.goal_id,
             causation_id=self.last_event_id,
@@ -155,9 +160,16 @@ class BaseAgent(ABC):
             input, EventType.TASK_STARTED, "task", input.task.id, {"run_id": input.run_id}
         )
         await self.publish(
-            input, EventType.RUN_STARTED, "run", input.run_id,
-            {"task_id": input.task.id, "agent_id": input.agent_id, "model": self.model or "unknown"},
-        )  # fmt: skip
+            input,
+            EventType.RUN_STARTED,
+            "run",
+            input.run_id,
+            {
+                "task_id": input.task.id,
+                "agent_id": input.agent_id,
+                "model": self.model or "unknown",
+            },
+        )
         try:
             output = await self.execute(input)
         except Exception as exc:  # 어떤 예외든 Run은 실패로 끝난다
@@ -166,7 +178,10 @@ class BaseAgent(ABC):
                 outcome="failed", summary=f"{type(exc).__name__}: {exc}", error=str(exc)
             )
         await self.publish(
-            input, EventType.RUN_FINISHED, "run", input.run_id,
+            input,
+            EventType.RUN_FINISHED,
+            "run",
+            input.run_id,
             {
                 "outcome": OUTCOME_TO_RUN[output.outcome],
                 "agent_outcome": output.outcome,
@@ -176,5 +191,5 @@ class BaseAgent(ABC):
                 "duration_s": round(time.monotonic() - started, 3),
                 "error": output.error,
             },
-        )  # fmt: skip
+        )
         return output

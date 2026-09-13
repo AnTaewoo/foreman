@@ -22,7 +22,6 @@ from agents.base import (
 from agents.context import assemble_context
 from agents.llm.base import estimate_tokens
 from agents.llm.fake import FakeProvider
-from control_plane.events.schema import EventType
 from tests.agents.conftest import Spy
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -68,10 +67,18 @@ def test_contract_shapes() -> None:
     assert inp.task.owned_paths == ["src/app/**", "tests/**"] and inp.budget.max_seconds == 2700
     out = AgentOutput(
         outcome="done",
-        artifacts=[Artifact(kind="branch", ref="ai/users-api/12-add-users"), Artifact(kind="pr", ref="42", url="https://gh/p/42")],
-        decision_request=None, new_tasks=[], notes_for_memory="", summary="did it",
-        tokens_in=10, tokens_out=5, cost_usd=0.0,
-    )  # fmt: skip
+        artifacts=[
+            Artifact(kind="branch", ref="ai/users-api/12-add-users"),
+            Artifact(kind="pr", ref="42", url="https://gh/p/42"),
+        ],
+        decision_request=None,
+        new_tasks=[],
+        notes_for_memory="",
+        summary="did it",
+        tokens_in=10,
+        tokens_out=5,
+        cost_usd=0.0,
+    )
     assert out.outcome == "done" and out.artifacts[1].url == "https://gh/p/42"
     with pytest.raises(ValueError):
         AgentOutput(outcome="maybe", summary="x")  # type: ignore[arg-type]
