@@ -29,3 +29,4 @@
 | 2026-09-13T12:19 | P1.3 | Gate | make check pass (144) + test-integration 3 passed (pg), 시도 2/3 | |
 | 2026-09-13T12:19 | P1.3 | 완료 | 보드 done | 02c7dc4 |
 | 2026-09-13T13:06 | P1.4 | 착수 | chain.py/bus.py/outbox.py | |
+| 2026-09-13T13:07 | P1.4 | Red | test_chain 9 + test_bus 9, ImportError events.chain/outbox | |
