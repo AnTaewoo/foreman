@@ -200,8 +200,8 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 | P4.1 | `agents/tools/` — base / fs / shell / git / github, 차단 규칙 | PC-3 | done | b39eee5 |
 | P4.2 | `agents/base.py` + `agents/context.py` — AgentInput/Output, BaseAgent, 컨텍스트 조립 §5.3 | P4.1 | done | 6be7531 |
 | P4.3 | `agents/coding.py` — 그래프, owned_paths diff 검사, needs_decision | P4.2 | done | 9d8dd0c |
-| P4.4 | `worker/` — Dockerfile, entrypoint, 45분 타임아웃 | P4.3 | running | |
-| P4.5 | `scheduler/` — task.created 구독, ready 판정, 워커 기동 | P4.4 | todo | |
+| P4.4 | `worker/` — Dockerfile, entrypoint, 45분 타임아웃 | P4.3 | done | 1c9a026 |
+| P4.5 | `scheduler/` — task.created 구독, ready 판정, 워커 기동 | P4.4 | running | |
 | **PC-4** | 로컬 bare remote에 브랜치 3개 push | P4.5 | pending | |
 
 ### P5 — API + e2e (`docs/prompts.md` P5)

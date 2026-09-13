@@ -114,3 +114,6 @@
 | 2026-09-13T15:49 | P4.4 | 착수 | worker entrypoint/publish/Dockerfile — 워커 XADD 직접, DB append는 Scheduler ingest(D-26) | |
 | 2026-09-13T15:50 | P4.4 | Red | test_entrypoint 7 + integration test_worker 1, ModuleNotFoundError worker.entrypoint | |
 | 2026-09-13T15:53 | P4.4 | Green | worker entrypoint/publish/__main__/Dockerfile + compose worker, 371 passed | |
+| 2026-09-13T15:58 | P4.4 | Gate | make check pass (371), docker 컨테이너 통합 1 passed, pre-commit pass, 시도 3/3 | |
+| 2026-09-13T15:58 | P4.4 | 완료 | 보드 done | 1c9a026 |
+| 2026-09-13T15:58 | P4.5 | 착수 | scheduler queue/graph/launcher/scheduler + ingest | |
