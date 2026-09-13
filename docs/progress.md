@@ -28,3 +28,4 @@
 | 2026-09-13T12:18 | P1.3 | Green | alembic 0001(9 tables, pg 공유 enum)/0002(트리거) + session.py, 144 passed | |
 | 2026-09-13T12:19 | P1.3 | Gate | make check pass (144) + test-integration 3 passed (pg), 시도 2/3 | |
 | 2026-09-13T12:19 | P1.3 | 완료 | 보드 done | 02c7dc4 |
+| 2026-09-13T13:06 | P1.4 | 착수 | chain.py/bus.py/outbox.py | |
