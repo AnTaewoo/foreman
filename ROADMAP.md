@@ -214,7 +214,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 | P5.3 | `WS /projects/{id}/stream` | P5.1 | done | 5681505 |
 | P5.4 | `scripts/e2e_dry_run.py` | P5.2 | done | e3322f6 |
 | P5.5 | `docs/runbook.md` | P5.4 | done | aa90ad5 |
-| **PC-5 = MVP 1 (dev)** | e2e dry-run 완주 + 품질 서명 | P5.3, P5.5 | pending | |
+| **PC-5 = MVP 1 (dev)** | e2e dry-run 완주 + 품질 서명 | P5.3, P5.5 | pending (자동: check/integration/--fake pass, 실 LLM은 Ollama만 → 기준 미달; Anthropic 재실행 + 사람 판정 대기) | 5ad94a7 |
 
 ---
 

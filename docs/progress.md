@@ -152,3 +152,6 @@
 | 2026-09-13T18:10 | P5.5 | 착수 | docs/runbook.md + scripts/check_runbook.sh | |
 | 2026-09-13T18:18 | P5.5 | Gate | check_runbook.sh 5/5 blocks OK (imports, migrate, app factory, e2e --fake, lint), 시도 2/3 | |
 | 2026-09-13T18:18 | P5.5 | 완료 | 보드 done | aa90ad5 |
+| 2026-09-13T18:20 | PC-5 | 자동 | make check pass (401), test-integration 5 passed, e2e --fake PASS | |
+| 2026-09-13T18:30 | PC-5 | 자동 | 실 LLM(Ollama 7B) e2e FAIL — Task 8, 브랜치 1, PR 0 (Task 1 3회 실패, 나머지 의존 대기) | |
+| 2026-09-13T18:32 | PC-5 | 판정 | pending — docs/pc/PC-5.md, docs/postmortem/mvp1.md; Anthropic 재실행·사람 (1)~(3) 대기 | 5ad94a7 |
