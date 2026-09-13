@@ -95,3 +95,5 @@
 | 2026-09-13T15:10 | P3.1+ | Green | ollama.py OllamaCompatProvider + llm_provider 선택 (D-33), 298 passed | |
 | 2026-09-13T15:12 | P3.1+ | Gate | make check pass (298), pre-commit pass — D-33 반영 | 3ceff07 |
 | 2026-09-13T15:15 | PC-3 | 결과 | Ollama 경로 PASS (2 calls, 8 tasks), 검토안 3/3 → 사람 서명 대기 | 91e4ed7 |
+| 2026-09-13T15:35 | PC-3 | 서명 | 사용자 pass (2번 조건부) → pass | |
+| 2026-09-13T15:35 | P4.1 | 착수 | agents/tools base/fs/shell/git/github | |

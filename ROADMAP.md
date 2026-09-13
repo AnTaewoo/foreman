@@ -142,6 +142,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 | D-28 | §6.1에 `assigned ──fail──► ready(attempt<max) / blocked` 추가(워커 기동 실패). `run.finished.payload.outcome`=RunOutcome(`success\|failed\|timeout\|cancelled\|escalated`), `agent_outcome`(`done\|needs_decision\|blocked\|failed\|timeout`) 병기. 매핑 done→success, failed→failed, needs_decision/blocked→escalated, timeout→timeout, kill→cancelled. 워커 타임아웃 시 `task.failed {reason:"timeout", attempt}`도 발행 | P1.2, P1.5, P4.2, P4.4, P4.5 |
 | D-29 | `events` 테이블: `seq`(append 순번, autoincrement; 커서·replay·verify 순서), `canonical_json TEXT NOT NULL`(서명·검증 대상 텍스트), `payload JSON`(쿼리용 사본), `stream_id TEXT NULL`(부기). `sign(prev, canonical_json: str)`. JSONB 왕복으로 payload 표기가 바뀌어도 체인은 안 깨진다 — Postgres 왕복 통합 테스트 필수(P1.3 (d)) | P1.1, P1.3, P1.4, P5.1 |
 | D-30 | D-07 개정: `InvalidTransition` → 버리지 않고 지연 재처리 스트림 `events:<project_id>:retry`(`{event_id, not_before, attempt}`; 5s/30s/5m/30m/2h, 5회) → 소진 시 `projection_error` + error 로그. DB/네트워크 예외는 attempt 미소모, backoff 무한 재시도(스트림 정지). `UnhandledEvent`는 즉시 `projection_error`. 교차 발행자 경쟁인 `pr.merged`는 Task가 in_review가 아니면 `tasks.pr_merged_at`만 기록(전이 없음), `task.completed`가 그 플래그를 보면 `running→in_review→done` 한 번에 | P1.4, P1.5 |
+| D-34 | **PC-4는 로컬 Ollama로 실제 코드 생성** (사용자 결정 2026-09-13 "fake 쓰지마"). P4.x 단위 테스트(Red/Green)는 ROADMAP대로 FakeProvider 결정적 스크립트를 유지하고, PC-4 자동 항목 `scripts/pc4_run_tasks.py`는 `Settings.llm_provider`(openai_compat, qwen2.5-coder:7b)로 Coding Agent가 실제로 편집·테스트·push 한다. Fake 스크립트 경로는 `--fake` 옵션으로만 남긴다 | P4.3, PC-4 |
 | D-33 | **LLM provider 선택** (사용자 결정 2026-09-13, 사용자는 D-29로 불렀으나 D-29는 canonical_json이라 D-33으로 기록). `agents/llm/ollama.py` `OllamaCompatProvider` — OpenAI 호환 엔드포인트(`{base_url}/chat/completions`, json_schema response_format, 코드펜스 관용 파싱, 실패 시 `parsed=None`→drafts 재시도 경로). `Settings.llm_provider ∈ {anthropic, openai_compat, fake}` + `llm_base_url`/`llm_model`/`llm_api_key`. 개발·PC-3 1차 검증은 로컬 Ollama(`qwen2.5-coder:7b`, 비-thinking 모델 — thinking 모델은 content가 빈다), **PC-5 최종 판정만 Anthropic**. Anthropic 크레딧이 채워지면 `.env`의 `HITL_LLM_PROVIDER=anthropic`으로 바꾸기만 하면 된다 | P3.1, PC-3, PC-5 |
 | D-32 | **테스트 Redis는 진짜 Redis** (사용자 결정 2026-09-13). fakeredis 제거. `tests/events/conftest.py`의 `redis` 픽스처가 `FOREMAN_TEST_REDIS_URL`(기본 `redis://localhost:6379/15`, 테스트 전용 DB)에 붙고 테스트마다 FLUSHDB. 연결 불가면 skip이 아니라 **fail** — `make test`는 Redis 컨테이너를 요구한다(`docker compose up -d --wait redis`). Postgres 통합 테스트는 D-17대로 skip 유지 | P1.4 이후 전부 |
 | D-31 | `run.tool_called`는 **감사 체인 밖**: `append_signed`가 이 타입은 `tool_calls` 테이블(id, run_id, project_id, seq, tool, args_digest, duration_ms, ts; 서명·락 없음)에 쓰고 스트림에는 그대로 흘림(Run Viewer·WS). `events`에는 안 들어감. 거부된 호출은 새 타입 `run.tool_denied {tool, reason, args_digest}`로 체인에. 기각 대안: 배치(`run.tools_batch`, 실시간성·타임아웃 유실), 체인 유지(호출당 락, 감사 로그 오염) | P1.1, P1.3, P1.4, P1.5, P4.1 |
@@ -190,13 +191,13 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 | P3.3 | `orchestrator/prompts/*.md` + `drafts.py` (TaskDraft, 검증·재시도) | P3.1 | done | 0ba957a |
 | P3.4 | `orchestrator/graph.py` + `state.py` — 5노드 그래프, interrupt, 체크포인터 | P3.2, P3.3 | done | cc4e86b |
 | P3.5 | `orchestrator/emit.py` — 위상 정렬, 사이클, owned_paths 직렬화, Issue(dry) 생성 | P3.4 | done | 2057464 |
-| **PC-3** | Fake로 그래프 완주 + 실 LLM dry-run 눈검사 | P3.5 | pending (자동 pass, 사람 서명 대기) | docs/pc/PC-3.md |
+| **PC-3** | Fake로 그래프 완주 + 실 LLM dry-run 눈검사 | P3.5 | pass | docs/pc/PC-3.md (사용자 서명 2026-09-13, 2번 조건부) |
 
 ### P4 — Coding Agent + Worker (`docs/prompts.md` P4)
 
 | ID | 제목 | depends_on | status | commit |
 |---|---|---|---|---|
-| P4.1 | `agents/tools/` — base / fs / shell / git / github, 차단 규칙 | PC-3 | todo | |
+| P4.1 | `agents/tools/` — base / fs / shell / git / github, 차단 규칙 | PC-3 | running | |
 | P4.2 | `agents/base.py` + `agents/context.py` — AgentInput/Output, BaseAgent, 컨텍스트 조립 §5.3 | P4.1 | todo | |
 | P4.3 | `agents/coding.py` — 그래프, owned_paths diff 검사, needs_decision | P4.2 | todo | |
 | P4.4 | `worker/` — Dockerfile, entrypoint, 45분 타임아웃 | P4.3 | todo | |

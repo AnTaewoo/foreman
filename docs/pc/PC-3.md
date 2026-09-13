@@ -1,7 +1,7 @@
 # PC-3 — 그래프 완주 + 눈검사
 
 - 일시: 2026-09-13 16:40 KST (1차 16:05는 Anthropic 크레딧 부족으로 pending)
-- 판정: **pending — 자동 전부 pass, 사람 서명 대기** (아래 검토안에 사용자가 서명하면 pass)
+- 판정: **pass** — 자동 전부 pass, 사람 3항목 검토안에 사용자 서명(2026-09-13, 2번 조건부)
 - provider: D-33에 따라 로컬 Ollama `qwen2.5-coder:7b` (`openai_compat`). Anthropic 최종 판정은 PC-5.
 
 ## 자동 항목
