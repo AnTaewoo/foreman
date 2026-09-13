@@ -1,4 +1,4 @@
-"""P2.5 — DryRun client 2개 + 팩토리 (red a~g). respx autouse가 켜져 있으므로 네트워크 0이 강제된다."""
+"""P2.5 — DryRun client 2개 + 팩토리 (red a~g). respx autouse로 네트워크 0이 강제된다."""
 
 from __future__ import annotations
 

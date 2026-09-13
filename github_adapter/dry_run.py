@@ -1,4 +1,4 @@
-"""DRY_RUN 계층 (D-10, CLAUDE.md): 실제 GitHub API를 호출하지 않고 ``would <method> …``를 로그로 남긴다.
+"""DRY_RUN 계층 (D-10): 실제 GitHub API를 부르지 않고 ``would <method> …``를 로그로 남긴다.
 
 ``DryRunGitHubClient``는 ``GitHubClient`` Protocol과 같은 시그니처, ``DryRunDiscussionsClient``는
 ``DiscussionsClient``와 같은 시그니처. 상태는 메모리 dict — 번호는 결정적(Issue/PR은 같은 번호 공간,

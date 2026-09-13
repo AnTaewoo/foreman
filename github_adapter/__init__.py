@@ -1,4 +1,4 @@
-"""GitHub Adapter: App 인증, 멱등 쓰기, 웹훅 → 이벤트 변환. 팩토리는 DRY_RUN이면 Dry client를 준다 (D-10)."""
+"""GitHub Adapter: App 인증, 멱등 쓰기, 웹훅 → 이벤트. 팩토리는 DRY_RUN이면 Dry client (D-10)."""
 
 from __future__ import annotations
 
