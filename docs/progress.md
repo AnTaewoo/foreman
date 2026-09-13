@@ -84,3 +84,6 @@
 | 2026-09-13T14:22 | P3.4 | 착수 | graph.py + state.py (LangGraph, interrupt, checkpointer) | |
 | 2026-09-13T14:23 | P3.4 | Red | test_graph 8, ModuleNotFoundError graph/state | |
 | 2026-09-13T14:25 | P3.4 | Green | graph.py 6노드(interrupt/resume/reject/blocked) + state.py + checkpointer, 278 passed | |
+| 2026-09-13T14:27 | P3.4 | Gate | make check pass (278), pre-commit pass, 시도 3/3 | |
+| 2026-09-13T14:27 | P3.4 | 완료 | 보드 done | cc4e86b |
+| 2026-09-13T14:27 | P3.5 | 착수 | emit.py toposort/overlap/emit | |
