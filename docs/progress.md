@@ -79,3 +79,6 @@
 | 2026-09-13T14:19 | P3.3 | 착수 | prompts/*.md + drafts.py | |
 | 2026-09-13T14:19 | P3.3 | Red | test_drafts 10, ModuleNotFoundError drafts | |
 | 2026-09-13T14:21 | P3.3 | Green | prompts 3 + drafts.py(PlanDraft/TaskDraft/DecomposeResult/decompose_with_retry), 270 passed | |
+| 2026-09-13T14:22 | P3.3 | Gate | make check pass (270), pre-commit pass, 시도 3/3 (E501·B007) | |
+| 2026-09-13T14:22 | P3.3 | 완료 | 보드 done | 0ba957a |
+| 2026-09-13T14:22 | P3.4 | 착수 | graph.py + state.py (LangGraph, interrupt, checkpointer) | |
