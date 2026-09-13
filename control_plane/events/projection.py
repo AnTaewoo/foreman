@@ -1,18 +1,18 @@
-"""Projection — 이벤트를 받아 Project/Goal/Epic/Task/Run 상태를 갱신하는 **유일한** 곳 (설계 §3.2, D-08).
+"""Projection — 이벤트로 Project/Goal/Epic/Task/Run 상태를 갱신하는 **유일한** 곳 (§3.2, D-08).
 
 - 모든 상태 전이는 ``store.transitions.assert_transition``을 거친다.
 - 44개 EventType 전부 ``HANDLERS``에 있다. MVP 1 미사용 타입은 ``noop``.
 - 멱등: ``events.projected_at``이 있으면 다시 적용하지 않는다(``force=True``는 replay 재구축용).
-- D-30: ``InvalidTransition``/``OrderingError``(선행 이벤트 미도착)는 retry 스트림으로, DB/네트워크 예외는
-  ``ProjectionTransient``(ack 안 함, attempt 미소모), ``UnhandledEvent``는 즉시 ``projection_error``.
-- D-30(b): ``pr.merged``가 ``in_review`` 전에 오면 ``tasks.pr_merged_at``만 기록, ``task.completed``가 done까지.
+- D-30: ``InvalidTransition``/``OrderingError``(선행 이벤트 미도착)는 retry 스트림으로,
+  DB/네트워크 예외는 ``ProjectionTransient``(ack 안 함, attempt 미소모),
+  ``UnhandledEvent``는 즉시 ``projection_error``.
+- D-30(b): ``pr.merged``가 먼저 오면 ``pr_merged_at``만 기록하고, 완료는 ``task.completed``가.
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-
 
 import structlog
 from redis.exceptions import RedisError

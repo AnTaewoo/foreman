@@ -53,44 +53,77 @@ def ev(
 
 def task_created(task_id: str, issue: int | None = 10, deps: list[str] | None = None) -> Event:
     return ev(
-        E.TASK_CREATED, ("task", task_id),
+        E.TASK_CREATED,
+        ("task", task_id),
         {
-            "epic_id": "E1", "epic_title": "epic", "title": f"task {task_id}", "spec": "s",
-            "kind": "feature", "role_required": "coding", "depends_on": deps or [],
-            "owned_paths": ["src/**"], "risk_tier": "T1", "issue_number": issue,
+            "epic_id": "E1",
+            "epic_title": "epic",
+            "title": f"task {task_id}",
+            "spec": "s",
+            "kind": "feature",
+            "role_required": "coding",
+            "depends_on": deps or [],
+            "owned_paths": ["src/**"],
+            "risk_tier": "T1",
+            "issue_number": issue,
             "issue_url": None if issue is None else f"https://x/issues/{issue}",
         },
-    )  # fmt: skip
+    )
 
 
 def run_finished(outcome: str = "success", agent_outcome: str = "done") -> Event:
     return ev(
-        E.RUN_FINISHED, ("run", "R1"),
+        E.RUN_FINISHED,
+        ("run", "R1"),
         {
-            "outcome": outcome, "agent_outcome": agent_outcome, "tokens_in": 100,
-            "tokens_out": 50, "cost_usd": 0.02, "duration_s": 12.5, "error": None,
+            "outcome": outcome,
+            "agent_outcome": agent_outcome,
+            "tokens_in": 100,
+            "tokens_out": 50,
+            "cost_usd": 0.02,
+            "duration_s": 12.5,
+            "error": None,
         },
-    )  # fmt: skip
+    )
 
 
 # (a) 전체 시퀀스
 SEQUENCE: list[Event] = [
-    ev(E.PROJECT_CREATED, ("project", "P1"), {"name": "demo", "repo": "org/demo", "default_branch": "main"}, correlation_id="P1"),
+    ev(
+        E.PROJECT_CREATED,
+        ("project", "P1"),
+        {"name": "demo", "repo": "org/demo", "default_branch": "main"},
+        correlation_id="P1",
+    ),
     ev(E.GOAL_CREATED, ("goal", "G1"), {"title": "goal", "description": "d"}),
     ev(E.GOAL_PLAN_PROPOSED, ("goal", "G1"), {"plan_discussion_number": 5, "revision": 1}),
     ev(E.GOAL_ACTIVATED, ("goal", "G1"), {}),
-    ev(E.EPIC_CREATED, ("epic", "E1"), {"goal_id": "G1", "title": "epic", "order": 1, "milestone_number": 3}),
+    ev(
+        E.EPIC_CREATED,
+        ("epic", "E1"),
+        {"goal_id": "G1", "title": "epic", "order": 1, "milestone_number": 3},
+    ),
     task_created("T1"),
     ev(E.TASK_ASSIGNED, ("task", "T1"), {"agent_id": "A1", "run_id": "R1"}),
     ev(E.EPIC_ACTIVATED, ("epic", "E1"), {}),
     ev(E.TASK_STARTED, ("task", "T1"), {"run_id": "R1"}),
     ev(E.RUN_STARTED, ("run", "R1"), {"task_id": "T1", "agent_id": "A1", "model": "claude-opus-5"}),
     ev(E.RUN_TOOL_CALLED, ("run", "R1"), {"tool": "fs.read", "args_digest": "ab" * 32}),
-    ev(E.PR_OPENED, ("pr", "42"), {"task_id": "T1", "run_id": "R1", "pr_number": 42, "head": "ai/epic/10-task", "base": "main"}),
+    ev(
+        E.PR_OPENED,
+        ("pr", "42"),
+        {
+            "task_id": "T1",
+            "run_id": "R1",
+            "pr_number": 42,
+            "head": "ai/epic/10-task",
+            "base": "main",
+        },
+    ),
     ev(E.TASK_COMPLETED, ("task", "T1"), {"run_id": "R1", "pr_number": 42}),
     run_finished(),
     ev(E.PR_MERGED, ("pr", "42"), {"task_id": "T1", "pr_number": 42}),
-]  # fmt: skip
+]
 
 
 @pytest.fixture
@@ -126,10 +159,22 @@ async def test_full_sequence(
 ) -> None:
     events = await publish_all(bus, factory, SEQUENCE)
     expected_task = [
-        None, None, None, None, None, TaskStatus.READY, TaskStatus.ASSIGNED, TaskStatus.ASSIGNED,
-        TaskStatus.RUNNING, TaskStatus.RUNNING, TaskStatus.RUNNING, TaskStatus.RUNNING,
-        TaskStatus.IN_REVIEW, TaskStatus.IN_REVIEW, TaskStatus.DONE,
-    ]  # fmt: skip
+        None,
+        None,
+        None,
+        None,
+        None,
+        TaskStatus.READY,
+        TaskStatus.ASSIGNED,
+        TaskStatus.ASSIGNED,
+        TaskStatus.RUNNING,
+        TaskStatus.RUNNING,
+        TaskStatus.RUNNING,
+        TaskStatus.RUNNING,
+        TaskStatus.IN_REVIEW,
+        TaskStatus.IN_REVIEW,
+        TaskStatus.DONE,
+    ]
     for e, exp in zip(events, expected_task, strict=True):
         assert await projection.apply(e) is True
         if exp is not None:
@@ -167,7 +212,7 @@ async def test_apply_is_idempotent(
     assert (await _task(factory)).status is TaskStatus.ASSIGNED
 
 
-# (c) 순서 뒤바뀜 → InvalidTransition / handle → retry 스케줄 / 소진 → projection_error / DB 예외 → Transient
+# (c) 순서 역전 → InvalidTransition; handle → retry; 소진 → projection_error; DB 예외 → Transient
 async def test_out_of_order_and_retry(
     factory: async_sessionmaker[AsyncSession],
     bus: EventBus,
@@ -192,8 +237,15 @@ async def test_out_of_order_and_retry(
     monkeypatch.setattr(bus, "schedule_retry", spy)
     for attempt in range(1, 6):
         await projection.handle(
-            Delivery(event=completed, message_id="1-0", attempt=attempt, group="g", consumer="c", seq=None)
-        )  # fmt: skip
+            Delivery(
+                event=completed,
+                message_id="1-0",
+                attempt=attempt,
+                group="g",
+                consumer="c",
+                seq=None,
+            )
+        )
     assert scheduled == [(completed.id, a) for a in range(1, 6)]
     assert await redis.xlen("events:P1:retry") == 5
     # 6회째: 소진 → 정상 반환 + projection_error
@@ -214,8 +266,10 @@ async def test_out_of_order_and_retry(
     monkeypatch.setattr(proj_mod.Projection, "apply", boom)
     with pytest.raises(ProjectionTransient):
         await projection.handle(
-            Delivery(event=completed, message_id="1-0", attempt=1, group="g", consumer="c", seq=None)
-        )  # fmt: skip
+            Delivery(
+                event=completed, message_id="1-0", attempt=1, group="g", consumer="c", seq=None
+            )
+        )
     assert scheduled == []
 
 
@@ -259,14 +313,32 @@ async def test_task_failed_from_assigned(
     events = await publish_all(bus, factory, SEQUENCE[:7])
     for e in events:
         await projection.apply(e)
-    f1, = await publish_all(bus, factory, [ev(E.TASK_FAILED, ("task", "T1"), {"run_id": "R1", "reason": "launch_failed", "attempt": 1})])  # fmt: skip
+    (f1,) = await publish_all(
+        bus,
+        factory,
+        [
+            ev(
+                E.TASK_FAILED,
+                ("task", "T1"),
+                {"run_id": "R1", "reason": "launch_failed", "attempt": 1},
+            )
+        ],
+    )
     await projection.apply(f1)
     t = await _task(factory)
     assert t.status is TaskStatus.READY and t.attempt_count == 1
-    a2, f3 = await publish_all(bus, factory, [
-        ev(E.TASK_ASSIGNED, ("task", "T1"), {"agent_id": "A1", "run_id": "R2"}),
-        ev(E.TASK_FAILED, ("task", "T1"), {"run_id": "R2", "reason": "launch_failed", "attempt": 3}),
-    ])  # fmt: skip
+    a2, f3 = await publish_all(
+        bus,
+        factory,
+        [
+            ev(E.TASK_ASSIGNED, ("task", "T1"), {"agent_id": "A1", "run_id": "R2"}),
+            ev(
+                E.TASK_FAILED,
+                ("task", "T1"),
+                {"run_id": "R2", "reason": "launch_failed", "attempt": 3},
+            ),
+        ],
+    )
     await projection.apply(a2)
     await projection.apply(f3)
     t = await _task(factory)
@@ -280,15 +352,31 @@ async def test_retried_cancelled_epic_denied(
     events = await publish_all(bus, factory, SEQUENCE[:10])  # ... run.started
     for e in events:
         await projection.apply(e)
-    more = await publish_all(bus, factory, [
-        ev(E.TASK_BLOCKED, ("task", "T1"), {"reason": "needs_decision"}),
-        ev(E.TASK_RETRIED, ("task", "T1"), {"reason": "approved", "by": "u1"}),
-        ev(E.EPIC_ACTIVATED, ("epic", "E1"), {}),  # 두 번째 → active 유지
-        ev(E.RUN_TOOL_DENIED, ("run", "R1"), {"tool": "fs.read", "reason": "secret", "args_digest": "cd" * 32}),
-        ev(E.RUN_TOOL_DENIED, ("run", "R1"), {"tool": "shell", "reason": "not_allowed", "args_digest": "ef" * 32}),
-        ev(E.TASK_CANCELLED, ("task", "T1"), {"reason": "goal cancelled", "by": "u1", "cascade_from": "G1"}),
-        ev(E.EPIC_COMPLETED, ("epic", "E1"), {}),
-    ])  # fmt: skip
+    more = await publish_all(
+        bus,
+        factory,
+        [
+            ev(E.TASK_BLOCKED, ("task", "T1"), {"reason": "needs_decision"}),
+            ev(E.TASK_RETRIED, ("task", "T1"), {"reason": "approved", "by": "u1"}),
+            ev(E.EPIC_ACTIVATED, ("epic", "E1"), {}),  # 두 번째 → active 유지
+            ev(
+                E.RUN_TOOL_DENIED,
+                ("run", "R1"),
+                {"tool": "fs.read", "reason": "secret", "args_digest": "cd" * 32},
+            ),
+            ev(
+                E.RUN_TOOL_DENIED,
+                ("run", "R1"),
+                {"tool": "shell", "reason": "not_allowed", "args_digest": "ef" * 32},
+            ),
+            ev(
+                E.TASK_CANCELLED,
+                ("task", "T1"),
+                {"reason": "goal cancelled", "by": "u1", "cascade_from": "G1"},
+            ),
+            ev(E.EPIC_COMPLETED, ("epic", "E1"), {}),
+        ],
+    )
     await projection.apply(more[0])
     assert (await _task(factory)).status is TaskStatus.BLOCKED
     await projection.apply(more[1])
@@ -317,7 +405,11 @@ async def test_plan_proposed_revision(
     events = await publish_all(bus, factory, SEQUENCE[:3])
     for e in events:
         await projection.apply(e)
-    rev2, = await publish_all(bus, factory, [ev(E.GOAL_PLAN_PROPOSED, ("goal", "G1"), {"plan_discussion_number": 5, "revision": 2})])  # fmt: skip
+    (rev2,) = await publish_all(
+        bus,
+        factory,
+        [ev(E.GOAL_PLAN_PROPOSED, ("goal", "G1"), {"plan_discussion_number": 5, "revision": 2})],
+    )
     await projection.apply(rev2)
     async with factory() as s:
         goal = await s.get(m.Goal, "G1")
@@ -329,13 +421,27 @@ async def test_plan_proposed_revision(
 def test_all_event_types_have_handlers_and_unused_are_noop() -> None:
     assert set(HANDLERS) == set(EventType)
     for t in (
-        E.PR_CLOSED, E.PR_CHECKS_PASSED, E.PR_CHECKS_FAILED, E.PR_REVIEW_SUBMITTED,
-        E.DECISION_OPENED, E.DECISION_AGENT_VOTED, E.DECISION_HUMAN_RESPONDED,
-        E.DECISION_RESOLVED, E.DECISION_EXPIRED, E.POLICY_UPDATED, E.POLICY_TIER_OVERRIDDEN,
-        E.BUDGET_WARNING, E.BUDGET_EXCEEDED, E.PROJECT_UPDATED, E.PROJECT_PAUSED,
-        E.PROJECT_RESUMED, E.AGENT_KILLED, E.CONTROL_EMERGENCY_STOP, E.TASK_ESCALATED,
+        E.PR_CLOSED,
+        E.PR_CHECKS_PASSED,
+        E.PR_CHECKS_FAILED,
+        E.PR_REVIEW_SUBMITTED,
+        E.DECISION_OPENED,
+        E.DECISION_AGENT_VOTED,
+        E.DECISION_HUMAN_RESPONDED,
+        E.DECISION_RESOLVED,
+        E.DECISION_EXPIRED,
+        E.POLICY_UPDATED,
+        E.POLICY_TIER_OVERRIDDEN,
+        E.BUDGET_WARNING,
+        E.BUDGET_EXCEEDED,
+        E.PROJECT_UPDATED,
+        E.PROJECT_PAUSED,
+        E.PROJECT_RESUMED,
+        E.AGENT_KILLED,
+        E.CONTROL_EMERGENCY_STOP,
+        E.TASK_ESCALATED,
         E.RUN_ARTIFACT_PRODUCED,
-    ):  # fmt: skip
+    ):
         assert HANDLERS[t] is noop, t
         assert HANDLERS[t].__name__ == "noop"
 
@@ -346,11 +452,13 @@ async def test_unhandled_event_records_error(
     projection: Projection,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    e, = await publish_all(bus, factory, [SEQUENCE[0]])  # fmt: skip
+    (e,) = await publish_all(bus, factory, [SEQUENCE[0]])
     monkeypatch.delitem(HANDLERS, E.PROJECT_CREATED)
     with pytest.raises(UnhandledEvent):
         await projection.apply(e)
-    await projection.handle(Delivery(event=e, message_id="1-0", attempt=1, group="g", consumer="c", seq=None))  # fmt: skip
+    await projection.handle(
+        Delivery(event=e, message_id="1-0", attempt=1, group="g", consumer="c", seq=None)
+    )
     async with factory() as s:
         row = (await s.execute(select(m.Event).where(m.Event.id == e.id))).scalar_one()
         assert row.projection_error and "unhandled" in row.projection_error.lower()
@@ -359,7 +467,7 @@ async def test_unhandled_event_records_error(
 async def test_missing_entity_is_ordering_error(
     factory: async_sessionmaker[AsyncSession], bus: EventBus, projection: Projection
 ) -> None:
-    e, = await publish_all(bus, factory, [SEQUENCE[6]])  # task.assigned, Task 없음  # fmt: skip
+    (e,) = await publish_all(bus, factory, [SEQUENCE[6]])  # task.assigned, Task 없음
     with pytest.raises(OrderingError):
         await projection.apply(e)
 

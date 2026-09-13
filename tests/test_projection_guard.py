@@ -1,4 +1,4 @@
-"""P1.5 (j) — AST 가드: control_plane/ 아래 DB 갱신은 projection.py뿐 (D-24 예외: chain.py add, outbox.py update)."""
+"""P1.5 (j) — AST 가드: control_plane/ 아래 DB 갱신은 projection.py뿐 (D-24 예외 적용)."""
 
 from __future__ import annotations
 
