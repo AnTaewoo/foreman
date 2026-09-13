@@ -181,9 +181,7 @@ async def test_subscribe_loop_stops(
 
 
 # (j) replay: DB seq 순, tool_called 제외, since_seq
-async def test_replay_from_db(
-    factory: async_sessionmaker[AsyncSession], redis: Redis
-) -> None:
+async def test_replay_from_db(factory: async_sessionmaker[AsyncSession], redis: Redis) -> None:
     bus = EventBus(redis)
     async with factory() as s:
         a = await bus.publish(s, make_event())

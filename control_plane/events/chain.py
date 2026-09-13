@@ -1,7 +1,7 @@
 """해시 체인 append — ``events``/``tool_calls`` 행을 만드는 **유일한** 곳 (D-26, D-29, D-31).
 
 - ``append_signed(session, event)``: 같은 project의 직전 행 signature로 서명해 insert. 발행자는
-  ``signature=None``으로 넘겨야 한다. ``UNCHAINED``(run.tool_called)는 ``tool_calls``에만 쓰고 서명 없음.
+  ``signature=None``으로 넘긴다. ``UNCHAINED``(run.tool_called)는 ``tool_calls``에만, 서명 없음.
 - 체인 직렬화: Postgres는 ``pg_advisory_xact_lock(hashtext(project_id))``(트랜잭션 끝까지 유지),
   그 외(sqlite)는 프로세스 내 ``asyncio.Lock``을 **세션 commit/rollback까지** 잡는다 — 그래야
   다른 세션이 아직 안 보이는 행을 prev로 놓치지 않는다. 같은 세션의 재진입은 통과.
@@ -34,7 +34,7 @@ class PayloadError(ValueError):
     """``PAYLOAD_TYPES``의 필수 키가 빠졌다."""
 
 
-# 루프별 락 (테스트는 루프를 매번 새로 만든다). 프로세스 내 직렬화용 — Postgres는 advisory lock을 쓴다.
+# 루프별 락 (테스트는 루프를 매번 새로 만든다). 프로세스 내 직렬화용 — Postgres는 advisory lock.
 _locks_by_loop: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[str, asyncio.Lock]] = (
     weakref.WeakKeyDictionary()
 )

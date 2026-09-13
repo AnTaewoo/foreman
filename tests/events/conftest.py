@@ -53,7 +53,7 @@ async def redis() -> AsyncIterator[Redis]:
     try:
         await r.ping()
     except (RedisError, OSError) as exc:
-        pytest.fail(f"Redis not reachable at {TEST_REDIS_URL}: {exc} — run `make docker-up`")
+        pytest.fail(f"Redis not reachable at {TEST_REDIS_URL}: {exc} - run `make docker-up`")
     await r.flushdb()
     yield r
     await r.flushdb()
@@ -72,7 +72,11 @@ def make_event(
     default_payloads: dict[EventType, dict[str, Any]] = {
         EventType.GOAL_CREATED: {"title": "t", "description": "d"},
         EventType.RUN_TOOL_CALLED: {"tool": "fs.read", "args_digest": "ab" * 32, "duration_ms": 3},
-        EventType.RUN_TOOL_DENIED: {"tool": "fs.read", "reason": "secret", "args_digest": "cd" * 32},
+        EventType.RUN_TOOL_DENIED: {
+            "tool": "fs.read",
+            "reason": "secret",
+            "args_digest": "cd" * 32,
+        },
     }
     return Event(
         project_id=project_id,

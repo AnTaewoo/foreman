@@ -1,4 +1,4 @@
-"""Event Bus — Redis Streams (설계 §3.2). publish는 outbox(D-06), 전달은 consumer group, 재시도는 D-30.
+"""Event Bus — Redis Streams (설계 §3.2). publish=outbox(D-06), 전달=consumer group, 재시도=D-30.
 
 스트림 메시지 필드: ``id``, ``type``, ``seq``, ``canonical``(서명 대상 텍스트), ``signature``.
 수신 측은 canonical 텍스트로 Event를 복원하므로 JSON 표기가 변하지 않는다 (D-29).
@@ -14,6 +14,7 @@ from typing import Any, cast
 
 import structlog
 from redis.asyncio import Redis
+from redis.typing import EncodableT, FieldT
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -64,7 +65,7 @@ class RetryItem:
 Handler = Callable[[Delivery], Awaitable[None]]
 
 
-def stream_fields(event: Event, seq: int | None = None) -> dict[str, str]:
+def stream_fields(event: Event, seq: int | None = None) -> dict[FieldT, EncodableT]:
     """XADD 필드. 워커(P4.4)도 이 형식으로 직접 XADD 한다."""
     return {
         "id": event.id,
@@ -90,7 +91,7 @@ class EventBus:
 
     # ------------------------------------------------------------------ publish
     async def publish(self, session: AsyncSession, event: Event) -> Event:
-        """outbox: 서명·insert만 한다. 스트림 전달은 ``OutboxRelay``. UNCHAINED는 바로 XADD (D-31)."""
+        """outbox: 서명·insert만. 스트림 전달은 ``OutboxRelay``. UNCHAINED는 바로 XADD (D-31)."""
         out = await append_signed(session, event)
         if event.type in UNCHAINED:
             await self._redis.xadd(stream_key(event.project_id), stream_fields(out))
@@ -164,7 +165,7 @@ class EventBus:
         reclaim_idle_ms: int = 30_000,
         count: int = 100,
     ) -> int:
-        """한 바퀴: (1) idle pending 재전달(XAUTOCLAIM) (2) 새 메시지(XREADGROUP '>'). 처리 건수 반환."""
+        """(1) idle pending 재전달(XAUTOCLAIM) (2) 새 메시지(XREADGROUP). 처리 건수 반환."""
         handled = 0
         streams = await self._streams(project_id)
         for stream in streams:
@@ -173,7 +174,11 @@ class EventBus:
             _, claimed, *_rest = cast(
                 tuple[Any, ...],
                 await self._redis.xautoclaim(
-                    stream, group, consumer, min_idle_time=reclaim_idle_ms, start_id="0-0",
+                    stream,
+                    group,
+                    consumer,
+                    min_idle_time=reclaim_idle_ms,
+                    start_id="0-0",
                     count=count,
                 ),  # fmt: skip
             )
@@ -244,9 +249,7 @@ class EventBus:
         )
         return cast(str, message_id)
 
-    async def due_retries(
-        self, project_id: str, *, now: datetime | None = None
-    ) -> list[RetryItem]:
+    async def due_retries(self, project_id: str, *, now: datetime | None = None) -> list[RetryItem]:
         """기한이 지난 항목만 돌려주고 스트림에서 제거."""
         ts_now = (now or datetime.now(UTC)).timestamp()
         key = retry_stream_key(project_id)

@@ -1,4 +1,4 @@
-"""Outbox relay (D-06): ``events.published_at IS NULL``인 행을 ``seq`` 순으로 XADD 하고 부기 컬럼을 채운다.
+"""Outbox relay (D-06): ``published_at IS NULL``인 행을 ``seq`` 순으로 XADD 하고 부기 컬럼을 채운다.
 
 XADD 뒤 ``_mark_published``가 실패하면 다음 바퀴에 같은 행을 한 번 더 XADD 한다 (at-least-once).
 projection은 event.id로 중복을 흡수한다 (P1.5). 이 파일의 UPDATE는 D-24가 허용한 부기 컬럼 예외다.

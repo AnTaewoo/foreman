@@ -1,4 +1,4 @@
-"""P1.4 — events/chain.py: append_signed 유일 경로, 서명, tool_calls 분기, 락, AST 가드 (red a~f)."""
+"""P1.4 — events/chain.py: append_signed 유일 경로, 서명, tool_calls 분기, 락, AST 가드 (a~f)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from control_plane.events import chain
 from control_plane.events.chain import PayloadError, append_signed, verify_chain_db
 from control_plane.events.schema import EventType, canonical_json, sign, verify_chain
 from control_plane.store import models as m
@@ -125,7 +124,6 @@ async def test_verify_chain_db_detects_tamper(factory: async_sessionmaker[AsyncS
         await s.commit()
     async with factory() as s:
         assert await verify_chain_db(s, "P1") is False
-
 
 
 # (f) AST: Event/ToolCall 모델 row를 만드는 곳은 chain.py뿐
