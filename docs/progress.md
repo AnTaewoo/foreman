@@ -109,3 +109,6 @@
 | 2026-09-13T15:44 | P4.3 | 착수 | agents/coding.py LangGraph 루프 + 스크립트 픽스처 | |
 | 2026-09-13T15:44 | P4.3 | Red | test_coding 7 + coding_scripts 5, ModuleNotFoundError agents.coding | |
 | 2026-09-13T15:47 | P4.3 | Green | agents/coding.py LangGraph 루프(pass/retry/fail/scope/dependency), 363 passed | |
+| 2026-09-13T15:49 | P4.3 | Gate | make check pass (363), pre-commit pass, 시도 3/3 | |
+| 2026-09-13T15:49 | P4.3 | 완료 | 보드 done | 9d8dd0c |
+| 2026-09-13T15:49 | P4.4 | 착수 | worker entrypoint/publish/Dockerfile — 워커 XADD 직접, DB append는 Scheduler ingest(D-26) | |
