@@ -87,7 +87,9 @@ def _last_processor_name() -> str:
     return type(procs[-1]).__name__
 
 
-def test_configure_logging_json_renderer(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+def test_configure_logging_json_renderer(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     from control_plane.config import Settings
     from control_plane.logging import configure_logging
 
