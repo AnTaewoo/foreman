@@ -125,3 +125,5 @@
 | 2026-09-13T16:14 | PC-4 | 자동 | make check pass (378), test-integration 5 passed, --fake PASS; Ollama 1차 0/3 (pycache 커밋, API 환각, 파일 전체 재작성 손상) | c728123 |
 | 2026-09-13T16:20 | PC-4 | 자동 | Ollama 2차: Scheduler 중복 배정 버그 발견 → 수정 | 1f1c460 |
 | 2026-09-13T16:27 | PC-4 | 자동 | Ollama 3차 2/3; Task 1(기존 파일 수정)은 JSON 안 코드 손상 → 파일 블록 형식으로 변경 → 단독 1회차 통과 | |
+| 2026-09-13T16:40 | PC-4 | 자동 | Ollama 5·6차 각 2/3 (모델 편차), 파서 마커 느슨화, make check pass (383) | 9518095 |
+| 2026-09-13T16:45 | PC-4 | 판정 | pending — docs/pc/PC-4.md, 사용자 선택지 3개 | |
