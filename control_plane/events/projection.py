@@ -103,6 +103,7 @@ async def _project_created(session: AsyncSession, event: Event) -> None:
     row.name = str(p.get("name", ""))
     row.repo_full_name = str(p.get("repo", ""))
     row.default_branch = str(p.get("default_branch", "main"))
+    row.members = list(p.get("members", []))  # P5.2 (additive key)
     row.created_at = event.ts
 
 

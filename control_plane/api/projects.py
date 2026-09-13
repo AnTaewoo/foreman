@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -15,10 +16,16 @@ from control_plane.store import models as m
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
+class Member(BaseModel):
+    user_id: str  # MVP 1: GitHub login과 같다 (설계 §4.1 members, §7.4 승인 권한)
+    role: Literal["owner", "approver", "viewer"]
+
+
 class ProjectIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     repo: str = Field(min_length=1, description="repo_full_name(owner/name) 또는 로컬 경로")
     default_branch: str = "main"
+    members: list[Member] | None = None  # 없으면 요청자가 owner
 
 
 class ProjectOut(BaseModel):
@@ -32,6 +39,7 @@ class ProjectOut(BaseModel):
 @router.post("", status_code=201)
 async def create_project(body: ProjectIn, state: StateDep, user: UserDep) -> ProjectOut:
     pid = str(ULID())
+    members = body.members if body.members is not None else [Member(user_id=user, role="owner")]
     (event,) = await publish(
         state,
         Event(
@@ -39,7 +47,12 @@ async def create_project(body: ProjectIn, state: StateDep, user: UserDep) -> Pro
             actor=human(user),
             type=EventType.PROJECT_CREATED,
             subject=Subject(entity="project", id=pid),
-            payload={"name": body.name, "repo": body.repo, "default_branch": body.default_branch},
+            payload={
+                "name": body.name,
+                "repo": body.repo,
+                "default_branch": body.default_branch,
+                "members": [mem.model_dump() for mem in members],
+            },
             correlation_id=pid,  # Goal 밖 → project_id (D-25)
             causation_id=None,
         ),

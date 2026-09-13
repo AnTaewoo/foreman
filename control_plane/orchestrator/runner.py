@@ -1,0 +1,210 @@
+"""Goal 실행기 (설계 §3.3, D-13): ``goal.created`` → 백그라운드로 Orchestrator 그래프
+(thread_id = goal_id) → Plan 승인 interrupt에서 대기 → 웹훅 ``/approve``·``/reject`` →
+``Command(resume)`` → decompose → emit(Issue) 까지.
+
+- 이벤트는 ``EventBus.publish``(outbox)로만 나간다. Goal 제목/설명은 projection 지연과 무관하게
+  ``events`` 테이블의 ``goal.created`` 행에서 읽는다.
+- repo 입력은 로컬 경로만 (D-11): ``repo_path_for(repo_full_name)``가 경로를 정한다.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import structlog
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import Command
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from agents.llm.base import ModelProvider
+from control_plane.events.bus import EventBus
+from control_plane.events.schema import Event
+from control_plane.orchestrator import emit as emit_mod
+from control_plane.orchestrator.graph import (
+    DiscussionsLike,
+    Emit,
+    OrchestratorDeps,
+    build_graph,
+    open_postgres_checkpointer,
+)
+from control_plane.orchestrator.state import OrchestratorState, initial_state
+from control_plane.store import models as m
+from control_plane.store.session import get_session
+from github_adapter.protocol import GitHubClient
+
+log = structlog.get_logger(__name__)
+
+RepoPathFor = Callable[[str], Path]
+
+
+def default_repo_path(repo: str) -> Path:
+    """``repo``가 존재하는 로컬 경로면 그대로, 아니면 ``repos/<name>`` (로컬 클론 디렉토리)."""
+    p = Path(repo)
+    return p if p.exists() else Path("repos") / repo.rsplit("/", 1)[-1]
+
+
+@dataclass
+class Waiting:
+    project_id: str
+    plan_discussion_number: int | None
+    plan_revision: int
+
+
+class GoalRunner:
+    def __init__(
+        self,
+        *,
+        factory: async_sessionmaker[AsyncSession],
+        bus: EventBus,
+        provider: ModelProvider,
+        github: GitHubClient,
+        discussions: DiscussionsLike,
+        checkpointer: BaseCheckpointSaver[Any] | None = None,
+        model: str | None = None,
+        repo_path_for: RepoPathFor | None = None,
+        emit: Emit | None = None,
+    ) -> None:
+        self._factory = factory
+        self._bus = bus
+        self._model = model
+        self._repo_path_for = repo_path_for or default_repo_path
+        self._checkpointer: BaseCheckpointSaver[Any] = checkpointer or MemorySaver()
+        self._pg_cm: Any = None  # Any: AsyncPostgresSaver 컨텍스트 매니저
+
+        async def publish(event: Event) -> Event:
+            async with get_session(factory) as s:
+                return await bus.publish(s, event)
+
+        async def do_emit(state: OrchestratorState) -> dict[str, Any]:
+            return await emit_mod.emit(state, github=github, publish=publish)
+
+        self.publish = publish
+        self._deps = OrchestratorDeps(
+            provider=provider,
+            github=github,
+            discussions=discussions,
+            publish=publish,
+            emit=emit or do_emit,
+            model=model,
+        )
+        self._graph: Any = None  # Any: CompiledStateGraph, 체크포인터 확정 후 lazy
+        self._running: dict[str, asyncio.Task[None]] = {}
+        self._waiting: dict[str, Waiting] = {}
+        self.errors: dict[str, str] = {}
+
+    # ------------------------------------------------------------------ 수명
+    async def startup(self, database_url: str) -> None:
+        """Postgres면 AsyncPostgresSaver를 연다(sqlite/주입된 saver면 no-op)."""
+        if self._pg_cm is None and not database_url.startswith("sqlite"):
+            if isinstance(self._checkpointer, MemorySaver):
+                self._pg_cm = open_postgres_checkpointer(_Db(database_url))
+                saver = await self._pg_cm.__aenter__()
+                await saver.setup()
+                self._checkpointer = saver
+                self._graph = None
+
+    async def shutdown(self) -> None:
+        for t in list(self._running.values()):
+            t.cancel()
+        if self._pg_cm is not None:
+            await self._pg_cm.__aexit__(None, None, None)
+            self._pg_cm = None
+
+    def graph(self) -> Any:
+        if self._graph is None:
+            self._graph = build_graph(self._deps, checkpointer=self._checkpointer)
+        return self._graph
+
+    # ------------------------------------------------------------------ 실행
+    async def start(self, project_id: str, goal_id: str) -> None:
+        """``AppState.on_goal_created`` 훅: 백그라운드 Task로 실행하고 바로 돌아온다."""
+        self._spawn(goal_id, self._run(project_id, goal_id))
+
+    def _spawn(self, goal_id: str, coro: Any) -> None:
+        task = asyncio.create_task(coro)
+        self._running[goal_id] = task
+        task.add_done_callback(lambda t: self._running.pop(goal_id, None))
+
+    async def _run(self, project_id: str, goal_id: str) -> None:
+        try:
+            async with self._factory() as s:
+                project = await s.get(m.Project, project_id)
+                created = await s.scalar(
+                    select(m.Event).where(
+                        m.Event.type == "goal.created", m.Event.subject_id == goal_id
+                    )
+                )
+            if project is None or created is None:
+                raise RuntimeError(f"project {project_id} or goal.created {goal_id} not found")
+            payload = created.payload
+            state = initial_state(
+                project_id=project_id,
+                goal_id=goal_id,
+                goal_title=str(payload.get("title", "")),
+                goal_description=str(payload.get("description", "")),
+                repo_path=str(self._repo_path_for(project.repo_full_name)),
+                repo_full_name=project.repo_full_name,
+                model=self._model,
+                last_event_id=created.id,
+            )
+            out = await self.graph().ainvoke(state, self._cfg(goal_id))
+            self._after_invoke(project_id, goal_id, out)
+        except Exception as exc:
+            log.error("runner.failed", goal_id=goal_id, error=repr(exc))
+            self.errors[goal_id] = repr(exc)
+
+    def _after_invoke(self, project_id: str, goal_id: str, out: dict[str, Any]) -> None:
+        if "__interrupt__" in out:
+            self._waiting[goal_id] = Waiting(
+                project_id=project_id,
+                plan_discussion_number=out.get("plan_discussion_number"),
+                plan_revision=int(out.get("plan_revision") or 1),
+            )
+            log.info("runner.waiting_approval", goal_id=goal_id)
+            return
+        log.info("runner.finished", goal_id=goal_id, tasks=len(out.get("tasks") or []))
+
+    # ------------------------------------------------------------------ 재개
+    def is_waiting(self, goal_id: str) -> bool:
+        return goal_id in self._waiting
+
+    def waiting(self, project_id: str) -> dict[str, Waiting]:
+        return {g: w for g, w in self._waiting.items() if w.project_id == project_id}
+
+    async def resume(self, goal_id: str, *, approved: bool, by: str, reason: str = "") -> None:
+        """interrupt 재개를 백그라운드로. 대기 중이 아니면 KeyError."""
+        waiting = self._waiting.pop(goal_id)
+        self._spawn(goal_id, self._resume(waiting.project_id, goal_id, approved, by, reason))
+
+    async def _resume(
+        self, project_id: str, goal_id: str, approved: bool, by: str, reason: str
+    ) -> None:
+        try:
+            out = await self.graph().ainvoke(
+                Command(resume={"approved": approved, "by": by, "reason": reason}),
+                self._cfg(goal_id),
+            )
+            self._after_invoke(project_id, goal_id, out)
+        except Exception as exc:
+            log.error("runner.resume_failed", goal_id=goal_id, error=repr(exc))
+            self.errors[goal_id] = repr(exc)
+
+    async def wait_idle(self) -> None:
+        """테스트/스크립트용: 진행 중인 백그라운드 실행이 끝날 때까지."""
+        while self._running:
+            await asyncio.gather(*list(self._running.values()), return_exceptions=True)
+
+    @staticmethod
+    def _cfg(goal_id: str) -> dict[str, Any]:
+        return {"configurable": {"thread_id": goal_id}}
+
+
+@dataclass
+class _Db:  # graph._DbSettings 프로토콜(쓰기 가능한 속성) 충족
+    database_url: str

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends, Header, Request
 from redis.asyncio import Redis
@@ -17,6 +17,9 @@ from control_plane.config import Settings
 from control_plane.events.bus import EventBus
 from control_plane.events.schema import Actor, Event
 from control_plane.store import session as sess
+
+if TYPE_CHECKING:
+    from control_plane.orchestrator.runner import GoalRunner
 
 GoalHook = Callable[[str, str], Awaitable[None]]  # (project_id, goal_id) — P5.2 runner가 건다
 
@@ -30,6 +33,7 @@ class AppState:
     engine: AsyncEngine | None = None  # 앱이 직접 만든 경우만 (shutdown에서 dispose)
     owns_redis: bool = False
     on_goal_created: GoalHook | None = None
+    runner: GoalRunner | None = None  # P5.2: Goal 실행기(웹훅 승인 재개)
 
 
 def build_state(

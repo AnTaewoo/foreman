@@ -225,6 +225,7 @@ class ProjectCreatedPayload(TypedDict):
     name: str
     repo: str  # repo_full_name 또는 로컬 경로
     default_branch: str
+    members: NotRequired[list[dict[str, str]]]  # P5.2 추가(additive): [{user_id, role}] §4.1
 
 
 class GoalCreatedPayload(TypedDict):

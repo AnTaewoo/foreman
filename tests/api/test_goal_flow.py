@@ -1,5 +1,5 @@
 """P5.2 — Goal 실행 + 승인 재개 (red a~e): POST /goals → 백그라운드 Orchestrator → interrupt 대기 →
-서명된 issue_comment 웹훅(/approve·/reject) → Command(resume). GitHub·LLM은 Dry/Fake, DB는 projection."""
+서명된 issue_comment 웹훅(/approve·/reject) → Command(resume). GitHub·LLM은 Dry/Fake."""
 
 from __future__ import annotations
 
@@ -103,7 +103,7 @@ async def start_goal(
     return pid, gid
 
 
-# (a) POST /goals → 백그라운드 실행 → Plan Discussion(dry) → interrupt에서 대기, awaiting_plan_approval
+# (a) POST /goals → 백그라운드 실행 → Plan Discussion(dry) → interrupt 대기, awaiting_plan_approval
 async def test_goal_runs_until_plan_approval(
     client: httpx.AsyncClient,
     pump: Pump,
@@ -195,7 +195,7 @@ async def test_reject_cancels_goal(
     assert await events_of(factory, "task.created") == []
 
 
-# (e) 같은 delivery 두 번 → 두 번째는 204, resume 1회
+# (e) 같은 delivery 두 번 → 두 번째는 200 duplicate(P2.4 계약), resume 1회
 async def test_same_delivery_twice_resumes_once(
     client: httpx.AsyncClient,
     pump: Pump,
@@ -209,7 +209,7 @@ async def test_same_delivery_twice_resumes_once(
     ).status_code == 202
     assert (
         await client.post("/webhooks/github", content=body, headers=signed(body, "d-1"))
-    ).status_code == 204
+    ).status_code == 200  # duplicate
     await runner.wait_idle()
     # 이미 재개된 뒤의 새 delivery도 무해 (대기 중인 Goal 없음 → no-op 202)
     assert (
