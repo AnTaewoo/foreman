@@ -1,4 +1,4 @@
-"""GitHub 본문 마커 (설계 §7.3). 멱등성의 근거: Issue/PR/코멘트에 플랫폼이 남긴 마커를 찾아 재생성을 막는다."""
+"""GitHub 본문 마커 (설계 §7.3). Issue/PR/코멘트에 남긴 마커를 찾아 재생성을 막는다(멱등)."""
 
 from __future__ import annotations
 
@@ -32,6 +32,10 @@ def pr_marker(meta: PrMeta) -> str:
     )
 
 
+def _box(ok: bool) -> str:
+    return "[x]" if ok else "[ ]"
+
+
 def pr_meta_block(
     meta: PrMeta,
     *,
@@ -44,7 +48,6 @@ def pr_meta_block(
 ) -> str:
     """§7.3 PR 본문 상단 블록."""
     decision_lines = "\n".join(f"- {d}" for d in (decisions or [])) or "- (none)"
-    box = lambda ok: "[x]" if ok else "[ ]"  # noqa: E731 — 한 줄 헬퍼
     return "\n".join(
         [
             pr_marker(meta),
@@ -57,8 +60,8 @@ def pr_meta_block(
             "### Decisions referenced",
             decision_lines,
             "### Checklist",
-            f"- {box(owned_paths_only)} owned_paths only",
-            f"- {box(no_new_dependency)} no new dependency",
+            f"- {_box(owned_paths_only)} owned_paths only",
+            f"- {_box(no_new_dependency)} no new dependency",
         ]
     )
 

@@ -1,6 +1,6 @@
 """GitHub REST client — httpx 직접 (PyGithub 미사용). 모든 쓰기는 멱등 (설계 §7.2, §7.3, D-22).
 
-``client``는 ``base_url=https://api.github.com``이고 ``InstallationAuth``가 붙은 ``httpx.AsyncClient``.
+``client``는 base_url이 api.github.com이고 ``InstallationAuth``가 붙은 ``httpx.AsyncClient``.
 멱등 판정은 GitHub search API(인덱스 지연) 대신 목록 조회로 한다 (D-22).
 """
 
@@ -28,17 +28,18 @@ log = structlog.get_logger(__name__)
 GITHUB_API_BASE_URL = "https://api.github.com"
 
 # §7.2 라벨 스키마 (이름 → 색). kind는 TaskKind 값의 언더스코어를 하이픈으로.
+_ROLES = ("coding", "test", "review", "research", "architect")
+_TIERS = (("T0", "c2e0c6"), ("T1", "fbca04"), ("T2", "f9a825"), ("T3", "d93f0b"))
+_STATUSES = ("ready", "running", "blocked", "awaiting-decision")
+_KINDS = ("feature", "bugfix", "test", "refactor", "research", "fix-from-review", "fix-from-test")
 LABEL_COLORS: dict[str, str] = {
     "ai:task": "0e8a16",
-    **{f"role:{r}": "1d76db" for r in ("coding", "test", "review", "research", "architect")},
-    **{f"tier:{t}": c for t, c in (("T0", "c2e0c6"), ("T1", "fbca04"), ("T2", "f9a825"), ("T3", "d93f0b"))},
-    **{f"status:{s}": "5319e7" for s in ("ready", "running", "blocked", "awaiting-decision")},
-    **{
-        f"kind:{k}": "bfdadc"
-        for k in ("feature", "bugfix", "test", "refactor", "research", "fix-from-review", "fix-from-test")
-    },
+    **{f"role:{r}": "1d76db" for r in _ROLES},
+    **{f"tier:{t}": c for t, c in _TIERS},
+    **{f"status:{s}": "5319e7" for s in _STATUSES},
+    **{f"kind:{k}": "bfdadc" for k in _KINDS},
     "human:override": "b60205",
-}  # fmt: skip
+}
 
 
 class GitHubError(Exception):
