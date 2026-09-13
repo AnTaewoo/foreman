@@ -254,7 +254,7 @@ def make_runner(
     )
 
 
-# (a)(b)(d) 같은 checkpointer로 만든 새 GoalRunner가 startup()에서 대기 목록을 복원하고, /approve로 재개된다
+# (a)(b)(d) 같은 checkpointer의 새 GoalRunner가 startup()에서 대기 목록을 복원하고 /approve로 재개
 async def test_restart_restores_waiting_goals(
     factory: async_sessionmaker[AsyncSession],
     redis: Redis,
@@ -274,7 +274,7 @@ async def test_restart_restores_waiting_goals(
         pid, gid = await start_goal(c1, pump, runner1)
         g = (await c1.get(f"/projects/{pid}/goals/{gid}")).json()
     assert runner1.is_waiting(gid) and g["status"] == "awaiting_plan_approval"
-    # "재시작": 새 프로세스의 runner는 _run을 돌린 적이 없다. 체크포인트(saver)와 projection만 남아 있다
+    # "재시작": 새 runner는 _run을 돌린 적이 없다. 체크포인트(saver)와 projection만 남아 있다
     runner2 = make_runner(factory, redis, saver, [DECOMPOSE_JSON])
     assert not runner2.is_waiting(gid)
     await runner2.startup("sqlite+aiosqlite://")

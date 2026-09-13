@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import structlog
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
@@ -99,10 +100,11 @@ class GoalRunner:
         self._running: dict[str, asyncio.Task[None]] = {}
         self._waiting: dict[str, Waiting] = {}
         self.errors: dict[str, str] = {}
+        self.restore_skipped: list[str] = []  # P6.2: 체크포인트가 없어 복원 못 한 Goal
 
     # ------------------------------------------------------------------ 수명
     async def startup(self, database_url: str) -> None:
-        """Postgres면 AsyncPostgresSaver를 연다(sqlite/주입된 saver면 no-op)."""
+        """Postgres면 AsyncPostgresSaver를 연다(sqlite면 no-op). 뒤이어 대기 목록 복원(P6.2)."""
         if self._pg_cm is None and not database_url.startswith("sqlite"):
             if isinstance(self._checkpointer, MemorySaver):
                 self._pg_cm = open_postgres_checkpointer(_Db(database_url))
@@ -110,6 +112,46 @@ class GoalRunner:
                 await saver.setup()
                 self._checkpointer = saver
                 self._graph = None
+        await self.restore_waiting()
+
+    async def restore_waiting(self) -> list[str]:
+        """projection의 ``awaiting_plan_approval`` Goal 중 체크포인트가 있는 것을 ``_waiting``에.
+
+        API 재시작 뒤에도 ``/approve``가 동작하게 한다(리뷰 A6). 스레드가 없는 Goal(다른 saver)은
+        ``restore_skipped``에 남기고 경고만 — 그 Goal은 다시 ``POST /goals``로 만들어야 한다.
+        """
+        from control_plane.store.enums import GoalStatus
+
+        async with self._factory() as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(m.Goal).where(m.Goal.status == GoalStatus.AWAITING_PLAN_APPROVAL)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        restored: list[str] = []
+        for goal in rows:
+            if goal.id in self._waiting:
+                continue
+            tup = await self._checkpointer.aget_tuple(self._cfg(goal.id))
+            if tup is None:
+                self.restore_skipped.append(goal.id)
+                log.warning(
+                    "runner.restore_skipped", goal_id=goal.id, reason="no checkpoint thread"
+                )
+                continue
+            self._waiting[goal.id] = Waiting(
+                project_id=goal.project_id,
+                plan_discussion_number=goal.plan_discussion_id,
+                plan_revision=goal.plan_revision,
+            )
+            restored.append(goal.id)
+        if restored:
+            log.info("runner.restored_waiting", goals=restored)
+        return restored
 
     async def shutdown(self) -> None:
         for t in list(self._running.values()):
@@ -203,8 +245,8 @@ class GoalRunner:
             await asyncio.gather(*list(self._running.values()), return_exceptions=True)
 
     @staticmethod
-    def _cfg(goal_id: str) -> dict[str, Any]:
-        return {"configurable": {"thread_id": goal_id}}
+    def _cfg(goal_id: str) -> RunnableConfig:
+        return RunnableConfig(configurable={"thread_id": goal_id})
 
 
 @dataclass

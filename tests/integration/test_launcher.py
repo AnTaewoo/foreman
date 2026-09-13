@@ -102,7 +102,7 @@ async def test_docker_launcher_starts_worker(tmp_path: Path) -> None:
         image="foreman-worker:test",
         redis_url=f"redis://host.docker.internal:{port_db}",
         worker_env={"WORKER_LLM_PROVIDER": "fake", "WORKER_FAKE_SCRIPT": "/scripts/pass.json"},
-        # remote 디렉토리 자체를 같은 경로에 마운트 — pytest tmp의 부모(0o700)는 컨테이너 uid가 못 지나간다
+        # remote 자체를 같은 경로에 마운트 — pytest tmp 부모(0o700)는 컨테이너 uid가 못 지남
         mounts=[(str(remote), str(remote)), (str(FIXTURES / "coding_scripts"), "/scripts")],
     )
     container = await launcher.launch(spec)
