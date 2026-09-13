@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
+import subprocess
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from control_plane.config import Settings
 from control_plane.events.bus import Delivery, EventBus
+from control_plane.events.outbox import OutboxRelay
+from control_plane.events.projection import Projection
 from control_plane.events.schema import Actor, Event, EventType
 from control_plane.scheduler.launcher import FakeLauncher
 from control_plane.store import models as m
@@ -201,3 +205,146 @@ async def test_runtime_dry_merge_unblocks_dependents(
 # (d) 헬퍼: settings_for가 dry_run을 받는다 (Settings 필드 확인)
 def test_settings_dry_run_flag(_: Callable[..., Settings] = settings_for) -> None:
     assert settings_for("sqlite+aiosqlite://", dry_run=False).dry_run is False
+
+
+# ------------------------------------------ PC-6 발견: Dry 머지는 git main도 옮겨야 한다
+
+GENV = {
+    "GIT_AUTHOR_NAME": "s",
+    "GIT_AUTHOR_EMAIL": "s@x",
+    "GIT_COMMITTER_NAME": "s",
+    "GIT_COMMITTER_EMAIL": "s@x",
+    "PATH": "/usr/bin:/bin",
+}
+FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
+
+
+def git(cwd: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True, env=GENV
+    ).stdout.strip()
+
+
+def make_remote_with_branch(
+    tmp_path: Path, branch: str, filename: str, diverge: bool = False
+) -> Path:
+    remote = tmp_path / "remote.git"
+    subprocess.run([str(FIXTURES / "make_remote.sh"), str(remote)], check=True, capture_output=True)
+    seed = tmp_path / "seed"
+    shutil.copytree(
+        FIXTURES / "sample_repo",
+        seed,
+        ignore=shutil.ignore_patterns("dot_git_stub", ".venv", "node_modules"),
+    )
+    git(seed, "init", "-q", "-b", "main")
+    git(seed, "add", "-A")
+    git(seed, "commit", "-q", "-m", "seed")
+    git(seed, "remote", "add", "origin", str(remote))
+    git(seed, "push", "-q", "origin", "main")
+    git(seed, "checkout", "-q", "-b", branch)
+    (seed / filename).write_text("x = 1\n")
+    git(seed, "add", "-A")
+    git(seed, "commit", "-q", "-m", f"feat: {filename}")
+    git(seed, "push", "-q", "origin", branch)
+    if diverge:  # main에도 다른 파일 커밋 → ff 불가, 충돌 없음
+        git(seed, "checkout", "-q", "main")
+        (seed / "OTHER.md").write_text("o\n")
+        git(seed, "add", "-A")
+        git(seed, "commit", "-q", "-m", "main moves")
+        git(seed, "push", "-q", "origin", "main")
+    return remote
+
+
+# (e) pr.opened{head} → bare remote의 main이 브랜치까지 fast-forward → 그 다음 pr.merged
+async def test_dry_merge_moves_git_main_fast_forward(
+    factory: async_sessionmaker[AsyncSession], redis: Redis, tmp_path: Path
+) -> None:
+    from control_plane.dry_merge import DryMerger
+
+    remote = make_remote_with_branch(tmp_path, "ai/e/1-t", "NEW.py")
+    bus = EventBus(redis)
+    await publish_all(
+        factory,
+        redis,
+        [*bootstrap("P1", "G1", str(remote)), task_created("P1", "G1", "T1", ["a/**"], 1)],
+    )
+    while await OutboxRelay(factory, redis).relay_once() > 0:
+        pass
+    await bus.poll_once("t", Projection(factory, bus).handle, consumer="t", project_id="P1")
+    merger = DryMerger(factory, bus, enabled=True, repo_path_for=lambda repo: Path(repo))
+    before = git(remote, "rev-parse", "main")
+    opened = ev(
+        "P1",
+        EventType.PR_OPENED,
+        "pr",
+        "7",
+        {"task_id": "T1", "run_id": "R1", "pr_number": 7, "head": "ai/e/1-t", "base": "main"},
+        correlation_id="G1",
+        actor=AGENT,
+    )
+    await merger.handle(delivery(opened))
+    assert git(remote, "rev-parse", "main") == git(remote, "rev-parse", "ai/e/1-t") != before
+    assert len(await merged_events(factory)) == 1 and merger.git_merges == [
+        ("P1", 7, "fast-forward")
+    ]
+
+
+# (f) main이 갈라졌지만 충돌 없음 → worktree merge 커밋 → pr.merged; 충돌이면 pr.merged 없음 + 기록
+async def test_dry_merge_diverged_and_conflict(
+    factory: async_sessionmaker[AsyncSession], redis: Redis, tmp_path: Path
+) -> None:
+    from control_plane.dry_merge import DryMerger
+
+    remote = make_remote_with_branch(tmp_path, "ai/e/1-t", "NEW.py", diverge=True)
+    bus = EventBus(redis)
+    await publish_all(
+        factory,
+        redis,
+        [*bootstrap("P1", "G1", str(remote)), task_created("P1", "G1", "T1", ["a/**"], 1)],
+    )
+    while await OutboxRelay(factory, redis).relay_once() > 0:
+        pass
+    await bus.poll_once("t", Projection(factory, bus).handle, consumer="t", project_id="P1")
+    merger = DryMerger(factory, bus, enabled=True, repo_path_for=lambda repo: Path(repo))
+    opened = ev(
+        "P1",
+        EventType.PR_OPENED,
+        "pr",
+        "7",
+        {"task_id": "T1", "run_id": "R1", "pr_number": 7, "head": "ai/e/1-t", "base": "main"},
+        correlation_id="G1",
+        actor=AGENT,
+    )
+    await merger.handle(delivery(opened))
+    assert merger.git_merges == [("P1", 7, "merge")]
+    assert "NEW.py" in git(remote, "ls-tree", "--name-only", "main")
+    assert "OTHER.md" in git(remote, "ls-tree", "--name-only", "main")
+    assert len(await merged_events(factory)) == 1
+    # 충돌: 같은 파일을 main과 브랜치가 다르게 바꿈 → 머지 실패 → pr.merged 발행 없음
+    remote2 = make_remote_with_branch(tmp_path / "c", "ai/e/2-t", "README.md", diverge=False)
+    seed = tmp_path / "c" / "seed"
+    git(seed, "checkout", "-q", "main")
+    (seed / "README.md").write_text("conflict on main\n")
+    git(seed, "add", "-A")
+    git(seed, "commit", "-q", "-m", "main edits README")
+    git(seed, "push", "-q", "origin", "main")
+    await publish_all(
+        factory,
+        redis,
+        [*bootstrap("P2", "G2", str(remote2)), task_created("P2", "G2", "T2", ["a/**"], 1)],
+    )
+    while await OutboxRelay(factory, redis).relay_once() > 0:
+        pass
+    await bus.poll_once("t", Projection(factory, bus).handle, consumer="t", project_id="P2")
+    opened2 = ev(
+        "P2",
+        EventType.PR_OPENED,
+        "pr",
+        "8",
+        {"task_id": "T2", "run_id": "R2", "pr_number": 8, "head": "ai/e/2-t", "base": "main"},
+        correlation_id="G2",
+        actor=AGENT,
+    )
+    await merger.handle(delivery(opened2))
+    assert merger.git_merges[-1] == ("P2", 8, "conflict")
+    assert len(await merged_events(factory)) == 1  # P2의 pr.merged는 없다
