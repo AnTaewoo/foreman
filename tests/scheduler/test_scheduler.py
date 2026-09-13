@@ -407,3 +407,38 @@ async def test_repo_resolver_and_failure(
     assert (
         h.launcher.specs[0].task_json["project_context"]["repo"] == "org/demo"
     )  # 워커 표시용 이름은 원본
+
+
+# PC-6 발견: ingest가 적용하는 워커 이벤트가 순서 역전(task.assigned 미반영)이면 예외가 아니라 D-30 재시도 큐로
+async def test_ingest_out_of_order_goes_to_retry_queue(
+    factory: async_sessionmaker[AsyncSession], redis: Redis
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from control_plane.events.bus import retry_stream_key
+
+    h = Harness(factory, redis)
+    await h.publish(*BOOTSTRAP, task_created("T1", [], ["src/a/**"]))
+    await h.pump()
+    run_id = h.launcher.specs[
+        0
+    ].run_id  # task.assigned는 outbox에 있고 아직 projection 전일 수 있다
+    # 워커가 바로 task.started를 XADD (미서명) → 아직 ready인 Task에 running 전이 = 순서 역전
+    started = ev(
+        E.TASK_STARTED, "task", "T1", {"run_id": run_id}, actor=Actor(type="agent", id="coding-1")
+    )
+    async with h.factory() as s:  # projection이 task.assigned를 못 본 상태를 강제: 직접 ready로
+        t = await s.get(m.Task, "T1")
+        assert t is not None
+        t.status = TaskStatus.READY
+        await s.commit()
+    await h.scheduler.ingest(started)  # 예외 없이 돌아와야 한다
+    assert await redis.exists(retry_stream_key(PID))  # 재시도 큐에 들어갔다
+    assert (await h.task("T1")).status is TaskStatus.READY
+    async with h.factory() as s:  # task.assigned 반영 후 재시도가 통과
+        t = await s.get(m.Task, "T1")
+        assert t is not None
+        t.status = TaskStatus.ASSIGNED
+        await s.commit()
+    applied = await h.projection.apply_retries(PID, now=datetime.now(UTC) + timedelta(hours=3))
+    assert applied == 1 and (await h.task("T1")).status is TaskStatus.RUNNING
