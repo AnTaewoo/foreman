@@ -383,3 +383,27 @@ async def test_stale_run_finished_does_not_release_new_run(
     assert h.scheduler.in_flight == {"T1"} and run2 != run1
     assert (await h.task("T1")).status is TaskStatus.ASSIGNED
     assert not any(e.projection_error for e in await h.events("task.assigned"))
+
+
+# P6.6 (D-38): Scheduler는 repo_resolver로 프로젝트 repo를 로컬 경로로 바꾼다; 실패면 launch_failed
+async def test_repo_resolver_and_failure(
+    factory: async_sessionmaker[AsyncSession], redis: Redis
+) -> None:
+    from control_plane.repo_cache import RepoUnavailable
+
+    calls: list[str] = []
+
+    def resolver(repo: str) -> str:
+        calls.append(repo)
+        if repo == "org/demo":
+            return "/cache/org/demo"
+        raise RepoUnavailable(repo, "nope")
+
+    h = Harness(factory, redis)
+    h.scheduler._repo_resolver = resolver  # Harness는 생성자 인자를 안 받으므로 직접 주입
+    await h.publish(*BOOTSTRAP, task_created("T1", [], ["src/a/**"]))
+    await h.pump()
+    assert h.launcher.specs[0].repo_url == "/cache/org/demo" and calls == ["org/demo"]
+    assert (
+        h.launcher.specs[0].task_json["project_context"]["repo"] == "org/demo"
+    )  # 워커 표시용 이름은 원본

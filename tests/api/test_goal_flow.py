@@ -375,3 +375,38 @@ async def test_discussion_reject_viewer_forbidden(
         "/webhooks/github", content=body, headers=signed_discussion(body, "d-dc-viewer")
     )
     assert r.status_code == 403 and runner.is_waiting(gid)
+
+
+# ------------------------------------------------ P6.6 repo 확보 실패 (D-38) → Goal 종료 이벤트
+async def test_repo_unavailable_blocks_goal(
+    factory: async_sessionmaker[AsyncSession], redis: Redis, pump: Pump
+) -> None:
+    from control_plane.repo_cache import RepoUnavailable
+
+    def boom(repo: str) -> Path:
+        raise RepoUnavailable(repo, "clone failed: no such remote")
+
+    runner = GoalRunner(
+        factory=factory,
+        bus=EventBus(redis),
+        provider=FakeProvider(script=[PLAN_JSON, DECOMPOSE_JSON]),
+        github=DryRunGitHubClient(),
+        discussions=DryRunDiscussionsClient(),
+        checkpointer=MemorySaver(),
+        repo_path_for=boom,
+        min_tasks=1,
+    )
+    app1 = create_app(
+        Settings(_env_file=None, github_webhook_secret=SECRET),
+        factory=factory,
+        redis=redis,
+        runner=runner,
+    )
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://t") as c:
+        pid, gid = await start_goal(c, pump, runner)
+        g = (await c.get(f"/projects/{pid}/goals/{gid}")).json()
+    # §6.1: draft→blocked는 없다 → Goal은 취소로 끝나고 사유를 남긴다 (P6.6 기록)
+    assert g["status"] == "cancelled"
+    ev = (await events_of(factory, "goal.cancelled"))[-1]
+    assert ev.payload["reason"].startswith("repo_unavailable") and ev.payload["by"] == "system"
+    assert not runner.is_waiting(gid) and await events_of(factory, "goal.plan_proposed") == []
