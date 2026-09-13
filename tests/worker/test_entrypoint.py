@@ -185,3 +185,11 @@ def test_fake_provider_loads_script() -> None:
     assert isinstance(p, FakeProvider) and len(p.script) == 3
     with pytest.raises(ValueError, match="WORKER_LLM_PROVIDER"):
         entrypoint.provider_from_env({"WORKER_LLM_PROVIDER": "bogus"})
+
+
+# P6.5: 워커는 WORKER_LLM_PRICE_IN_PER_MTOK / _OUT_PER_MTOK 로 단가를 받는다 (기본 0)
+def test_prices_from_env() -> None:
+    from agents.llm.pricing import Prices
+
+    assert entrypoint.prices_from_env({"WORKER_LLM_PRICE_IN_PER_MTOK": "2.5"}) == Prices(2.5, 0.0)
+    assert entrypoint.prices_from_env({}) == Prices()

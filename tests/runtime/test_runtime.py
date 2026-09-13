@@ -280,3 +280,23 @@ async def test_main_runs_until_stop(
     asyncio.create_task(trigger())
     await serve(rt, stop)
     assert all(t.done() for t in rt.tasks)
+
+
+# P6.5: Settings 단가 → 워커 env (D-39)
+def test_worker_env_carries_prices() -> None:
+    from control_plane.runtime import worker_llm_env
+
+    s = Settings(_env_file=None, llm_provider="fake")
+    assert s.llm_price_in_per_mtok == 0.0 and s.llm_price_out_per_mtok == 0.0
+    env = worker_llm_env(
+        Settings(
+            _env_file=None,
+            llm_provider="fake",
+            llm_price_in_per_mtok=3.0,
+            llm_price_out_per_mtok=15.0,
+        )
+    )
+    assert (
+        env["WORKER_LLM_PRICE_IN_PER_MTOK"] == "3.0"
+        and env["WORKER_LLM_PRICE_OUT_PER_MTOK"] == "15.0"
+    )

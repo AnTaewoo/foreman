@@ -227,3 +227,30 @@ def test_agents_do_not_import_config() -> None:
                     else [node.module or ""]
                 )
                 assert not any(n.startswith("control_plane.config") for n in names), p
+
+
+# P6.5 (D-39): BaseAgent(prices=)가 run.finished.cost_usd를 채운다; execute가 준 0이 아닌 값은 유지
+class TokensAgent(BaseAgent):
+    async def execute(self, input: AgentInput) -> AgentOutput:
+        return AgentOutput(outcome="done", summary="ok", tokens_in=1000, tokens_out=500)
+
+
+async def test_run_finished_cost_from_prices(spy: Spy) -> None:
+    from agents.llm.pricing import Prices
+
+    agent = TokensAgent(
+        publish=spy.publish, provider=FakeProvider(script=[]), prices=Prices(3.0, 15.0)
+    )
+    out = await agent.run(make_input())
+    p = spy.events[-1].payload
+    assert p["cost_usd"] == 0.0105 and out.cost_usd == 0.0105
+    spy.events.clear()
+    agent0 = TokensAgent(publish=spy.publish, provider=FakeProvider(script=[]))  # 단가 미설정 → 0
+    await agent0.run(make_input())
+    assert spy.events[-1].payload["cost_usd"] == 0.0
+    spy.events.clear()
+    explicit = OkAgent(
+        publish=spy.publish, provider=FakeProvider(script=[]), prices=Prices(3.0, 15.0)
+    )
+    await explicit.run(make_input())
+    assert spy.events[-1].payload["cost_usd"] == 0.01  # execute가 준 값 우선

@@ -331,3 +331,18 @@ def test_settings_has_llm_provider_fields() -> None:
     s = Settings(_env_file=None)
     assert s.llm_provider == "anthropic" and s.llm_base_url.endswith("/v1")
     assert s.llm_model and s.llm_api_key.get_secret_value()
+
+
+# P6.5 (D-39): 비용 = 토큰 × 설정 단가 (USD per 1M tokens). 코드에 단가표를 박지 않는다
+def test_estimate_cost() -> None:
+    from agents.llm.pricing import Prices, estimate_cost
+
+    assert estimate_cost(0, 0, Prices()) == 0.0
+    assert estimate_cost(1_000_000, 0, Prices(in_per_mtok=3.0, out_per_mtok=15.0)) == 3.0
+    assert estimate_cost(1000, 500, Prices(3.0, 15.0)) == 0.0105
+    assert estimate_cost(123_456, 7_890, Prices(0.8, 4.0)) == round(0.0987648 + 0.03156, 6)
+    assert Prices().is_set is False and Prices(1.0, 0.0).is_set is True
+    assert Prices.from_env(
+        {"WORKER_LLM_PRICE_IN_PER_MTOK": "3", "WORKER_LLM_PRICE_OUT_PER_MTOK": "15"}
+    ) == Prices(3.0, 15.0)
+    assert Prices.from_env({}) == Prices()
