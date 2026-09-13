@@ -41,6 +41,7 @@ from control_plane.events.chain import verify_chain_db
 from control_plane.events.outbox import OutboxRelay
 from control_plane.events.projection import Projection
 from control_plane.events.schema import Actor, Event, EventType, Subject
+from control_plane.pr_opener import PrOpener
 from control_plane.scheduler.launcher import FakeLauncher, LaunchSpec
 from control_plane.scheduler.scheduler import Scheduler
 from control_plane.store import models as m
@@ -382,9 +383,12 @@ async def main() -> int:
         await s.commit()
     print(f"=== PC-4 (provider={mode}) remote={remote} ===")
 
+    pr_opener = PrOpener(factory, bus, github)  # D-37: PR은 control plane
+
     async def both(d: Delivery) -> None:
         await projection.handle(d)
         await scheduler.handle(d)
+        await pr_opener.handle(d)
 
     deadline = time.monotonic() + 60 * 60
     while time.monotonic() < deadline:
@@ -436,7 +440,9 @@ async def main() -> int:
             f"  trailer={'Task #' in log}"
         )
     check(len(branches) >= 3, f"branches pushed: {len(branches)} >= 3")
-    snap = github.snapshot()["repos"].get("local/sample-repo", {})
+    snap = github.snapshot()["repos"].get(
+        str(remote), {}
+    )  # PrOpener는 project.repo(remote 경로)로 연다
     pulls = snap.get("pulls", {})
     print("=== would open_pr ===")
     for n, pr in pulls.items():

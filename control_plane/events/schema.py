@@ -271,7 +271,16 @@ class TaskStartedPayload(TypedDict):
 
 class TaskCompletedPayload(TypedDict):
     run_id: str
-    pr_number: NotRequired[int]
+    pr_number: NotRequired[
+        int
+    ]  # D-37 이전: 워커가 PR을 열던 시절의 키. 지금은 PrOpener가 pr.opened로
+    branch: NotRequired[str]  # D-37 (additive): push한 브랜치 — PrOpener가 head로 쓴다
+    summary: NotRequired[str]  # D-37 (additive): LLM 요약 — PR 본문·Issue 코멘트
+
+
+class RunArtifactProducedPayload(TypedDict):
+    kind: str  # branch | pr | comment | log
+    ref: str
 
 
 class TaskFailedPayload(TypedDict):
@@ -328,6 +337,7 @@ PAYLOAD_TYPES: dict[EventType, type[Any]] = {  # Any: TypedDict 클래스들
     EventType.TASK_ASSIGNED: TaskAssignedPayload,
     EventType.TASK_STARTED: TaskStartedPayload,
     EventType.TASK_COMPLETED: TaskCompletedPayload,
+    EventType.RUN_ARTIFACT_PRODUCED: RunArtifactProducedPayload,  # D-37 (additive)
     EventType.TASK_FAILED: TaskFailedPayload,
     EventType.RUN_STARTED: RunStartedPayload,
     EventType.RUN_TOOL_CALLED: RunToolCalledPayload,

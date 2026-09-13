@@ -47,6 +47,7 @@ from control_plane.events.schema import Actor, Event, EventType, Subject
 from control_plane.orchestrator import emit as emit_mod
 from control_plane.orchestrator.graph import OrchestratorDeps, build_graph
 from control_plane.orchestrator.state import OrchestratorState, initial_state
+from control_plane.pr_opener import PrOpener
 from control_plane.scheduler.launcher import FakeLauncher, LaunchSpec
 from control_plane.scheduler.scheduler import Scheduler
 from control_plane.store import models as m
@@ -400,9 +401,12 @@ async def run(argv: list[str]) -> Summary:
 
     dry_merger = DryMerger(factory, bus, enabled=settings.dry_run, on_merge=on_merge)
 
+    pr_opener = PrOpener(factory, bus, github)  # D-37: PR은 control plane
+
     async def both(d: Delivery) -> None:
         await projection.handle(d)
         await scheduler.handle(d)
+        await pr_opener.handle(d)
         await dry_merger.handle(d)
 
     deadline = time.monotonic() + 60 * 60

@@ -87,7 +87,7 @@ def test_is_dependency_file() -> None:
         assert not is_dependency_file(p), p
 
 
-# (a) pass 경로 (D-37: 워커는 push + task.completed{branch, summary}까지, PR은 control plane PrOpener)
+# (a) pass 경로 (D-37: 워커는 push + task.completed{branch, summary}까지, PR은 control plane)
 async def test_pass_path(worktree: Path, remote: Path, spy: Spy) -> None:
     github = DryRunGitHubClient()
     agent = make_agent("pass", spy, worktree, github)

@@ -114,8 +114,14 @@ async def test_runtime_dry_merge_unblocks_dependents(
         settings_for("sqlite+aiosqlite://", dry_run=True), factory, redis, launcher=launcher
     )
     assert any(getattr(h, "__self__", None).__class__ is DryMerger for h in rt.handlers)
+    from github_adapter.dry_run import DryRunGitHubClient
+
     real = Runtime(
-        settings_for("sqlite+aiosqlite://", dry_run=False), factory, redis, launcher=FakeLauncher()
+        settings_for("sqlite+aiosqlite://", dry_run=False),
+        factory,
+        redis,
+        launcher=FakeLauncher(),
+        github=DryRunGitHubClient(),  # 실 client는 App 자격 증명이 필요 — 배선만 확인
     )
     assert not any(getattr(h, "__self__", None).__class__ is DryMerger for h in real.handlers)
 

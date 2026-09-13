@@ -570,10 +570,14 @@ async def test_task_completed_sets_branch_name(
     ]
     async with factory() as s:
         for e in events:
-            await projection.apply(await bus.publish(s, e))
+            await bus.publish(s, e)
         await s.commit()
+    from control_plane.events.outbox import OutboxRelay
+
+    while await OutboxRelay(factory, redis).relay_once() > 0:
+        pass
+    await bus.poll_once("t", projection.handle, consumer="t", project_id="P1")
     async with factory() as s:
         task = await s.get(m.Task, "T1")
-    assert (
-        task is not None and task.branch_name == "ai/e/1-t" and task.status is TaskStatus.IN_REVIEW
-    )
+    assert task is not None and task.status is TaskStatus.IN_REVIEW
+    assert task.branch_name == "ai/e/1-t"

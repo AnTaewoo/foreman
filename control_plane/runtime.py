@@ -27,10 +27,13 @@ from control_plane.dry_merge import DryMerger
 from control_plane.events.bus import RETRY_SUFFIX, STREAM_PREFIX, Delivery, EventBus
 from control_plane.events.outbox import OutboxRelay
 from control_plane.events.projection import Projection
+from control_plane.pr_opener import PrOpener
 from control_plane.repo_cache import RepoCache
 from control_plane.scheduler.launcher import DockerCliLauncher, InProcessLauncher, WorkerLauncher
 from control_plane.scheduler.scheduler import Scheduler
 from control_plane.store import session as sess
+from github_adapter import get_github_client
+from github_adapter.protocol import GitHubClient
 
 log = structlog.get_logger(__name__)
 
@@ -97,6 +100,7 @@ class Runtime:
         clock: Callable[[], datetime] | None = None,
         consumer: str = "cp1",
         block_ms: int = 200,
+        github: GitHubClient | None = None,
     ) -> None:
         self.settings = settings
         self.factory = factory
@@ -115,6 +119,9 @@ class Runtime:
             repo_resolver=lambda repo: str(self.repo_cache.ensure(repo)),
         )
         self.handlers: list[Handler] = [self.projection.handle, self.scheduler.handle]
+        self.github = github or get_github_client(settings)  # D-37: Dry/실 선택은 control plane
+        self.pr_opener = PrOpener(factory, self.bus, self.github)
+        self.handlers.append(self.pr_opener.handle)
         self.dry_merger: DryMerger | None = None
         if settings.dry_run:  # D-36: Dry에서만 사람 머지를 흉내 낸다
             self.dry_merger = DryMerger(factory, self.bus, enabled=True)

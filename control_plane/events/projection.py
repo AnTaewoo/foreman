@@ -245,6 +245,8 @@ async def _task_completed(session: AsyncSession, event: Event) -> None:
     task.status = TaskStatus.IN_REVIEW
     if (pr := event.payload.get("pr_number")) is not None:
         task.pr_number = int(pr)
+    if (branch := event.payload.get("branch")) is not None:  # D-37
+        task.branch_name = str(branch)
     if task.pr_merged_at is not None:  # D-30(b): pr.merged가 먼저 왔다
         assert_transition(TaskStatus.IN_REVIEW, TaskStatus.DONE)
         task.status = TaskStatus.DONE

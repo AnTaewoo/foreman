@@ -1,4 +1,4 @@
-"""P6.7 — PrOpener (D-37, red b~c, f): control plane이 task.completed를 받아 PR을 열고 pr.opened를 발행."""
+"""P6.7 — PrOpener (D-37, red b~c, f): control plane이 task.completed를 받아 PR을 열고 pr.opened."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ async def events_of(factory: async_sessionmaker[AsyncSession], type_: str) -> li
         return list(rows.scalars().all())
 
 
-# (b) task.completed{branch, summary} → open_pr(draft, 메타) → pr.opened + Issue 요약 코멘트; 두 번 → 1건
+# (b) task.completed{branch, summary} → open_pr(draft, 메타) → pr.opened + Issue 코멘트; 두 번 → 1건
 async def test_pr_opener_opens_once(
     factory: async_sessionmaker[AsyncSession], redis: Redis, tmp_path: Path
 ) -> None:

@@ -364,28 +364,13 @@ class CodingAgent(BaseAgent):
 
         async def push(state: CodingState) -> dict[str, Any]:
             await git.push(branch)
+            await emit(  # D-37: 산출물은 브랜치. PR은 control plane(PrOpener)이 연다
+                EventType.RUN_ARTIFACT_PRODUCED,
+                "run",
+                input.run_id,
+                {"kind": "branch", "ref": branch},
+            )
             return {}
-
-        async def open_pr(state: CodingState) -> dict[str, Any]:
-            title = f"[T-{input.task.issue_number or '?'}] {input.task.title}"
-            pr = await gh.open_pr(
-                head=branch, title=title, body=str(state.get("plan", ""))[:2000], draft=True
-            )
-            await emit(
-                EventType.PR_OPENED,
-                "pr",
-                str(pr.number),
-                {
-                    "task_id": input.task.id,
-                    "run_id": input.run_id,
-                    "pr_number": pr.number,
-                    "head": branch,
-                    "base": input.project_context.default_branch,
-                    "draft": True,
-                    "url": pr.url,
-                },
-            )
-            return {"pr_number": pr.number, "pr_url": pr.url}
 
         async def summarize(state: CodingState) -> dict[str, Any]:
             c = await llm(
@@ -395,26 +380,21 @@ class CodingAgent(BaseAgent):
                         content=(
                             f"Task: {input.task.title}\n"
                             f"Changed files: {state.get('changed_files')}\n"
-                            f"PR: #{state.get('pr_number')}\n"
+                            f"Branch: {branch}\n"
                             "Write a 2-4 sentence summary of what was done and what remains, "
-                            "for the issue comment."
+                            "for the pull request description and the issue comment."
                         ),
                     )
                 ]
             )
-            comment_id: int | None = None
-            if input.task.issue_number is not None:
-                ref = await gh.comment(
-                    input.task.issue_number, c.text, key=f"summary:{input.run_id}"
-                )
-                comment_id = ref.id
+            # D-37: Issue 코멘트·PR은 control plane(PrOpener)이 task.completed를 받아 처리한다
             await emit(
                 EventType.TASK_COMPLETED,
                 "task",
                 input.task.id,
-                {"run_id": input.run_id, "pr_number": state.get("pr_number")},
+                {"run_id": input.run_id, "branch": branch, "summary": c.text},
             )
-            return {"summary": c.text, "comment_id": comment_id, "outcome": "done"}
+            return {"summary": c.text, "outcome": "done"}
 
         g: StateGraph[CodingState, None, CodingState, CodingState] = StateGraph(CodingState)
         for name, fn in (
@@ -428,7 +408,6 @@ class CodingAgent(BaseAgent):
             ("run_tests", run_tests),
             ("fail", fail),
             ("push", push),
-            ("open_pr", open_pr),
             ("summarize", summarize),
         ):
             g.add_node(name, fn)
@@ -456,8 +435,7 @@ class CodingAgent(BaseAgent):
             "run_tests", route_after_tests, {"push": "push", "edit": "edit", "fail": "fail"}
         )
         g.add_edge("fail", END)
-        g.add_edge("push", "open_pr")
-        g.add_edge("open_pr", "summarize")
+        g.add_edge("push", "summarize")
         g.add_edge("summarize", END)
         graph = g.compile()
 
@@ -466,13 +444,9 @@ class CodingAgent(BaseAgent):
         self.last_state = state
         self.last_event_id = ctx.last_event_id
         outcome = str(state.get("outcome") or "failed")
-        artifacts: list[Artifact] = [Artifact(kind="branch", ref=branch)]
-        if state.get("pr_number") is not None:
-            artifacts.append(
-                Artifact(kind="pr", ref=str(state["pr_number"]), url=state.get("pr_url"))
-            )
-        if state.get("comment_id") is not None:
-            artifacts.append(Artifact(kind="comment", ref=str(state["comment_id"])))
+        artifacts: list[Artifact] = [
+            Artifact(kind="branch", ref=branch)
+        ]  # D-37: PR은 control plane
         decision = None
         if outcome == "needs_decision":
             decision = DecisionRequest(
