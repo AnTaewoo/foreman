@@ -70,11 +70,16 @@ async def test_dry_merger_skips_already_merged(
     factory: async_sessionmaker[AsyncSession], redis: Redis
 ) -> None:
     from control_plane.dry_merge import DryMerger
+    from control_plane.events.outbox import OutboxRelay
+    from control_plane.events.projection import Projection
 
     bus = EventBus(redis)
     await publish_all(
         factory, redis, [*bootstrap("P1", "G1", "/r"), task_created("P1", "G1", "T1", ["a/**"], 1)]
     )
+    while await OutboxRelay(factory, redis).relay_once() > 0:  # projection에 Task 행을 만든다
+        pass
+    await bus.poll_once("t", Projection(factory, bus).handle, consumer="t", project_id="P1")
     async with factory() as s:
         t = await s.get(m.Task, "T1")
         assert t is not None
@@ -125,12 +130,48 @@ async def test_runtime_dry_merge_unblocks_dependents(
         await until(lambda: asyncio.sleep(0, result=len(launcher.specs) >= 1))
         run_id = launcher.specs[0].run_id
         # 워커 흐름 (서명 발행으로 흉내): started → pr.opened → completed → run.finished
-        await publish_all(factory, redis, [
-            ev("P1", EventType.TASK_STARTED, "task", "T1", {"run_id": run_id}, correlation_id="G1", actor=AGENT),
-            pr_opened("P1", "G1", "T1", 3, run_id),
-            ev("P1", EventType.TASK_COMPLETED, "task", "T1", {"run_id": run_id, "pr_number": 3}, correlation_id="G1", actor=AGENT),
-            ev("P1", EventType.RUN_FINISHED, "run", run_id, {"outcome": "success", "agent_outcome": "done", "tokens_in": 1, "tokens_out": 1, "cost_usd": 0.0, "duration_s": 1.0, "error": None}, correlation_id="G1", actor=AGENT),
-        ])  # fmt: skip
+        await publish_all(
+            factory,
+            redis,
+            [
+                ev(
+                    "P1",
+                    EventType.TASK_STARTED,
+                    "task",
+                    "T1",
+                    {"run_id": run_id},
+                    correlation_id="G1",
+                    actor=AGENT,
+                ),
+                pr_opened("P1", "G1", "T1", 3, run_id),
+                ev(
+                    "P1",
+                    EventType.TASK_COMPLETED,
+                    "task",
+                    "T1",
+                    {"run_id": run_id, "pr_number": 3},
+                    correlation_id="G1",
+                    actor=AGENT,
+                ),
+                ev(
+                    "P1",
+                    EventType.RUN_FINISHED,
+                    "run",
+                    run_id,
+                    {
+                        "outcome": "success",
+                        "agent_outcome": "done",
+                        "tokens_in": 1,
+                        "tokens_out": 1,
+                        "cost_usd": 0.0,
+                        "duration_s": 1.0,
+                        "error": None,
+                    },
+                    correlation_id="G1",
+                    actor=AGENT,
+                ),
+            ],
+        )
 
         async def t1_done_t2_assigned() -> bool:
             async with factory() as s:

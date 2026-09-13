@@ -2,7 +2,7 @@
 
 - 한 consumer group ``control-plane``에서 delivery마다 projection.handle → scheduler.handle 순.
   (그룹을 나누면 scheduler가 ``task.created``를 projection보다 먼저 받아 ``ready``를 못 본다.)
-  P6.3/P6.7의 DryMerger·PrOpener도 이 체인 뒤에 붙는다.
+  DryMerger(dry_run일 때, D-36)와 P6.7의 PrOpener도 이 체인 뒤에 붙는다.
 - retry 루프: ``events:*:retry`` 키를 SCAN 해 모든 project의 기한 지난 재시도를 적용한다(D-30).
 - launcher는 설정(D-15): ``docker`` → DockerCliLauncher(호스트 Redis는 host.docker.internal)
   / ``inprocess`` → InProcessLauncher
@@ -22,6 +22,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from control_plane.config import Settings
+from control_plane.dry_merge import DryMerger
 from control_plane.events.bus import RETRY_SUFFIX, STREAM_PREFIX, Delivery, EventBus
 from control_plane.events.outbox import OutboxRelay
 from control_plane.events.projection import Projection
@@ -103,6 +104,10 @@ class Runtime:
             max_workers=settings.scheduler_max_workers,
         )
         self.handlers: list[Handler] = [self.projection.handle, self.scheduler.handle]
+        self.dry_merger: DryMerger | None = None
+        if settings.dry_run:  # D-36: Dry에서만 사람 머지를 흉내 낸다
+            self.dry_merger = DryMerger(factory, self.bus, enabled=True)
+            self.handlers.append(self.dry_merger.handle)
         self.tasks: list[asyncio.Task[None]] = []
         self._retry_interval = retry_interval
         self._clock = clock or (lambda: datetime.now(UTC))

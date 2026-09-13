@@ -37,6 +37,7 @@ from agents.llm import get_provider
 from agents.llm.base import Completion, ModelProvider
 from agents.llm.fake import FakeProvider
 from control_plane.config import Settings
+from control_plane.dry_merge import DryMerger
 from control_plane.events.bus import Delivery, EventBus
 from control_plane.events.chain import verify_chain_db
 from control_plane.events.outbox import OutboxRelay
@@ -389,11 +390,18 @@ async def run(argv: list[str]) -> Summary:
         timeout_min=20,
     )
 
+    # D-36: Dry PR은 플랫폼의 DryMerger가 머지(사람 머지 흉내) — 의존 Task가 done을 기다릴 수 있다
+
+    def on_merge(_pid: str, pr_number: int, task_id: str) -> None:
+        print(f"(dry-merge) PR #{pr_number} → task {task_id}")
+
+    dry_merger = DryMerger(factory, bus, enabled=settings.dry_run, on_merge=on_merge)
+
     async def both(d: Delivery) -> None:
         await projection.handle(d)
         await scheduler.handle(d)
+        await dry_merger.handle(d)
 
-    merged: set[str] = set()
     deadline = time.monotonic() + 60 * 60
     while time.monotonic() < deadline:
         relayed = 0
@@ -408,33 +416,7 @@ async def run(argv: list[str]) -> Summary:
                     .scalars()
                     .all()
                 )
-                review = [
-                    (t.id, t.pr_number, t.title)
-                    for t in rows
-                    if t.status.value == "in_review" and t.pr_number and t.id not in merged
-                ]
                 settled = all(t.status.value in ("done", "blocked", "cancelled") for t in rows)
-            if review:
-                # MVP 1은 사람이 머지한다(§8) — e2e는 Dry PR을 사람 대신 머지해 의존 Task를 풀어준다
-                for task_id, pr_number, title in review:
-                    merged.add(task_id)
-                    await publish(
-                        Event(
-                            project_id=pid,
-                            actor=Actor(type="github", id="e2e"),
-                            type=EventType.PR_MERGED,
-                            subject=Subject(entity="pr", id=str(pr_number)),
-                            payload={
-                                "task_id": task_id,
-                                "pr_number": pr_number,
-                                "merged_by": "e2e",
-                            },
-                            correlation_id=gid,
-                            causation_id=None,
-                        )
-                    )
-                    print(f"(auto-merge) PR #{pr_number} → {title}")
-                continue
             if not scheduler.in_flight and (settled or not await scheduler.tick(pid)):
                 break
             if workers:
