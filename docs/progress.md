@@ -89,3 +89,5 @@
 | 2026-09-13T14:27 | P3.5 | 착수 | emit.py toposort/overlap/emit | |
 | 2026-09-13T14:27 | P3.5 | Red | test_emit 9, ModuleNotFoundError emit | |
 | 2026-09-13T14:28 | P3.5 | Green | emit.py toposort/paths_overlap/serialize_overlaps/emit(멱등, 사이클→goal.blocked), 292 passed | |
+| 2026-09-13T14:29 | P3.5 | Gate | make check pass (292), pre-commit pass, 시도 3/3 | |
+| 2026-09-13T14:29 | P3.5 | 완료 | 보드 done | 2057464 |
