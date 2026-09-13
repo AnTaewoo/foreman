@@ -1,6 +1,6 @@
-"""P5.3 — WebSocket 스트림 (red a~c). Starlette TestClient(별도 스레드 루프)로 WS, 발행은 pytest 루프에서.
+"""P5.3 — WebSocket 스트림 (red a~c). Starlette TestClient(별도 스레드 루프)로 WS, 발행은 pytest.
 
-앱은 factory/redis를 주입받지 않고 같은 sqlite 파일·Redis DB에 자기 연결을 만든다(루프가 다르므로)."""
+앱은 factory/redis를 주입받지 않고 같은 sqlite 파일·Redis DB에 자기 연결을 만든다(루프가 다름)."""
 
 from __future__ import annotations
 

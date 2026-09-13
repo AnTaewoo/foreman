@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from control_plane.api import approvals, events, goals, projects, tasks
+from control_plane.api import approvals, events, goals, projects, stream, tasks
 from control_plane.api.deps import AppState, build_state
 from control_plane.api.idempotency import IdempotencyMiddleware
 from control_plane.config import Settings, get_settings
@@ -57,7 +57,7 @@ def create_app(
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    for r in (projects.router, goals.router, tasks.router, events.router):
+    for r in (projects.router, goals.router, tasks.router, events.router, stream.router):
         application.include_router(r)
     if runner is not None:
         application.include_router(approvals.build_webhook(state, runner))
