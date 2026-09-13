@@ -23,3 +23,4 @@
 | 2026-09-13T12:08 | P1.2 | Green | enums 10 + transitions 4표 + models 9 tables, 137 passed | |
 | 2026-09-13T12:09 | P1.2 | Gate | make check pass (137 tests), 시도 2/3 (E501 10건) | |
 | 2026-09-13T12:09 | P1.2 | 완료 | 보드 done | b1979cd |
+| 2026-09-13T12:14 | P1.3 | 착수 | alembic 0001/0002 + session.py + pg 통합 테스트 | |
