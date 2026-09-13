@@ -167,6 +167,9 @@ async def run(argv: list[str]) -> Summary:
     ap.add_argument("--no-coding", action="store_true", help="Plan + Issue까지만")
     ap.add_argument("--remote", default=None, help="bare remote 경로 (기본 workdir/remote.git)")
     ap.add_argument("--workdir", default=None, help="작업 디렉토리 (기본 임시)")
+    ap.add_argument(
+        "--model", default=None, help="openai_compat 모델 덮어쓰기 (예: qwen2.5-coder:14b)"
+    )
     args = ap.parse_args(argv)
     structlog.configure(
         processors=[
@@ -176,6 +179,8 @@ async def run(argv: list[str]) -> Summary:
         logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
     )
     settings = Settings()
+    if args.model:
+        settings = settings.model_copy(update={"llm_model": args.model})
     summary = Summary(provider="fake" if args.fake else _provider_label(settings), dry_run=True)
     workdir = Path(args.workdir) if args.workdir else Path(tempfile.mkdtemp(prefix="e2e-"))
     workdir.mkdir(parents=True, exist_ok=True)

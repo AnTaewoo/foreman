@@ -105,6 +105,45 @@ TASKS: list[dict[str, Any]] = [
 ]
 
 
+# --tasks hard: PC-4 1차의 원래 Task (기존 파일 수정 포함). 7B는 실행마다 2/3, 더 큰 모델 비교용
+HARD_TASKS: list[dict[str, Any]] = [
+    {
+        "title": "Add update and delete to UserStore",
+        "spec": (
+            "In `src/app/models.py`, add "
+            "`UserStore.update(user_id: int, name: str) -> User | None` and "
+            "`UserStore.delete(user_id: int) -> bool`. Add `tests/test_models.py` covering both "
+            "(update existing, update missing returns None, delete existing True, "
+# --tasks hard: PC-4 1차의 원래 Task(기존 파일 수정 포함). 7B는 실행마다 2/3, 큰 모델 비교용
+        ),
+        "owned_paths": ["src/app/models.py", "tests/test_models.py"],
+        "depends_on": [],
+    },
+    {
+        "title": "Add users module with list_users and add_user",
+        "spec": (
+            "Create `src/app/users.py` with a module-level `store = UserStore()` and functions "
+            "`list_users() -> list[dict]` (each dict has id and name) and "
+            "`add_user(name: str) -> dict`. Import UserStore from app.models. "
+            "Add `tests/test_users.py` with at least two tests. Do not modify main.py or models.py."
+        ),
+        "owned_paths": ["src/app/users.py", "tests/test_users.py"],
+        "depends_on": [],
+    },
+    {
+        "title": "Add greet_all helper to main",
+        "spec": (
+            "In `src/app/main.py`, add `greet_all(names: list[str]) -> list[str]` that returns "
+            "`greet(name)` for each name, keeping existing functions unchanged. Add "
+            "`tests/test_greet_all.py` with two tests (empty list, two names). "
+            "Do not modify other files."
+        ),
+        "owned_paths": ["src/app/main.py", "tests/test_greet_all.py"],
+        "depends_on": [],
+    },
+]
+
+
 # --fake: pass.json 스크립트는 users 모듈 하나만 만든다 → 같은 owned_paths의 변형 3개(직렬 배정)
 FAKE_TASKS: list[dict[str, Any]] = [
     {**TASKS[1], "title": f"{TASKS[1]['title']} (fake {i})"} for i in (1, 2, 3)
@@ -166,6 +205,13 @@ async def main() -> int:
         "--only", type=int, nargs="*", default=None, help="실행할 Task 번호(1..3) 부분집합"
     )
     ap.add_argument("--dump", default=None, help="LLM 요청/응답을 JSON-lines로 남길 디렉토리")
+    ap.add_argument(
+        "--model", default=None, help="openai_compat 모델 덮어쓰기 (예: qwen2.5-coder:14b)"
+    )
+    ap.add_argument(
+        "--tasks", choices=["simple", "hard"], default="simple",
+        help="simple=D-35 간단 Task, hard=원래 Task(UserStore.update/delete 등, 7B가 2/3)",
+    )  # fmt: skip
     args = ap.parse_args()
     structlog.configure(
         processors=[
@@ -175,6 +221,8 @@ async def main() -> int:
         logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
     )
     settings = Settings()
+    if args.model:
+        settings = settings.model_copy(update={"llm_model": args.model})
     tmp = Path(tempfile.mkdtemp(prefix="pc4-"))
     remote = Path(args.remote) if args.remote else tmp / "remote.git"
     if not remote.exists():
@@ -272,7 +320,7 @@ async def main() -> int:
     )
 
     pid, gid, eid = str(ULID()), str(ULID()), str(ULID())
-    tasks_spec = FAKE_TASKS if args.fake else TASKS
+    tasks_spec = FAKE_TASKS if args.fake else (HARD_TASKS if args.tasks == "hard" else TASKS)
     if args.only:
         tasks_spec = [t for i, t in enumerate(tasks_spec, start=1) if i in args.only]
     tids = [str(ULID()) for _ in tasks_spec]
