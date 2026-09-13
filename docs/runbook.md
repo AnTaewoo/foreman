@@ -16,7 +16,7 @@ uv run python -c "import control_plane, agents, github_adapter, worker; print('i
 
 ## 1. 기동 순서
 
-1. **docker-up** — Postgres/Redis/MinIO. 호스트 포트가 잡혀 있으면 `*_HOST_PORT`로 바꾼다.
+1. **docker-up** — Postgres/Redis/MinIO. 순서: docker-up → migrate → run-control-plane → run-api. 호스트 포트가 잡혀 있으면 `*_HOST_PORT`로 바꾼다.
 
    ```bash
    make docker-up
@@ -31,19 +31,29 @@ uv run python -c "import control_plane, agents, github_adapter, worker; print('i
    uv run alembic current | tail -1
    ```
 
-3. **run-api** — FastAPI(`/health`, `/projects…`, `/webhooks/github`, `WS /projects/{id}/stream`).
+3. **run-control-plane** — 상주 프로세스(P6.1): outbox relay + projection + Scheduler + retry, dry 모드면
+   `DryMerger`(PR 자동 머지, D-36), `PrOpener`(PR 생성, D-37). Task 배정·워커 기동·PR은 전부 여기서 일어난다.
+   워커 기동 방식은 `HITL_WORKER_LAUNCHER`: `docker`(기본, `HITL_WORKER_IMAGE`, `HITL_REPO_ROOT`를 컨테이너에
+   마운트) 또는 `inprocess`(Docker 없는 개발 — 이 프로세스 안에서 Coding Agent 실행).
+
+   ```bash
+   docker build -f worker/Dockerfile -t foreman-worker:dev .   # docker 런처일 때 한 번
+   make run-control-plane                                       # HITL_WORKER_LAUNCHER=inprocess 도 가능
+   ```
+
+4. **run-api** — FastAPI(`/health`, `/projects…`, `/webhooks/github`, `WS /projects/{id}/stream`).
    `POST /projects/{id}/goals`가 Orchestrator를 백그라운드로 돌리고 Plan 승인 interrupt에서 기다린다.
+   재시작하면 `awaiting_plan_approval` Goal의 대기 목록을 projection에서 복원한다(P6.2).
 
    ```bash
    make run-api          # API_PORT=8000 기본, --reload
    curl -s localhost:8000/health
    ```
 
-4. **run-worker** — 워커는 Scheduler가 컨테이너로 띄우는 것이 기본(`DockerCliLauncher`, 이미지
-   `foreman-worker:dev`). 수동 실행은 `WORKER_*` 환경변수를 주고 `python -m worker`.
+5. **run-worker(수동)** — 보통은 Scheduler가 띄운다. 디버그용 수동 실행은 `WORKER_*` 환경변수를 주고
+   `python -m worker`. 워커는 push와 `task.completed`까지만 하고 PR은 열지 않는다(D-37).
 
    ```bash
-   docker build -f worker/Dockerfile -t foreman-worker:dev .
    make run-worker       # WORKER_REPO_URL / WORKER_BRANCH / WORKER_TASK_JSON / WORKER_REDIS_URL 필요
    ```
 
@@ -60,6 +70,9 @@ uv run python -c "from control_plane.api.app import app; a = app(); print('app o
 | `HITL_DRY_RUN` | 실제 GitHub API 호출 여부. MVP 1 전 구간 `true` (Issue/PR/Discussion은 "would …" 로그) | `true` |
 | `HITL_DATABASE_URL` | SQLAlchemy async URL. Postgres(`postgresql+asyncpg://`) 또는 sqlite(`sqlite+aiosqlite:///…`, 단위 테스트) | Postgres localhost |
 | `HITL_REDIS_URL` | Redis Streams(outbox relay, 워커 XADD). 테스트는 DB 15, 스크립트는 DB 14를 쓴다 | `redis://localhost:6379/0` |
+| `HITL_WORKER_LAUNCHER` / `HITL_WORKER_IMAGE` / `HITL_SCHEDULER_MAX_WORKERS` | 상주 프로세스의 워커 기동 방식·이미지·동시 수 (P6.1) | `docker`, `foreman-worker:dev`, 4 |
+| `HITL_REPO_ROOT` | `owner/name` 프로젝트를 clone 하는 루트(D-38). 로컬 경로 프로젝트는 그대로 | `./repos` |
+| `HITL_LLM_PRICE_IN_PER_MTOK` / `HITL_LLM_PRICE_OUT_PER_MTOK` | 비용 단가 USD per 1M tokens (D-39). 비우면 cost_usd 0 | 0 |
 | `HITL_LLM_PROVIDER` | `anthropic` \| `openai_compat`(Ollama) \| `fake` (D-33) | `anthropic` |
 | `HITL_LLM_BASE_URL` / `HITL_LLM_MODEL` / `HITL_LLM_API_KEY` | openai_compat 엔드포인트·모델·키(Ollama는 아무 값) | `http://localhost:11434/v1`, `qwen2.5-coder:7b`, `ollama` |
 | `HITL_ANTHROPIC_API_KEY` / `HITL_ANTHROPIC_MODEL` | Anthropic 키·모델. PC-5 최종 판정용 | 없음, `claude-opus-5` |
