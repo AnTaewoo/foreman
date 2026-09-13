@@ -164,3 +164,7 @@
 | 2026-09-13T19:58 | P6.2 | Green | GoalRunner.restore_waiting (startup), 414 passed | 725422e |
 | 2026-09-13T20:00 | P6.2 | Gate | make check pass (414), mypy clean, 시도 3/3 | |
 | 2026-09-13T20:00 | P6.2 | 완료 | 보드 done | 725422e |
+| 2026-09-13T20:05 | P6.3 | Red | test_dry_merge 5건 + e2e (dry-merge) 출력 | 9059168 |
+| 2026-09-13T20:15 | P6.3 | Green | control_plane/dry_merge.py, Runtime 체인, e2e 자체 머지 제거, 419 passed | c6c9e88 |
+| 2026-09-13T20:16 | P6.3 | Gate | make check pass (419), 시도 3/3 | |
+| 2026-09-13T20:16 | P6.3 | 완료 | 보드 done | c6c9e88 |
