@@ -1,4 +1,4 @@
-"""P5.1 — API (red a~i): 라우터, 커서, Idempotency-Key, 취소 cascade. 이벤트만 발행, DB는 projection."""
+"""P5.1 — API (red a~i): 라우터, 커서, Idempotency-Key, 취소 cascade. 발행만, DB는 projection."""
 
 from __future__ import annotations
 

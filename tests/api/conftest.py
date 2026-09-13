@@ -17,14 +17,15 @@ from control_plane.events.bus import EventBus
 from control_plane.events.outbox import OutboxRelay
 from control_plane.events.projection import Projection
 from control_plane.events.schema import Event
-from tests.events.conftest import (  # noqa: F401  # pytest 픽스처 재노출
-    engine,
-    factory,
-    redis,
-    session,
-)
+from tests.events import conftest as _events
 
 Pump = Callable[[], Awaitable[list[str]]]
+
+# P1 픽스처 재노출 (aiosqlite + 진짜 Redis)
+engine = _events.engine
+factory = _events.factory
+redis = _events.redis
+session = _events.session
 
 
 @pytest.fixture
