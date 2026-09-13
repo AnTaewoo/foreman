@@ -7,3 +7,4 @@
 | 2026-09-13T11:01 | P0.1 | Green | 패키지 11개+Settings+pyproject+Makefile, 17 passed | |
 | 2026-09-13T11:03 | P0.1 | 완료 | make check pass, 보드 done | 16f90dd |
 | 2026-09-13T11:18 | P0.2 | 착수 | 설계 § 참조 확인 | |
+| 2026-09-13T11:18 | P0.2 | 완료 | § 8개 전부 존재 | 5fcebdd |
