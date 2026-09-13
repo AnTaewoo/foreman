@@ -1,0 +1,280 @@
+################ PC-5 e2e on Ollama qwen2.5-coder:7b — 2026-09-13
+e2e dry-run  provider=openai_compat:qwen2.5-coder:7b  repo=/home/lhjin0j/foreman/tests/fixtures/sample_repo  remote=/home/lhjin0j/.claude/jobs/a2da875f/tmp/pc5-e2e/remote.git
+
+=== 1. RepoSummary ===
+## Repository
+- root: sample_repo
+- language: python
+- framework: flask
+- test_runner: pytest
+
+### Tree (depth ≤ 2)
+```
+.ai-platform
+.ai-platform/CONTEXT.md
+docs
+docs/ARCHITECTURE.md
+src
+src/app
+src/app/deep
+src/app/__init__.py
+src/app/main.py
+src/app/models.py
+tests
+tests/test_main.py
+README.md
+pyproject.toml
+```
+
+### README (head)
+# sample-app
+
+Tiny Flask app used as the foreman fixture repo. It exposes a `/users` in-memory store.
+
+## Layout
+- `src/app/main.py` — Flask app factory and routes
+- `src/app/models.py` — dataclasses
+- `tests/` — pytest
+
+## Conventions
+- ruff, 100 cols
+
+
+### Config
+#### pyproject.toml
+```
+[project]
+name = "sample-app"
+version = "0.1.0"
+description = "A tiny FastAPI-flavored description that should NOT influence framework detection (we use flask)."
+requires-python = ">=3.12"
+dependencies = ["flask>=3.0", "pydantic>=2"]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+```
+
+### Docs
+#### docs/ARCHITECTURE.md
+# Architecture
+
+Single-process Flask app. State lives in `app.models.UserStore` (in-memory). No database.
+
+#### .ai-platform/CONTEXT.md
+# CONTEXT.md
+
+## Architecture
+- Flask app factory in `app.main:create_app`; in-memory `UserStore`.
+
+## Conventions
+- pytest via `pytest -q`; keep functions small; type hints required.
+
+## Pitfalls
+- Do not add a database; this fixture must stay dependency-light.
+
+=== 2. Plan ===
+## Plan for Goal #3Y5XCP: Add a /users CRUD endpoint with tests
+### Understanding
+The repository contains a minimal Flask app with an in-memory user store. The goal is to add CRUD operations for users and corresponding tests.
+### Acceptance Criteria
+- [ ] AC-1 A POST /users endpoint is available for creating new user records
+- [ ] AC-2 A GET /users endpoint returns a list of all user records
+- [ ] AC-3 A GET /users/{id} endpoint returns a single user record by ID
+- [ ] AC-4 A PUT /users/{id} endpoint updates an existing user record
+- [ ] AC-5 A DELETE /users/{id} endpoint deletes an existing user record
+- [ ] AC-6 All CRUD endpoints return appropriate HTTP status codes (200, 201, 400, 404)
+- [ ] AC-7 Tests for each CRUD operation pass
+- [ ] AC-8 No database is used
+### Epics
+1. User model and data store — Tasks: 2, est. risk: T0
+   Extend the user model and data store to support reading, writing, and querying users.
+2. CRUD endpoints — Tasks: 4, est. risk: T0
+   Implement Flask routes for creating, retrieving, updating, and deleting user records.
+3. Tests for CRUD operations — Tasks: 2, est. risk: T0
+   Write unit and integration tests for each of the CRUD endpoints.
+### Task Graph
+Epic-1 → Epic-2, Epic-1 → Epic-3
+### Decisions Expected
+- none
+### Budget Estimate
+~$1, ~4 runs
+
+(auto-approve) by e2e
+
+=== 3. TaskDrafts ===
+{
+  "epics": [],
+  "tasks": [
+    {
+      "title": "Extend User model",
+      "spec": "Add a new file `src/app/user.py` to define a User dataclass with fields for `id`, `username`, and `email`. Update `tests/test_main.py` to test this new model.",
+      "kind": "feature",
+      "role_required": "coding",
+      "depends_on": [],
+      "owned_paths": [
+        "src/app/user.py",
+        "tests/test_main.py"
+      ],
+      "estimated_tier": "T0",
+      "epic": "User model and data store"
+    },
+    {
+      "title": "Implement UserStore in-memory storage",
+      "spec": "Modify `src/app/models.py` to extend the `UserStore` class with methods to create, read, update, and delete user records. Add initial dummy implementations in the `UserStore` that return static data for testing.",
+      "kind": "feature",
+      "role_required": "coding",
+      "depends_on": [],
+      "owned_paths": [
+        "src/app/models.py",
+        "tests/test_main.py"
+      ],
+      "estimated_tier": "T0",
+      "epic": "User model and data store"
+    },
+    {
+      "title": "Create POST /users endpoint",
+      "spec": "Add a route `/api/users` in `src/app/main.py` that handles the POST request to create new user records. Implement the route logic using the `UserStore`. Write unit tests for this route in `tests/test_main.py`.",
+      "kind": "feature",
+      "role_required": "coding",
+      "depends_on": [],
+      "owned_paths": [
+        "src/app/main.py",
+        "tests/test_main.py"
+      ],
+      "estimated_tier": "T0",
+      "epic": "CRUD endpoints"
+    },
+    {
+      "title": "Create GET /users endpoint",
+      "spec": "Add a route `/api/users` in `src/app/main.py` that handles the GET request to return all user records. Implement the route logic using the `UserStore`. Write unit tests for this route in `tests/test_main.py`.",
+      "kind": "feature",
+      "role_required": "coding",
+      "depends_on": [],
+      "owned_paths": [
+        "src/app/main.py",
+        "tests/test_main.py"
+      ],
+      "estimated_tier": "T0",
+      "epic": "CRUD endpoints"
+    },
+    {
+      "title": "Create GET /users/{id} endpoint",
+      "spec": "Add a route `/api/users/<int:user_id>` in `src/app/main.py` that handles the GET request to return a single user record by ID. Implement the route logic using the `UserStore`. Write unit tests for this route in `tests/test_main.py`.",
+      "kind": "feature",
+      "role_required": "coding",
+      "depends_on": [],
+      "owned_paths": [
+        "src/app/main.py",
+        "tests/test_main.py"
+      ],
+      "estimated_tier": "T0",
+      "epic": "CRUD endpoints"
+    },
+    {
+      "title": "Create PUT /users/{id} endpoint",
+      "spec": "Add a route `/api/users/<int:user_id>` in `src/app/main.py` that handles the PUT request to update an existing user record. Implement the route logic using the `UserStore`. Write unit tests for this route in `tests/test_main.py`.",
+      "kind": "feature",
+      "role_required": "coding",
+      "depends_on": [],
+      "owned_paths": [
+        "src/app/main.py",
+        "tests/test_main.py"
+      ],
+      "estimated_tier": "T0",
+      "epic": "CRUD endpoints"
+    },
+    {
+      "title": "Create DELETE /users/{id} endpoint",
+      "spec": "Add a route `/api/users/<int:user_id>` in `src/app/main.py` that handles the DELETE request to delete an existing user record. Implement the route logic using the `UserStore`. Write unit tests for this route in `tests/test_main.py`.",
+      "kind": "feature",
+      "role_required": "coding",
+      "depends_on": [],
+      "owned_paths": [
+        "src/app/main.py",
+        "tests/test_main.py"
+      ],
+      "estimated_tier": "T0",
+      "epic": "CRUD endpoints"
+    },
+    {
+      "title": "Refactor routes to use Blueprints (optional)",
+      "spec": "Consider breaking down the routes into a Blueprint for better organization. This is optional and can be done later if needed.",
+      "kind": "feature",
+      "role_required": "coding",
+      "depends_on": [],
+      "owned_paths": [
+        "src/app/main.py"
+      ],
+      "estimated_tier": "T2",
+      "epic": "CRUD endpoints"
+    }
+  ]
+}
+
+would create issue #1: Extend User model
+would create issue #2: Implement UserStore in-memory storage
+would create issue #3: Create POST /users endpoint
+would create issue #4: Create GET /users endpoint
+would create issue #5: Create GET /users/{id} endpoint
+would create issue #6: Create PUT /users/{id} endpoint
+would create issue #7: Create DELETE /users/{id} endpoint
+would create issue #8: Refactor routes to use Blueprints (optional)
+
+=== 4. Coding Agent 결과 ===
+  failed     attempts=3 calls=4 tokens=5169/818 15.9s  Extend User model  error=tests failed after 3 attempts
+
+=== 5. bare remote 브랜치 ===
+  ai/user-model-and-data-store/1-extend-user-model: Added User model and test
+  pr.opened=0 verify_chain=True
+
+=== 6. 토큰 합계 ===
+  orchestrator: 2 calls, 2316/1281
+  coding:       4 calls, 5169/818
+  total:        6 calls, in 7485 / out 2099
+
+e2e: FAIL
+
+################ branch diff (Task 1, blocked after 3 attempts)
+diff --git a/src/app/user.py b/src/app/user.py
+new file mode 100644
+--- /dev/null
++++ b/src/app/user.py
+@@ -0,0 +1,11 @@
++"""User dataclass."""
++from __future__ import annotations
++
++from dataclasses import dataclass, field
++
++
++@dataclass
++class User:
++    id: int
++    username: str
++    email: str
+diff --git a/tests/test_main.py b/tests/test_main.py
+--- a/tests/test_main.py
++++ b/tests/test_main.py
+@@ -1,5 +1,5 @@
+ from app.main import greet
+-from app.models import UserStore
++from app.models import UserStore, User
+ 
+ 
+ def test_greet() -> None:
+@@ -10,3 +10,11 @@ def test_store() -> None:
+     s = UserStore()
+     u = s.add("ann")
+     assert s.get(u.id) == u and len(s.all()) == 1
++
++
++def test_user_creation() -> None:
++    s = UserStore()
++    user = User(id=1, username="alice", email="alice@example.com")
++    s.store(user)
++    assert s.get(1) == user
++    assert len(s.all()) == 1
