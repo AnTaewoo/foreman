@@ -6,8 +6,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from agents.base import AgentInput, AgentMemory, ProjectContext, RunBudget, TaskRef
 from agents.coding import CodingAgent, is_dependency_file
 from agents.llm.fake import FakeProvider

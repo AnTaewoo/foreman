@@ -7,8 +7,8 @@
     check_scope: 의존성 파일 변경 → needs_decision (Issue 코멘트 "승인 필요" + task.blocked, D-16)
     edit: owned_paths 밖 경로는 **쓰기 전에** 거부 → task.failed(scope_violation), 커밋 0
 
-브랜치 ``ai/<epic_slug>/<issue>-<slug(title)>``는 ``run()`` 진입 시 plain git으로 만든다(툴 이벤트 아님).
-이벤트 순서: task.started → run.started → run.tool_called(fs.read CONTEXT.md 가 첫 툴) … → run.finished.
+브랜치 ``ai/<epic_slug>/<issue>-<slug(title)>``는 ``run()`` 진입 시 plain git으로 만든다.
+이벤트 순서: task.started → run.started → run.tool_called(CONTEXT.md가 첫 툴) … → run.finished.
 """
 
 from __future__ import annotations
@@ -35,8 +35,8 @@ from agents.tools.base import ToolContext, ToolDenied
 from agents.tools.fs import FsTool
 from agents.tools.git import GitTool, _git
 from agents.tools.github import GitHubTool
-from agents.tools.shell import ShellTool, ShellResult
-from control_plane.events.schema import EventType
+from agents.tools.shell import ShellResult, ShellTool
+from control_plane.events.schema import EntityType, EventType
 from github_adapter.protocol import GitHubClient
 
 log = structlog.get_logger(__name__)
@@ -160,10 +160,12 @@ class CodingAgent(BaseAgent):
             tokens["out"] += c.tokens_out
             return c
 
-        async def emit(type_: EventType, entity: str, id_: str, payload: dict[str, Any]) -> None:
+        async def emit(
+            type_: EventType, entity: EntityType, id_: str, payload: dict[str, Any]
+        ) -> None:
             # 툴 이벤트(ctx)와 Task/Run 이벤트(BaseAgent)가 한 체인을 공유
             self.last_event_id = ctx.last_event_id
-            ev = await self.publish(input, type_, entity, id_, payload)  # type: ignore[arg-type]
+            ev = await self.publish(input, type_, entity, id_, payload)
             ctx.last_event_id = ev.id
 
         # -- nodes
@@ -180,9 +182,10 @@ class CodingAgent(BaseAgent):
             )
             assembled = assemble_context(
                 input.model_copy(update={"project_context": pc}),
-                token_budget=self._token_budget, system=system,
+                token_budget=self._token_budget,
+                system=system,
                 related_files=await _owned_files(fs, ctx),
-            )  # fmt: skip
+            )
             c = await llm(
                 [
                     Message(
@@ -197,22 +200,31 @@ class CodingAgent(BaseAgent):
         async def edit(state: CodingState) -> dict[str, Any]:
             attempt = int(state.get("attempt", 0)) + 1
             parts = [
-                assemble_context(input, token_budget=self._token_budget, system=system,
-                                 related_files=await _owned_files(fs, ctx)).user_message(),
+                assemble_context(
+                    input,
+                    token_budget=self._token_budget,
+                    system=system,
+                    related_files=await _owned_files(fs, ctx),
+                ).user_message(),
                 f"## Plan\n{state.get('plan', '')}",
-            ]  # fmt: skip
+            ]
             if state.get("test_output"):
                 parts.append(
-                    f"## Previous attempt {attempt - 1} failed. Test output:\n```\n{state['test_output'][-4000:]}\n```\n"
+                    f"## Previous attempt {attempt - 1} failed. Test output:\n"
+                    f"```\n{state['test_output'][-4000:]}\n```\n"
                     "Fix the code and/or tests so the command passes."
                 )
             parts.append("Return the complete content of every file you create or change.")
             c = await llm([Message(role="user", content="\n\n".join(parts))], schema=EditPlan)
             plan = c.parsed if isinstance(c.parsed, EditPlan) else None
             if plan is None:
-                return {"attempt": attempt, "error": "edit plan invalid", "tests_passed": False,
-                        "test_output": f"model returned invalid EditPlan: {c.text[:500]}"}  # fmt: skip
-            # owned 사전 검사: 하나라도 밖이면 아무것도 쓰지 않는다 (거부 이벤트는 fs.write가 남긴다)
+                return {
+                    "attempt": attempt,
+                    "error": "edit plan invalid",
+                    "tests_passed": False,
+                    "test_output": f"model returned invalid EditPlan: {c.text[:500]}",
+                }
+            # owned 사전 검사: 하나라도 밖이면 아무것도 쓰지 않는다 (거부 이벤트는 fs.write가)
             unowned = [f.path for f in plan.files if not ctx.is_owned(ctx.relative(f.path))]
             if unowned:
                 try:
@@ -232,10 +244,17 @@ class CodingAgent(BaseAgent):
             return "check_scope"
 
         async def scope_violation(state: CodingState) -> dict[str, Any]:
-            await emit(EventType.TASK_FAILED, "task", input.task.id, {
-                "run_id": input.run_id, "reason": "scope_violation", "attempt": input.task.attempt,
-                "files": state.get("denied_files", []),
-            })  # fmt: skip
+            await emit(
+                EventType.TASK_FAILED,
+                "task",
+                input.task.id,
+                {
+                    "run_id": input.run_id,
+                    "reason": "scope_violation",
+                    "attempt": input.task.attempt,
+                    "files": state.get("denied_files", []),
+                },
+            )
             return {"outcome": "failed", "error": f"scope violation: {state.get('denied_files')}"}
 
         async def check_scope(state: CodingState) -> dict[str, Any]:
@@ -251,7 +270,7 @@ class CodingAgent(BaseAgent):
             body = (
                 "**승인 필요** — 이 Task는 의존성 파일을 바꾸려 합니다: "
                 + ", ".join(f"`{f}`" for f in files)
-                + "\n\n설계 §8.2에 따라 T2 결정입니다. 승인되면 `/approve`, 아니면 `/reject <이유>`."
+                + "\n\n설계 §8.2에 따라 T2 결정입니다. `/approve` 또는 `/reject <이유>`."
             )
             if input.task.issue_number is not None:
                 await gh.comment(
@@ -290,9 +309,16 @@ class CodingAgent(BaseAgent):
                 await git.push(branch)
             except Exception as exc:  # WIP 보존은 최선 노력
                 log.warning("coding.wip_push_failed", error=str(exc))
-            await emit(EventType.TASK_FAILED, "task", input.task.id, {
-                "run_id": input.run_id, "reason": "tests_failed", "attempt": int(state.get("attempt", 0)),
-            })  # fmt: skip
+            await emit(
+                EventType.TASK_FAILED,
+                "task",
+                input.task.id,
+                {
+                    "run_id": input.run_id,
+                    "reason": "tests_failed",
+                    "attempt": int(state.get("attempt", 0)),
+                },
+            )
             return {
                 "outcome": "failed",
                 "error": f"tests failed after {state.get('attempt')} attempts",
@@ -307,17 +333,37 @@ class CodingAgent(BaseAgent):
             pr = await gh.open_pr(
                 head=branch, title=title, body=str(state.get("plan", ""))[:2000], draft=True
             )
-            await emit(EventType.PR_OPENED, "pr", str(pr.number), {
-                "task_id": input.task.id, "run_id": input.run_id, "pr_number": pr.number,
-                "head": branch, "base": input.project_context.default_branch, "draft": True, "url": pr.url,
-            })  # fmt: skip
+            await emit(
+                EventType.PR_OPENED,
+                "pr",
+                str(pr.number),
+                {
+                    "task_id": input.task.id,
+                    "run_id": input.run_id,
+                    "pr_number": pr.number,
+                    "head": branch,
+                    "base": input.project_context.default_branch,
+                    "draft": True,
+                    "url": pr.url,
+                },
+            )
             return {"pr_number": pr.number, "pr_url": pr.url}
 
         async def summarize(state: CodingState) -> dict[str, Any]:
-            c = await llm([Message(role="user", content=(
-                f"Task: {input.task.title}\nChanged files: {state.get('changed_files')}\nPR: #{state.get('pr_number')}\n"
-                "Write a 2-4 sentence summary of what was done and what remains, for the issue comment."
-            ))])  # fmt: skip
+            c = await llm(
+                [
+                    Message(
+                        role="user",
+                        content=(
+                            f"Task: {input.task.title}\n"
+                            f"Changed files: {state.get('changed_files')}\n"
+                            f"PR: #{state.get('pr_number')}\n"
+                            "Write a 2-4 sentence summary of what was done and what remains, "
+                            "for the issue comment."
+                        ),
+                    )
+                ]
+            )
             comment_id: int | None = None
             if input.task.issue_number is not None:
                 ref = await gh.comment(
@@ -334,11 +380,19 @@ class CodingAgent(BaseAgent):
 
         g: StateGraph[CodingState, None, CodingState, CodingState] = StateGraph(CodingState)
         for name, fn in (
-            ("load_context", load_context), ("plan_changes", plan_changes), ("edit", edit),
-            ("scope_violation", scope_violation), ("check_scope", check_scope),
-            ("needs_decision", needs_decision), ("commit", commit), ("run_tests", run_tests),
-            ("fail", fail), ("push", push), ("open_pr", open_pr), ("summarize", summarize),
-        ):  # fmt: skip
+            ("load_context", load_context),
+            ("plan_changes", plan_changes),
+            ("edit", edit),
+            ("scope_violation", scope_violation),
+            ("check_scope", check_scope),
+            ("needs_decision", needs_decision),
+            ("commit", commit),
+            ("run_tests", run_tests),
+            ("fail", fail),
+            ("push", push),
+            ("open_pr", open_pr),
+            ("summarize", summarize),
+        ):
             g.add_node(name, fn)
         g.add_edge(START, "load_context")
         g.add_edge("load_context", "plan_changes")
@@ -384,11 +438,14 @@ class CodingAgent(BaseAgent):
         decision = None
         if outcome == "needs_decision":
             decision = DecisionRequest(
-                type="dependency", reason="dependency manifest changed", files=state.get("dependency_files", []),
-                options=["approve the dependency", "reject and re-plan"], recommendation="review the diff",
-            )  # fmt: skip
+                type="dependency",
+                reason="dependency manifest changed",
+                files=state.get("dependency_files", []),
+                options=["approve the dependency", "reject and re-plan"],
+                recommendation="review the diff",
+            )
         return AgentOutput(
-            outcome=outcome,  # type: ignore[arg-type]  # Outcome Literal
+            outcome=cast(Any, outcome),  # Any: Outcome Literal로 좁히기
             artifacts=artifacts,
             decision_request=decision,
             summary=str(state.get("summary") or state.get("error") or ""),
