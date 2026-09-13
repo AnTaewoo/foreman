@@ -1,0 +1,2 @@
+{"action": "closed", "number": 42, "pull_request": {"number": 42, "html_url": "https://gh/p/42", "draft": false, "body": "<!-- ai-platform:meta task=01TASK run=01RUN agent=coding-1 tier=T1 -->\n### Summary\ns", "head": {"ref": "ai/epic/12-x", "sha": "abc"}, "base": {"ref": "main"}, "merged": true, "merged_by": {"login": "alice"}},
+ "repository": {"full_name": "org/demo"}, "sender": {"login": "alice", "type": "User"}}

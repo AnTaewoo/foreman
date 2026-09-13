@@ -1,0 +1,3 @@
+{"action": "created", "issue": {"number": 5, "title": "Plan #1"},
+ "comment": {"id": 900, "body": "/approve", "user": {"login": "alice", "type": "User"}},
+ "repository": {"full_name": "org/demo"}, "sender": {"login": "alice", "type": "User"}}

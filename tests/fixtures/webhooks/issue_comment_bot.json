@@ -1,0 +1,3 @@
+{"action": "created", "issue": {"number": 5},
+ "comment": {"id": 903, "body": "/approve", "user": {"login": "foreman[bot]", "type": "Bot"}},
+ "repository": {"full_name": "org/demo"}, "sender": {"login": "foreman[bot]", "type": "Bot"}}

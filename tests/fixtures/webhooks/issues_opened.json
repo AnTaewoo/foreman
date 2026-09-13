@@ -1,0 +1,2 @@
+{"action": "opened", "issue": {"number": 12, "title": "t", "body": "<!-- ai-platform:meta task=01TASK -->"},
+ "repository": {"full_name": "org/demo"}, "sender": {"login": "alice", "type": "User"}}

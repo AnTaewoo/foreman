@@ -1,0 +1,2 @@
+{"action": "completed", "check_suite": {"id": 101, "conclusion": "success", "head_sha": "zzz", "pull_requests": []},
+ "repository": {"full_name": "org/demo"}, "sender": {"login": "github-actions[bot]", "type": "Bot"}}

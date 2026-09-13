@@ -1,0 +1,2 @@
+{"action": "opened", "number": 43, "pull_request": {"number": 43, "html_url": "https://gh/p/43", "draft": false, "body": "a human PR", "head": {"ref": "feature/x", "sha": "abc"}, "base": {"ref": "main"}, "merged": false},
+ "repository": {"full_name": "org/demo"}, "sender": {"login": "alice", "type": "User"}}

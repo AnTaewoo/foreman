@@ -1,0 +1,2 @@
+{"action": "submitted", "review": {"id": 7, "state": "approved", "user": {"login": "bob"}}, "pull_request": {"number": 42, "body": "<!-- ai-platform:meta task=01TASK run=01RUN agent=coding-1 tier=T1 -->\n### Summary\ns", "head": {"ref": "ai/epic/12-x"}, "base": {"ref": "main"}},
+ "repository": {"full_name": "org/demo"}, "sender": {"login": "bob", "type": "User"}}
