@@ -31,6 +31,7 @@ from agents.base import (
 )
 from agents.context import assemble_context
 from agents.llm.base import Message, ModelProvider, extract_json
+from agents.llm.pricing import Prices
 from agents.prompts import load_prompt
 from agents.tools.base import ToolContext, ToolDenied
 from agents.tools.fs import FsTool
@@ -137,8 +138,9 @@ class CodingAgent(BaseAgent):
         test_command: str = "pytest -q",
         shell_timeout: float = 600.0,
         token_budget: int = 60_000,
+        prices: Prices | None = None,
     ) -> None:
-        super().__init__(publish=publish, provider=provider, model=model)
+        super().__init__(publish=publish, provider=provider, model=model, prices=prices)
         self._github_client = github
         self._repo = repo
         self._worktree = Path(worktree)

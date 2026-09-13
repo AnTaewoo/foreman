@@ -36,6 +36,7 @@ from agents.coding import CodingAgent
 from agents.llm import get_provider
 from agents.llm.base import Completion, ModelProvider
 from agents.llm.fake import FakeProvider
+from agents.llm.pricing import Prices, estimate_cost, format_cost
 from control_plane.config import Settings
 from control_plane.dry_merge import DryMerger
 from control_plane.events.bus import Delivery, EventBus
@@ -195,6 +196,7 @@ async def run(argv: list[str]) -> Summary:
     settings = Settings()
     if args.model:
         settings = settings.model_copy(update={"llm_model": args.model})
+    prices = Prices(settings.llm_price_in_per_mtok, settings.llm_price_out_per_mtok)  # D-39
     summary = Summary(provider="fake" if args.fake else _provider_label(settings), dry_run=True)
     workdir = Path(args.workdir) if args.workdir else Path(tempfile.mkdtemp(prefix="e2e-"))
     workdir.mkdir(parents=True, exist_ok=True)
@@ -317,8 +319,8 @@ async def run(argv: list[str]) -> Summary:
         print("!! emit 오류:", final["error"])
     await pump()
     if args.no_coding:
-        summary.tokens = _tokens(orch, [])
-        _print_tokens(summary.tokens)
+        summary.tokens = _tokens(orch, [], prices)
+        _print_tokens(summary.tokens, prices)
         summary.exit_code = 0 if issues and not final.get("error") else 1
         await _close(redis, engine)
         return summary
@@ -356,6 +358,7 @@ async def run(argv: list[str]) -> Summary:
             model=None if args.fake or settings.llm_provider == "anthropic" else settings.llm_model,
             test_command="pytest -q",
             shell_timeout=300,
+            prices=prices,
         )
         started = time.monotonic()
         title = spec.task_json["task"]["title"]
@@ -452,15 +455,15 @@ async def run(argv: list[str]) -> Summary:
             ).all()
         )
     print(f"  pr.opened={pr_opened} verify_chain={chain_ok}")
-    summary.tokens = _tokens(orch, coding_counts)
-    _print_tokens(summary.tokens)
+    summary.tokens = _tokens(orch, coding_counts, prices)
+    _print_tokens(summary.tokens, prices)
     all_done = bool(summary.coding) and all(c["outcome"] == "done" for c in summary.coding)
     summary.exit_code = 0 if all_done and chain_ok and len(summary.branches) >= len(tasks) else 1
     await _close(redis, engine)
     return summary
 
 
-def _tokens(orch: Counting, coding: list[Counting]) -> dict[str, int]:
+def _tokens(orch: Counting, coding: list[Counting], prices: Prices) -> dict[str, int]:
     return {
         "orchestrator_calls": orch.calls,
         "orchestrator_tokens_in": orch.tin,
@@ -471,10 +474,21 @@ def _tokens(orch: Counting, coding: list[Counting]) -> dict[str, int]:
         "calls": orch.calls + sum(c.calls for c in coding),
         "tokens_in": orch.tin + sum(c.tin for c in coding),
         "tokens_out": orch.tout + sum(c.tout for c in coding),
+        "cost_usd": int(
+            round(
+                estimate_cost(
+                    orch.tin + sum(c.tin for c in coding),
+                    orch.tout + sum(c.tout for c in coding),
+                    prices,
+                )
+                * 1_000_000
+            )
+        ),  # 마이크로달러(int) — 표시는 _print_tokens
     }
 
 
-def _print_tokens(t: dict[str, int]) -> None:
+def _print_tokens(t: dict[str, int], prices: Prices | None = None) -> None:
+    prices = prices or Prices()
     print("\n=== 6. 토큰 합계 ===")
     print(
         f"  orchestrator: {t['orchestrator_calls']} calls, "
@@ -485,6 +499,7 @@ def _print_tokens(t: dict[str, int]) -> None:
         f"{t['coding_tokens_in']}/{t['coding_tokens_out']}"
     )
     print(f"  total:        {t['calls']} calls, in {t['tokens_in']} / out {t['tokens_out']}")
+    print(f"  cost:         ≈ {format_cost(t['cost_usd'] / 1_000_000, prices)}  (D-39 단가 × 토큰)")
 
 
 async def _close(redis: Redis, engine: Any) -> None:

@@ -10,6 +10,7 @@
     WORKER_TIMEOUT_MIN    기본 45
     WORKER_LLM_PROVIDER   fake | openai_compat | anthropic (D-33)
     WORKER_LLM_BASE_URL / WORKER_LLM_MODEL / WORKER_LLM_API_KEY / WORKER_FAKE_SCRIPT(fake용 JSON)
+    WORKER_LLM_PRICE_IN_PER_MTOK / WORKER_LLM_PRICE_OUT_PER_MTOK  단가 (D-39, 기본 0)
 
 종료 코드: 0 done / 1 failed / 2 needs_decision·blocked / 3 timeout / 64 설정 오류.
 타임아웃이면 WIP 커밋+push 후 ``task.failed(timeout)``·``run.finished(outcome=timeout)`` (D-28).
@@ -37,6 +38,7 @@ from agents.llm.anthropic import AnthropicProvider
 from agents.llm.base import ModelProvider
 from agents.llm.fake import FakeProvider
 from agents.llm.ollama import OllamaCompatProvider
+from agents.llm.pricing import Prices
 from control_plane.events.schema import Actor, EntityType, Event, EventType, Subject
 from github_adapter.dry_run import DryRunGitHubClient
 from worker.publish import FilePublisher, RedisPublisher
@@ -52,6 +54,11 @@ GIT_ENV = {
     "GIT_COMMITTER_NAME": "foreman-agent",
     "GIT_COMMITTER_EMAIL": "agent@foreman.local",
 }
+
+
+def prices_from_env(env: Mapping[str, str]) -> Prices:
+    """``WORKER_LLM_PRICE_IN_PER_MTOK`` / ``_OUT_PER_MTOK`` (D-39, 기본 0)."""
+    return Prices.from_env(env)
 
 
 def provider_from_env(env: Mapping[str, str]) -> ModelProvider:
@@ -179,6 +186,7 @@ async def _run(
         worktree=repo,
         model=env.get("WORKER_LLM_MODEL"),
         test_command=env.get("WORKER_TEST_COMMAND", "pytest -q"),
+        prices=prices_from_env(env),
         shell_timeout=min(timeout_s, 600.0),
     )
     started = time.monotonic()

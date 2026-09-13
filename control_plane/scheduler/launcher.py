@@ -143,8 +143,10 @@ class InProcessLauncher:
         model: str | None = None,
         test_command: str = "pytest -q",
         shell_timeout: float = 300.0,
+        prices: Any = None,  # Any: agents.llm.pricing.Prices
     ) -> None:
         self._redis = redis
+        self._prices = prices
         self._provider_factory = provider_factory
         self._workdir = Path(workdir)
         self._model = model
@@ -183,6 +185,7 @@ class InProcessLauncher:
                 model=self._model,
                 test_command=self._test_command,
                 shell_timeout=self._shell_timeout,
+                prices=self._prices,
             )
             output = await asyncio.wait_for(
                 agent.run(AgentInput.model_validate(spec.task_json)), timeout=spec.timeout_min * 60

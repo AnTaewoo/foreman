@@ -34,6 +34,7 @@ from agents.coding import CodingAgent
 from agents.llm import get_provider
 from agents.llm.base import Completion, ModelProvider
 from agents.llm.fake import FakeProvider
+from agents.llm.pricing import Prices, estimate_cost, format_cost
 from control_plane.config import Settings
 from control_plane.events.bus import Delivery, EventBus
 from control_plane.events.chain import verify_chain_db
@@ -474,6 +475,10 @@ async def main() -> int:
             f"tokens={r['tokens_in']}/{r['tokens_out']} {r['seconds']}s  {r['task']}"
             + (f"  error={r['error'][:80]}" if r["error"] else "")
         )
+    total_in = sum(int(r.get("tokens_in") or 0) for r in stats["runs"])
+    total_out = sum(int(r.get("tokens_out") or 0) for r in stats["runs"])
+    prices = Prices(settings.llm_price_in_per_mtok, settings.llm_price_out_per_mtok)  # D-39
+    print(f"  cost: ≈ {format_cost(estimate_cost(total_in, total_out, prices), prices)}")
     print(
         f"  runs in db: {len(runs)}, "
         f"outcomes={[r.outcome.value if r.outcome else None for r in runs]}"

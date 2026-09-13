@@ -21,6 +21,7 @@ import structlog
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from agents.llm.pricing import Prices
 from control_plane.config import Settings
 from control_plane.dry_merge import DryMerger
 from control_plane.events.bus import RETRY_SUFFIX, STREAM_PREFIX, Delivery, EventBus
@@ -53,7 +54,12 @@ def worker_llm_env(settings: Settings) -> dict[str, str]:
     elif settings.llm_provider == "anthropic":
         env["WORKER_LLM_MODEL"] = settings.anthropic_model
         env["WORKER_LLM_API_KEY"] = settings.anthropic_api_key.get_secret_value()
+    env.update(prices_of(settings).to_env())  # D-39
     return env
+
+
+def prices_of(settings: Settings) -> Prices:
+    return Prices(settings.llm_price_in_per_mtok, settings.llm_price_out_per_mtok)
 
 
 def build_launcher(
@@ -73,6 +79,7 @@ def build_launcher(
         provider_factory=lambda: get_provider(settings),
         workdir=Path(tempfile.gettempdir()) / "foreman-inprocess",
         model=settings.llm_model if settings.llm_provider == "openai_compat" else None,
+        prices=prices_of(settings),
     )
 
 

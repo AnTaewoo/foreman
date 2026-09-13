@@ -17,6 +17,7 @@ import structlog
 from pydantic import BaseModel, ConfigDict, Field
 
 from agents.llm.base import ModelProvider
+from agents.llm.pricing import Prices, estimate_cost
 from control_plane.events.schema import Actor, EntityType, Event, EventType, Subject
 
 log = structlog.get_logger(__name__)
@@ -123,11 +124,17 @@ class AgentOutput(BaseModel):
 
 class BaseAgent(ABC):
     def __init__(
-        self, *, publish: Publish, provider: ModelProvider, model: str | None = None
+        self,
+        *,
+        publish: Publish,
+        provider: ModelProvider,
+        model: str | None = None,
+        prices: Prices | None = None,
     ) -> None:
         self._publish = publish
         self.provider = provider
         self.model = model
+        self.prices = prices or Prices()  # D-39: 단가 미설정이면 cost_usd 0
         self.last_event_id: str | None = None
 
     async def publish(
@@ -176,6 +183,10 @@ class BaseAgent(ABC):
             log.exception("agent.execute_failed", run_id=input.run_id, task_id=input.task.id)
             output = AgentOutput(
                 outcome="failed", summary=f"{type(exc).__name__}: {exc}", error=str(exc)
+            )
+        if output.cost_usd == 0.0 and self.prices.is_set:  # execute가 준 값이 있으면 그대로
+            output = output.model_copy(
+                update={"cost_usd": estimate_cost(output.tokens_in, output.tokens_out, self.prices)}
             )
         await self.publish(
             input,
