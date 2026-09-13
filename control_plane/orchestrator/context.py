@@ -158,6 +158,12 @@ def _symbol_index(root: Path) -> dict[str, tuple[str, ...]]:
         except (SyntaxError, ValueError, OSError):
             continue
         names: list[str] = []
+        for node in ast.walk(tree):  # 라우트는 create_app 안에 중첩되므로 전체를 훑는다
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                for dec in node.decorator_list:
+                    route = _route_of(dec)
+                    if route:
+                        names.append(route)
         for node in tree.body:
             if isinstance(node, ast.ClassDef):
                 methods = [
@@ -172,6 +178,31 @@ def _symbol_index(root: Path) -> dict[str, tuple[str, ...]]:
         if names:
             out[path.relative_to(root).as_posix()] = tuple(names[:SYMBOL_MAX_PER_FILE])
     return out
+
+
+def _route_of(dec: object) -> str | None:
+    """``@app.get("/users")`` / ``@router.route("/x", methods=[...])`` → ``route GET /users``."""
+    import ast
+
+    if not (isinstance(dec, ast.Call) and isinstance(dec.func, ast.Attribute)):
+        return None
+    method = dec.func.attr
+    if method not in {"get", "post", "put", "delete", "patch", "route", "websocket"}:
+        return None
+    if not (
+        dec.args and isinstance(dec.args[0], ast.Constant) and isinstance(dec.args[0].value, str)
+    ):
+        return None
+    verb = method.upper()
+    if method == "route":
+        methods = next((kw.value for kw in dec.keywords if kw.arg == "methods"), None)
+        verb = (
+            ",".join(
+                str(e.value) for e in getattr(methods, "elts", []) if isinstance(e, ast.Constant)
+            )
+            or "GET"
+        )
+    return f"route {verb} {dec.args[0].value}"
 
 
 def build_summary(path: str | Path) -> RepoSummary:

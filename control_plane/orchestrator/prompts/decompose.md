@@ -39,8 +39,9 @@ Decompose the approved plan into Tasks. Return ONLY a JSON object matching this 
 Rules:
 - Each Task takes one agent 30 minutes to 2 hours. Do not split below that; do not exceed it.
   Produce at least 3 Tasks and at most 8, following the plan's Task Graph numbering.
-- Names under "Symbols" in the repository summary already exist. Never create a Task whose job is
-  to add or "implement" one of them; write Tasks that extend or use them (say which symbol).
+- Names under "Symbols" in the repository summary already exist (including `route GET /users`
+  style entries = routes already implemented). Never create a Task whose job is to add or
+  "implement" one of them; write Tasks that extend or use them (say which symbol).
 - "owned_paths" is REQUIRED and must not be empty: list the exact files (or narrow globs) the Task
   may modify. Two Tasks that touch the same file must be ordered with "depends_on". Tasks that
   touch different files must NOT depend on each other unless one imports the other's new code.

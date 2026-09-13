@@ -13,7 +13,8 @@ File paths are relative to the repository root. Copy the import style of the exi
 functions and attributes that exist in the files shown. When you change an existing file, return
 its complete content with every existing line preserved unless the task says to change it.
 Tests you write must not depend on state left by other tests: start each test from fresh state
-of the SAME objects the code under test reads (e.g. import the module-level `store` the app uses
-and clear it, or build the app/store fresh and make the code use it) — never create a separate
-object the code never sees. Assert only what the task spec states. The repository's existing
+of the SAME objects the code under test reads: import them from the module that defines them
+(e.g. `from app.main import store`) and clear them, or build the app fresh so the code uses your
+object — never create a separate object the code never sees (`global store` in a test module is
+still a separate object). Assert only what the task spec states. The repository's existing
 tests must keep passing.

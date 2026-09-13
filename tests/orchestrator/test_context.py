@@ -101,6 +101,7 @@ def test_symbol_index(summary: RepoSummary, tmp_path: Path) -> None:
     assert any(s.startswith("class User") for s in models)
     assert any(s.startswith("class UserStore") and "add" in s and "all" in s for s in models)
     assert any(s == "def greet" for s in summary.symbols["src/app/main.py"])
+    assert "route GET /users" in summary.symbols["src/app/main.py"]  # 중첩된 @app.get도 (X.2 3차)
     assert any(s.startswith("def test_") for s in summary.symbols["tests/test_main.py"])
     md = render_summary(summary)
     assert "### Symbols" in md and "class UserStore" in md
