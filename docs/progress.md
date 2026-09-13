@@ -33,3 +33,4 @@
 | 2026-09-13T13:17 | P1.4 | Green | chain/bus/outbox + 진짜 Redis 픽스처(D-32), 163 passed | |
 | 2026-09-13T13:18 | P1.4 | Gate | make check pass (163, 진짜 Redis), pre-commit pass, 시도 2/3 | |
 | 2026-09-13T13:18 | P1.4 | 완료 | 보드 done, D-32 기록 | 4c244bd |
+| 2026-09-13T13:27 | P1.5 | 착수 | projection.py 44 핸들러 + D-30 + guard | |
