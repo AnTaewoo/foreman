@@ -87,3 +87,4 @@
 | 2026-09-13T14:27 | P3.4 | Gate | make check pass (278), pre-commit pass, 시도 3/3 | |
 | 2026-09-13T14:27 | P3.4 | 완료 | 보드 done | cc4e86b |
 | 2026-09-13T14:27 | P3.5 | 착수 | emit.py toposort/overlap/emit | |
+| 2026-09-13T14:27 | P3.5 | Red | test_emit 9, ModuleNotFoundError emit | |
