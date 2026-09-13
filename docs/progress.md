@@ -41,3 +41,4 @@
 | 2026-09-13T13:41 | PC-1 | 결과 | roundtrip PASS, make check 179, integration 3, tag event-schema-v1 → pass | fefffb3 |
 | 2026-09-13T13:47 | P2.1 | 착수 | auth.py JWT/installation token/InstallationAuth | |
 | 2026-09-13T13:47 | P2.1 | Red | test_auth 7, ModuleNotFoundError github_adapter.auth | |
+| 2026-09-13T13:48 | P2.1 | Green | auth.py app_jwt/InstallationTokenProvider/InstallationAuth, 186 passed | |
