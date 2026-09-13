@@ -322,7 +322,7 @@ async def test_restore_skips_goals_without_checkpoint(
     assert runner3.restore_skipped == [gid]
 
 
-# ---------------------------------------------------------------- P6.4 Discussion 번호로 승인 매칭 (리뷰 A5)
+# ------------------------------------------------ P6.4 Discussion 번호로 승인 매칭 (리뷰 A5)
 def discussion_body(text: str, number: int, author: str = "alice") -> bytes:
     payload = json.loads((FIXTURES / "discussion_comment_approve.json").read_text())
     payload["comment"]["body"] = text

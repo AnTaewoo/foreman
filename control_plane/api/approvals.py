@@ -1,8 +1,8 @@
 """웹훅 슬래시 명령 → 권한 검사 → Plan 승인 재개 (설계 §7.4, §13; D-13).
 
 - ``/approve``·``/reject <reason>``: 작성자가 ``project.members``의 owner|approver(아니면 403).
-- 대상 Goal: 그 project에서 interrupt 대기 중인 Goal 중 Plan Discussion 번호가 코멘트 대상인 것,
-  없으면 대기 중인 Goal이 하나뿐일 때 그것. 없으면 no-op(202).
+- 대상 Goal: 그 project에서 interrupt 대기 중인 Goal 중 Plan Discussion 번호가 코멘트 대상인 것.
+  issue_comment(개발용 우회)만 대기 Goal이 하나뿐이면 그것으로 폴백. 없으면 no-op(202).
 - ``/changes``는 MVP 1에서 미지원(B6 재계획은 후속) — 기록만.
 - 같은 delivery 두 번은 ``WebhookHandler``의 DeliveryCache가 204로 막는다.
 """
@@ -62,9 +62,10 @@ class ApprovalService:
             return
         waiting = self._runner.waiting(cmd.project_id)
         goal_id = next(
-            (g for g, w in waiting.items() if w.plan_discussion_number == cmd.issue_number), None
+            (g for g, w in waiting.items() if w.plan_discussion_number == cmd.number), None
         )
-        if goal_id is None and len(waiting) == 1:
+        # issue_comment(dev 우회)만 "유일한 대기 Goal" 폴백. discussion은 번호가 맞아야 한다 (P6.4)
+        if goal_id is None and cmd.source == "issue" and len(waiting) == 1:
             goal_id = next(iter(waiting))
         if goal_id is None:
             log.info("approval.no_waiting_goal", project=cmd.project_id, issue=cmd.issue_number)

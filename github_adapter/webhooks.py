@@ -56,10 +56,12 @@ class SlashCommand:
     command: SlashName
     argument: str
     author: str
-    issue_number: int
+    issue_number: int  # 호환: issue_comment면 issue.number, discussion_comment면 discussion.number
     repo: str
     project_id: str
     delivery_id: str
+    source: Literal["issue", "discussion"] = "issue"  # P6.4 (리뷰 A5)
+    number: int = 0  # source의 번호 (issue.number | discussion.number)
 
 
 Publish = Callable[[Event], Awaitable[None]]
@@ -154,6 +156,7 @@ class WebhookHandler:
         ctx = _Ctx(project=project, repo=repo, actor=actor, delivery=delivery, payload=payload)
         dispatch = {
             "issue_comment": self._issue_comment,
+            "discussion_comment": self._discussion_comment,
             "pull_request": self._pull_request,
             "pull_request_review": self._pull_request_review,
             "check_suite": self._check_suite,
@@ -203,14 +206,46 @@ class WebhookHandler:
         if parsed is None:
             return _IGNORED
         name, argument = parsed
+        number = int((p.get("issue") or {}).get("number", 0))
         cmd = SlashCommand(
             command=name,
             argument=argument,
             author=str((p.get("comment") or {}).get("user", {}).get("login", ctx.actor.id)),
-            issue_number=int((p.get("issue") or {}).get("number", 0)),
+            issue_number=number,
             repo=ctx.repo,
             project_id=ctx.project.project_id,
             delivery_id=ctx.delivery,
+            source="issue",
+            number=number,
+        )
+        await self._on_slash(cmd)
+        return _ACCEPTED
+
+    async def _discussion_comment(self, ctx: _Ctx) -> Response:
+        """Plan Discussion의 ``/approve`` 등 (P6.4, 리뷰 A5).
+
+        페이로드: docs.github.com/en/webhooks/webhook-events-and-payloads#discussion_comment
+        (2026-09-13 확인) — ``action`` created|edited|deleted, ``comment{body, user.login, …}``,
+        ``discussion{number, title, …}``. created만 처리한다.
+        """
+        p = ctx.payload
+        if p.get("action") != "created":
+            return _IGNORED
+        parsed = parse_slash_command(str((p.get("comment") or {}).get("body", "")))
+        if parsed is None:
+            return _IGNORED
+        name, argument = parsed
+        number = int((p.get("discussion") or {}).get("number", 0))
+        cmd = SlashCommand(
+            command=name,
+            argument=argument,
+            author=str((p.get("comment") or {}).get("user", {}).get("login", ctx.actor.id)),
+            issue_number=number,
+            repo=ctx.repo,
+            project_id=ctx.project.project_id,
+            delivery_id=ctx.delivery,
+            source="discussion",
+            number=number,
         )
         await self._on_slash(cmd)
         return _ACCEPTED

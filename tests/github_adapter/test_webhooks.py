@@ -250,7 +250,7 @@ def test_dedupe_before_ignore_paths(app: TestClient, spy: Spy) -> None:
 
 
 # ---------------------------------------------------------------- P6.4 discussion_comment (리뷰 A5)
-# 페이로드 형식: docs.github.com/en/webhooks/webhook-events-and-payloads#discussion_comment (2026-09-13 확인)
+# 페이로드: docs.github.com/en/webhooks/webhook-events-and-payloads#discussion_comment (2026-09-13)
 # action created|edited|deleted, 최상위 comment{body,user.login,user.type,node_id,id,html_url},
 # discussion{number,title,node_id,category,user,state}. 픽스처는 이 키만 담는다.
 def test_discussion_comment_slash_command(app: TestClient, spy: Spy) -> None:
