@@ -1,4 +1,4 @@
-"""P3.4 — orchestrator graph (red a~f): interrupt, resume approve/reject, checkpointer 재빌드, get_checkpointer."""
+"""P3.4 — orchestrator graph (red a~f): interrupt, approve/reject, checkpointer 재빌드."""
 
 from __future__ import annotations
 
@@ -30,24 +30,42 @@ SAMPLE = Path(__file__).resolve().parent.parent / "fixtures" / "sample_repo"
 PLAN_JSON: dict[str, Any] = {
     "understanding": "Flask app with in-memory store.",
     "acceptance_criteria": ["GET /users lists users", "tests pass"],
-    "epics": [{"title": "Users API", "order": 1, "summary": "CRUD", "task_count": 2, "risk_tier": "T1"}],
+    "epics": [
+        {"title": "Users API", "order": 1, "summary": "CRUD", "task_count": 2, "risk_tier": "T1"}
+    ],
     "task_graph": "T-1 → T-2",
     "decisions_expected": ["none"],
     "budget_estimate": "~$1, ~2 runs",
-}  # fmt: skip
+}
 DECOMPOSE_JSON: dict[str, Any] = {
     "epics": [{"title": "Users API", "order": 1, "summary": "CRUD"}],
     "tasks": [
-        {"title": "Add users route", "spec": "s", "kind": "feature", "role_required": "coding",
-         "depends_on": [], "owned_paths": ["src/app/users.py"], "estimated_tier": "T1", "epic": "Users API"},
-        {"title": "Test users route", "spec": "s", "kind": "test", "role_required": "coding",
-         "depends_on": ["Add users route"], "owned_paths": ["tests/test_users.py"], "estimated_tier": "T0", "epic": "Users API"},
+        {
+            "title": "Add users route",
+            "spec": "s",
+            "kind": "feature",
+            "role_required": "coding",
+            "depends_on": [],
+            "owned_paths": ["src/app/users.py"],
+            "estimated_tier": "T1",
+            "epic": "Users API",
+        },
+        {
+            "title": "Test users route",
+            "spec": "s",
+            "kind": "test",
+            "role_required": "coding",
+            "depends_on": ["Add users route"],
+            "owned_paths": ["tests/test_users.py"],
+            "estimated_tier": "T0",
+            "epic": "Users API",
+        },
     ],
-}  # fmt: skip
+}
 
 
 class Sink:
-    """publish 스파이: 이벤트를 모으고 그대로 돌려준다 (서명은 P1.4 chain이 하지만 여기선 불필요)."""
+    """publish 스파이: 이벤트를 모으고 그대로 돌려준다 (서명은 여기서 불필요)."""
 
     def __init__(self) -> None:
         self.events: list[Event] = []
@@ -67,15 +85,31 @@ async def stub_emit(state: OrchestratorState, *, sink: Sink, publish: Any) -> di
     prev = state.get("last_event_id")
     issues: list[dict[str, Any]] = []
     for i, epic in enumerate(state.get("epics") or [], start=1):
-        e = Event(project_id=state["project_id"], actor=Actor(type="agent", id="orchestrator"),
-                  type=EventType.EPIC_CREATED, subject=Subject(entity="epic", id=f"E{i}"),
-                  payload={"goal_id": state["goal_id"], "title": epic["title"], "order": i, "milestone_number": None},
-                  correlation_id=state["goal_id"], causation_id=prev)  # fmt: skip
+        e = Event(
+            project_id=state["project_id"],
+            actor=Actor(type="agent", id="orchestrator"),
+            type=EventType.EPIC_CREATED,
+            subject=Subject(entity="epic", id=f"E{i}"),
+            payload={
+                "goal_id": state["goal_id"],
+                "title": epic["title"],
+                "order": i,
+                "milestone_number": None,
+            },
+            correlation_id=state["goal_id"],
+            causation_id=prev,
+        )
         prev = (await publish(e)).id
     for i, task in enumerate(state.get("tasks") or [], start=1):
-        e = Event(project_id=state["project_id"], actor=Actor(type="agent", id="orchestrator"),
-                  type=EventType.TASK_CREATED, subject=Subject(entity="task", id=f"T{i}"),
-                  payload={"title": task["title"]}, correlation_id=state["goal_id"], causation_id=prev)  # fmt: skip
+        e = Event(
+            project_id=state["project_id"],
+            actor=Actor(type="agent", id="orchestrator"),
+            type=EventType.TASK_CREATED,
+            subject=Subject(entity="task", id=f"T{i}"),
+            payload={"title": task["title"]},
+            correlation_id=state["goal_id"],
+            causation_id=prev,
+        )
         prev = (await publish(e)).id
         issues.append({"task_id": f"T{i}", "issue_number": i})
     return {"issues": issues, "last_event_id": prev}
@@ -91,17 +125,25 @@ def make(
         return await stub_emit(state, sink=sink, publish=sink.publish)
 
     deps = OrchestratorDeps(
-        provider=provider, github=DryRunGitHubClient(), discussions=DryRunDiscussionsClient(),
-        publish=sink.publish, emit=emit, model=None,
-    )  # fmt: skip
+        provider=provider,
+        github=DryRunGitHubClient(),
+        discussions=DryRunDiscussionsClient(),
+        publish=sink.publish,
+        emit=emit,
+        model=None,
+    )
     return deps, sink, provider, deps
 
 
 def state0() -> OrchestratorState:
     return initial_state(
-        project_id="P1", goal_id="G1", goal_title="Add users endpoint", goal_description="CRUD for users",
-        repo_path=str(SAMPLE), repo_full_name="org/demo",
-    )  # fmt: skip
+        project_id="P1",
+        goal_id="G1",
+        goal_title="Add users endpoint",
+        goal_description="CRUD for users",
+        repo_path=str(SAMPLE),
+        repo_full_name="org/demo",
+    )
 
 
 CFG = {"configurable": {"thread_id": "G1"}}

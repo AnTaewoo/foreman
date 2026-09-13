@@ -48,7 +48,7 @@ def initial_state(
     model: str | None = None,
     last_event_id: str | None = None,
 ) -> OrchestratorState:
-    """API가 goal.created를 발행한 뒤 그 id를 ``last_event_id``로 넘긴다 (그래프는 goal.created를 안 만든다)."""
+    """API가 goal.created를 발행하고 그 id를 ``last_event_id``로 넘긴다 (그래프는 안 만든다)."""
     return OrchestratorState(
         project_id=project_id,
         goal_id=goal_id,

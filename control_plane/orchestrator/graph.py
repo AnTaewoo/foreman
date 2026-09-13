@@ -1,12 +1,13 @@
 """MVP 1 Orchestrator 그래프 (설계 §15.1, §3.3):
 
-    analyze_repo → draft_plan → wait_plan_approval ─┬─ approved → activate_and_decompose → emit_issues → END
-                                                    └─ rejected → reject → END
+    analyze_repo → draft_plan → wait_plan_approval
+        ├─ approved → activate_and_decompose → emit_issues → END
+        └─ rejected → reject → END
 
-- 부작용(Discussion 생성, 이벤트 발행)은 ``draft_plan``에 있고 ``wait_plan_approval``은 ``interrupt``만 한다.
-  resume 시 interrupt 노드가 처음부터 다시 실행되므로 그 노드에는 부작용을 두지 않는다 (D-13).
+- 부작용(Discussion, 이벤트)은 ``draft_plan``에, ``wait_plan_approval``은 ``interrupt``만 한다.
+  resume 시 interrupt 노드가 처음부터 다시 실행되므로 거기엔 부작용을 두지 않는다 (D-13).
 - ``goal.activated``는 resume 직후, decompose **전**에 발행한다 (B5: 사이클이면 active→blocked).
-- ``emit_issues``는 주입된 ``deps.emit(state)``를 호출한다 (P3.5). 결과 키는 issues / error / last_event_id만.
+- ``emit_issues``는 주입된 ``deps.emit(state)`` 호출 (P3.5). 결과 키는 issues/error/last_event_id.
 - 체크포인터: 단위 테스트는 MemorySaver, 운영은 Postgres (D-12).
 """
 
@@ -14,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 import structlog
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -77,13 +78,17 @@ class OrchestratorDeps:
 
 
 def _event(
-    state: OrchestratorState, type_: EventType, payload: dict[str, Any], *, entity: str = "goal"
+    state: OrchestratorState,
+    type_: EventType,
+    payload: dict[str, Any],
+    *,
+    entity: Literal["goal"] = "goal",
 ) -> Event:
     return Event(
         project_id=state["project_id"],
         actor=ORCHESTRATOR_ACTOR,
         type=type_,
-        subject=Subject(entity=entity, id=state["goal_id"]),  # type: ignore[arg-type]  # Literal
+        subject=Subject(entity=entity, id=state["goal_id"]),
         payload=payload,
         correlation_id=state["goal_id"],
         causation_id=state.get("last_event_id"),
@@ -268,7 +273,7 @@ def postgres_conn_string(url: str) -> str:
 
 
 def get_checkpointer(settings: _DbSettings) -> BaseCheckpointSaver[Any]:
-    """sqlite(단위 테스트)면 MemorySaver. Postgres는 ``open_postgres_checkpointer``로 열어야 한다."""
+    """sqlite(단위 테스트)면 MemorySaver. Postgres는 ``open_postgres_checkpointer``로 연다."""
     if settings.database_url.startswith("sqlite"):
         return MemorySaver()
     raise ValueError("postgres checkpointer must be opened with open_postgres_checkpointer()")
