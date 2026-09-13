@@ -70,7 +70,7 @@ def test_plan_draft_markdown() -> None:
     assert "- [ ] AC-1 GET /users returns list" in md
     assert "1. Users API — Tasks: 3, est. risk: T1" in md
     assert missing_plan_sections(md) == []
-    assert missing_plan_sections("## Plan\n### Understanding\nx") == PLAN_SECTIONS[1:]
+    assert missing_plan_sections("## Plan\n### Understanding\nx") == list(PLAN_SECTIONS[1:])
 
 
 # (c) 프롬프트 파일 + render_prompt

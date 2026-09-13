@@ -78,3 +78,4 @@
 | 2026-09-13T14:19 | P3.2 | 완료 | 보드 done | 034f9ff |
 | 2026-09-13T14:19 | P3.3 | 착수 | prompts/*.md + drafts.py | |
 | 2026-09-13T14:19 | P3.3 | Red | test_drafts 10, ModuleNotFoundError drafts | |
+| 2026-09-13T14:21 | P3.3 | Green | prompts 3 + drafts.py(PlanDraft/TaskDraft/DecomposeResult/decompose_with_retry), 270 passed | |
