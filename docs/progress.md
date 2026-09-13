@@ -149,3 +149,6 @@
 | 2026-09-13T18:05 | P5.4 | Green | e2e 스크립트(자동 머지 포함), 401 passed | e3322f6 |
 | 2026-09-13T18:06 | P5.4 | Gate | make check pass (401) && e2e --fake PASS (8 calls), 시도 3/3 | |
 | 2026-09-13T18:06 | P5.4 | 완료 | 보드 done | e3322f6 |
+| 2026-09-13T18:10 | P5.5 | 착수 | docs/runbook.md + scripts/check_runbook.sh | |
+| 2026-09-13T18:18 | P5.5 | Gate | check_runbook.sh 5/5 blocks OK (imports, migrate, app factory, e2e --fake, lint), 시도 2/3 | |
+| 2026-09-13T18:18 | P5.5 | 완료 | 보드 done | aa90ad5 |
