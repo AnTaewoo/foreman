@@ -124,7 +124,9 @@ class Runtime:
         self.handlers.append(self.pr_opener.handle)
         self.dry_merger: DryMerger | None = None
         if settings.dry_run:  # D-36: Dry에서만 사람 머지를 흉내 낸다
-            self.dry_merger = DryMerger(factory, self.bus, enabled=True)
+            self.dry_merger = DryMerger(
+                factory, self.bus, enabled=True, repo_path_for=self.repo_cache.ensure
+            )
             self.handlers.append(self.dry_merger.handle)
         self.tasks: list[asyncio.Task[None]] = []
         self._retry_interval = retry_interval

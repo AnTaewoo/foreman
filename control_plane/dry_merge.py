@@ -9,7 +9,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import asyncio
+import subprocess
+import tempfile
+from collections.abc import Callable, Mapping
+from pathlib import Path
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -23,6 +27,63 @@ log = structlog.get_logger(__name__)
 
 DRY_MERGE_ACTOR = Actor(type="system", id="dry-merge")
 OnMerge = Callable[[str, int, str], None]  # (project_id, pr_number, task_id)
+RepoPathFor = Callable[[str], Path]
+GIT_ENV: dict[str, str] = {
+    "PATH": "/usr/bin:/bin:/usr/local/bin",
+    "GIT_AUTHOR_NAME": "foreman-dry-merge",
+    "GIT_AUTHOR_EMAIL": "dry-merge@foreman.local",
+    "GIT_COMMITTER_NAME": "foreman-dry-merge",
+    "GIT_COMMITTER_EMAIL": "dry-merge@foreman.local",
+}
+
+
+def git_merge_branch(repo: Path, head: str, base: str, env: Mapping[str, str] = GIT_ENV) -> str:
+    """``head``를 ``base``에 반영: fast-forward | merge | conflict | skipped.
+
+    PC-6 발견: pr.merged 이벤트만 흉내 내면 후속 Task가 선행 코드 없는 main에서 시작한다. 사람
+    머지가 GitHub에서 main을 옮기듯 Dry에서는 여기서 옮긴다. ff가 안 되면 임시 worktree에서 머지.
+    """
+
+    def run(*args: str, cwd: Path = repo) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", *args], cwd=cwd, capture_output=True, text=True, env=dict(env), check=False
+        )
+
+    if run("rev-parse", "--git-dir").returncode != 0:
+        return "skipped"  # git repo가 아님(FakeLauncher 등) — 이벤트만 흉내
+    head_sha = run("rev-parse", "--verify", f"refs/heads/{head}").stdout.strip()
+    if not head_sha:
+        return "skipped"  # 워커가 push한 브랜치가 없다 — 이벤트만
+    if run("merge-base", "--is-ancestor", base, head).returncode == 0:
+        r = run("update-ref", f"refs/heads/{base}", head_sha)
+        if r.returncode != 0:
+            raise RuntimeError(r.stderr.strip())
+        return "fast-forward"
+    with tempfile.TemporaryDirectory(prefix="dry-merge-") as tmp:
+        wt = Path(tmp) / "wt"
+        r = run("worktree", "add", "--detach", str(wt), base)
+        if r.returncode != 0:
+            raise RuntimeError(r.stderr.strip())
+        try:
+            m = run(
+                "merge",
+                "--no-ff",
+                "--no-edit",
+                "-m",
+                f"dry-merge: {head} into {base}",
+                head,
+                cwd=wt,
+            )
+            if m.returncode != 0:
+                run("merge", "--abort", cwd=wt)
+                return "conflict"
+            sha = run("rev-parse", "HEAD", cwd=wt).stdout.strip()
+            r = run("update-ref", f"refs/heads/{base}", sha)
+            if r.returncode != 0:
+                raise RuntimeError(r.stderr.strip())
+            return "merge"
+        finally:
+            run("worktree", "remove", "--force", str(wt))
 
 
 class DryMerger:
@@ -33,12 +94,15 @@ class DryMerger:
         *,
         enabled: bool,
         on_merge: OnMerge | None = None,
+        repo_path_for: RepoPathFor | None = None,
     ) -> None:
         self._factory = factory
         self._bus = bus
         self._enabled = enabled
         self._on_merge = on_merge
+        self._repo_path_for = repo_path_for  # None이면 이벤트만 (git main은 안 옮김 — 단위 테스트)
         self.merged: list[tuple[str, int]] = []
+        self.git_merges: list[tuple[str, int, str]] = []  # (project_id, pr, 결과)
         self._seen: set[tuple[str, int]] = set()
 
     async def handle(self, delivery: Delivery) -> None:
@@ -52,10 +116,25 @@ class DryMerger:
             return
         async with self._factory() as s:
             task = await s.get(m.Task, task_id) if task_id else None
+            project = await s.get(m.Project, event.project_id)
         if task is not None and task.pr_merged_at is not None:
             self._seen.add(key)
             return
         self._seen.add(key)
+        if self._repo_path_for is not None and project is not None:
+            head = str(event.payload.get("head") or "")
+            base = str(event.payload.get("base") or project.default_branch)
+            try:
+                result = await asyncio.to_thread(
+                    git_merge_branch, self._repo_path_for(project.repo_full_name), head, base
+                )
+            except Exception as exc:
+                log.error("dry_merge.git_failed", pr_number=pr_number, error=str(exc)[-300:])
+                result = "error"
+            self.git_merges.append((event.project_id, pr_number, result))
+            if result in ("conflict", "error"):
+                log.warning("dry_merge.not_merged", pr_number=pr_number, result=result, head=head)
+                return  # 사람이 풀어야 할 PR — in_review에 남긴다
         merged = Event(
             project_id=event.project_id,
             actor=DRY_MERGE_ACTOR,

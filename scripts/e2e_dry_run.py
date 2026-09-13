@@ -399,7 +399,9 @@ async def run(argv: list[str]) -> Summary:
     def on_merge(_pid: str, pr_number: int, task_id: str) -> None:
         print(f"(dry-merge) PR #{pr_number} → task {task_id}")
 
-    dry_merger = DryMerger(factory, bus, enabled=settings.dry_run, on_merge=on_merge)
+    dry_merger = DryMerger(
+        factory, bus, enabled=settings.dry_run, on_merge=on_merge, repo_path_for=lambda r: Path(r)
+    )  # git main도 옮긴다(PC-6)
 
     pr_opener = PrOpener(factory, bus, github)  # D-37: PR은 control plane
 
