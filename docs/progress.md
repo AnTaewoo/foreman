@@ -31,3 +31,5 @@
 | 2026-09-13T13:06 | P1.4 | 착수 | chain.py/bus.py/outbox.py | |
 | 2026-09-13T13:07 | P1.4 | Red | test_chain 9 + test_bus 9, ImportError events.chain/outbox | |
 | 2026-09-13T13:17 | P1.4 | Green | chain/bus/outbox + 진짜 Redis 픽스처(D-32), 163 passed | |
+| 2026-09-13T13:18 | P1.4 | Gate | make check pass (163, 진짜 Redis), pre-commit pass, 시도 2/3 | |
+| 2026-09-13T13:18 | P1.4 | 완료 | 보드 done, D-32 기록 | 4c244bd |
