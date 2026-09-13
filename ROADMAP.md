@@ -118,7 +118,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 | D-04 | 이벤트 `payload`는 `dict[str, Any]`, P1 발행 타입은 TypedDict로 형태 문서화. 동결 후 강타입화는 "추가" | P1.1 |
 | D-05 | ULID = `python-ulid`. 단위 테스트 DB = aiosqlite, Postgres 전용은 `tests/integration/`. sqlite는 tz를 버리므로 `UTCDateTime` TypeDecorator로 UTC를 보장한다 (서명 안정성) | P1.2 |
 | D-06 | `bus.publish` = **outbox**: `events` 테이블에 `published_at NULL`로 insert → relay가 XADD 후 `published_at` 채움. at-least-once, projection 멱등으로 흡수 | P1.4 |
-| D-07 | projection이 불허 전이 이벤트를 받으면 **nack 후 재시도 N=3**(consumer group pending + XCLAIM 재전달, `Delivery.attempt`). 소진 시 `events.projection_error` 기록 후 ack (스트림이 막히지 않게) | P1.4, P1.5 |
+| D-07 | (**D-30으로 개정**) projection이 불허 전이 이벤트를 받으면 **nack 후 재시도 N=3**(consumer group pending + XCLAIM 재전달, `Delivery.attempt`). 소진 시 `events.projection_error` 기록 후 ack (스트림이 막히지 않게) | P1.4, P1.5 |
 | D-08 | §6.1 전이 테이블은 `control_plane/store/transitions.py` 한 곳. projection과 API 양쪽이 이걸 호출 | P1.2, P1.5 |
 | D-09 | GitHub GraphQL Discussions는 `docs.github.com`을 **web fetch로 확인**한 뒤 구현. 확인된 형태: `repository(owner,name){id discussionCategories{nodes{id name slug}} discussions(first,after,categoryId,orderBy){pageInfo nodes{id number title body url category{id name}}}}`, `createDiscussion(input:{repositoryId,categoryId,title,body}){discussion{id number title url}}`, `addDiscussionComment(input:{discussionId,body}){comment{id url}}`. 출처 URL을 docstring에 남긴다 | P2.3 |
 | D-10 | DRY_RUN 계층은 `github_adapter/dry_run.py` 하나. `GitHubClient` Protocol을 `DryRunGitHubClient`가 같은 시그니처로 구현, 팩토리 `get_github_client(settings)`가 교체. 테스트는 respx `assert_all_mocked=True, assert_all_called=False` | P2.5 |
@@ -135,7 +135,14 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 | D-21 | Anthropic SDK 1.x는 `httpx2` 기반 → respx가 못 가로챈다. `/v1/messages` mock은 `httpx2.MockTransport`를 `AnthropicProvider(transport_handler=...)`로 주입. `schema` 강제는 tool_use 대신 **structured outputs**(`messages.parse(output_format=Model)`) — 최신 모델은 `tool_choice: any/tool`이 400. 기본 모델 `claude-opus-5` | P3.1 |
 | D-22 | Issue 마커 존재 확인은 search API(인덱스 지연) 대신 `GET /repos/{repo}/issues?labels=ai:task&state=all` 목록 스캔 | P2.2 |
 | D-23 | `agents/`·`worker/`는 `control_plane.config` import 금지(AST 가드). `get_provider(settings)`는 `anthropic_api_key`만 가진 구조적 Protocol로 받고, 키가 비면 `fake=True`일 때만 FakeProvider, 아니면 `ProviderConfigError` | P0.1, P3.1 |
-| D-24 | DB 갱신 가드(P1.5 (f))는 AST 기반. 허용 예외: `events/outbox.py`의 `update(Event)`(published_at 부기)와 `bus.py`의 `insert(Event)`(append). 수신자가 `session`류 이름일 때만 검사 | P1.5 |
+| D-24 | DB 갱신 가드(P1.5 (f))는 AST 기반. 허용 예외: `events/outbox.py`의 `update(Event)`(published_at·stream_id 부기)와 `events/chain.py`의 `insert(Event)`/`insert(ToolCall)`(append). 수신자가 `session`류 이름일 때만 검사 | P1.5 |
+| D-25 | `correlation_id` 필수: Goal 스코프면 goal_id, Goal 밖(project/policy/budget/agent/control)은 project_id. `causation_id: str \| None`, None=루트(사람·API 명령). 필드 누락은 ValidationError | P1.1, P5.1 |
+| D-26 | 서명은 **저장 시점**. `Event.signature: str \| None`, 발행자는 None. `control_plane/events/chain.py`의 `append_signed(session, event)`가 publish·ingest 양쪽의 **유일한** `events` append 경로(AST 가드). 함수 안에서 Postgres면 `pg_advisory_xact_lock(hashtext(project_id))`, sqlite면 모듈 전역 `asyncio.Lock`. 서명은 저장소 무결성이지 발행자 인증이 아님 | P1.1, P1.4, P4.5 |
+| D-27 | 추가 타입: `epic.created {goal_id, title, order, milestone_number}`, `epic.activated`, `epic.completed`, `task.cancelled {reason, by, cascade_from}`. emit 순서 `epic.created`×N → `task.created`×M. projection: epic created→pending, activated→active(`active→active` 멱등), completed→done; task.cancelled any→cancelled. 발행자: `epic.activated`=Scheduler(Epic status 조회 + 프로세스 내 memo), `epic.completed`/`goal.completed`=MVP 4(MVP 1은 핸들러만), `task.cancelled`=API | P1.1, P1.5, P3.5, P4.5, P5.1 |
+| D-28 | §6.1에 `assigned ──fail──► ready(attempt<max) / blocked` 추가(워커 기동 실패). `run.finished.payload.outcome`=RunOutcome(`success\|failed\|timeout\|cancelled\|escalated`), `agent_outcome`(`done\|needs_decision\|blocked\|failed\|timeout`) 병기. 매핑 done→success, failed→failed, needs_decision/blocked→escalated, timeout→timeout, kill→cancelled. 워커 타임아웃 시 `task.failed {reason:"timeout", attempt}`도 발행 | P1.2, P1.5, P4.2, P4.4, P4.5 |
+| D-29 | `events` 테이블: `seq`(append 순번, autoincrement; 커서·replay·verify 순서), `canonical_json TEXT NOT NULL`(서명·검증 대상 텍스트), `payload JSON`(쿼리용 사본), `stream_id TEXT NULL`(부기). `sign(prev, canonical_json: str)`. JSONB 왕복으로 payload 표기가 바뀌어도 체인은 안 깨진다 — Postgres 왕복 통합 테스트 필수(P1.3 (d)) | P1.1, P1.3, P1.4, P5.1 |
+| D-30 | D-07 개정: `InvalidTransition` → 버리지 않고 지연 재처리 스트림 `events:<project_id>:retry`(`{event_id, not_before, attempt}`; 5s/30s/5m/30m/2h, 5회) → 소진 시 `projection_error` + error 로그. DB/네트워크 예외는 attempt 미소모, backoff 무한 재시도(스트림 정지). `UnhandledEvent`는 즉시 `projection_error`. 교차 발행자 경쟁인 `pr.merged`는 Task가 in_review가 아니면 `tasks.pr_merged_at`만 기록(전이 없음), `task.completed`가 그 플래그를 보면 `running→in_review→done` 한 번에 | P1.4, P1.5 |
+| D-31 | `run.tool_called`는 **감사 체인 밖**: `append_signed`가 이 타입은 `tool_calls` 테이블(id, run_id, project_id, seq, tool, args_digest, duration_ms, ts; 서명·락 없음)에 쓰고 스트림에는 그대로 흘림(Run Viewer·WS). `events`에는 안 들어감. 거부된 호출은 새 타입 `run.tool_denied {tool, reason, args_digest}`로 체인에. 기각 대안: 배치(`run.tools_batch`, 실시간성·타임아웃 유실), 체인 유지(호출당 락, 감사 로그 오염) | P1.1, P1.3, P1.4, P1.5, P4.1 |
 
 ---
 
@@ -211,7 +218,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 
 | 일시 | Task | 사유 | 옵션 / 필요한 조치 |
 |---|---|---|---|
-| | | | |
+| 2026-09-13 | (기록) P1.1 전 | 스키마 동결 전 점검에서 확정한 구현 메모 (D-25~D-31 외) | A4 publish·ingest 모두 `append_signed` 경유(락 포함) / A7 §4.2 표의 행은 그룹, 프리픽스가 도메인 / B4 `task.retried`→blocked→ready 매핑(MVP 1 발행자 없음) / B5 `goal.activated`는 resume 직후 / B6 plan_proposed는 awaiting에서도(revision) / B7 `pr.closed`는 noop, in_review 탈출은 MVP 2 / B10 웹훅 sender가 앱 봇이면 무시(P2.4) / B11 Scheduler read-your-writes memo / C 값 집합: actor.id 규약, subject.pr id=PR 번호, 엔티티 id는 발행자 ULID, `append_signed`가 payload 필수 키 검사 |
 
 ---
 
@@ -254,50 +261,50 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 ### P1.1 이벤트 스키마
 - depends_on: PC-0
 - owned_paths: `control_plane/events/schema.py`, `tests/events/**`
-- red: (a) `EventType` 멤버 전부 `<domain>.<name>`, §4.2 도메인 7개 + D-19 추가분이 **하나도 빠짐없이** 존재 — 테스트에 표를 리터럴로 박아 양방향 비교 (b) `Event` JSON 라운드트립, `id`가 ULID, `ts`는 UTC aware (c) `sign(prev_signature, event)` 결정적 — payload 키 순서 무관, `signature` 필드 제외 (d) `verify_chain([...])` 정상 True, 변조/순서 바꿈/미서명 → False (e) `correlation_id`, `causation_id` 없으면 ValidationError, `Actor.type`은 agent|human|system|github (f) P1 발행 타입 10개(goal.created, task.created, task.assigned, task.started, task.completed, task.failed, run.started, run.tool_called, run.finished, pr.opened)의 payload TypedDict가 `PAYLOAD_TYPES`에 등록
-- green: pydantic v2 frozen `Event`, `Actor`, `Subject`, canonical JSON = `json.dumps(model_dump(mode="json", exclude={"signature"}), sort_keys=True, separators=(",",":"), ensure_ascii=False)` SHA-256(prev ‖ "\n" ‖ body). `ts` validator: naive→UTC, aware→UTC 정규화
+- red: (a) `EventType` 멤버 전부 `<domain>.<name>`, 설계 §4.2 표(D-19·D-27·D-31 반영, **44개**)와 **하나도 빠짐없이** 일치 — 테스트에 44개 이름을 리터럴로 박아 양방향 비교 (b) `Event` JSON 라운드트립, `id`가 ULID, `ts`는 UTC aware (c) `canonical_json(event)` 결정적 — payload 키 순서 무관, `signature` 제외, `allow_nan=False`; `sign(prev_signature, canonical: str)` (d) `verify_chain([...])` 정상 True, 변조/순서 바꿈/미서명(`signature=None`) → False (e) `correlation_id`, `causation_id` **필드 누락** → ValidationError; `causation_id=None`(루트)과 `signature=None`(저장 전)은 허용; `Actor.type`은 agent|human|system|github, `Subject.entity`는 project|goal|epic|task|run|decision|pr|agent|policy (f) P1 발행 타입 12개(project.created, goal.created, epic.created, task.created, task.assigned, task.started, task.completed, task.failed, run.started, run.tool_called, run.finished, pr.opened)의 payload TypedDict가 `PAYLOAD_TYPES`에 등록; `run.finished`는 `outcome`(RunOutcome 값)·`agent_outcome` 둘 다; `goal.plan_proposed`에 `revision` (g) payload 값은 JSON 원시형만 — NaN/Infinity/Decimal/datetime/set → ValidationError; `UNCHAINED == {EventType.RUN_TOOL_CALLED}`; `required_payload_keys(type)`가 TypedDict 필수 키 집합을 돌려줌
+- green: pydantic v2 frozen `Event`, `Actor`, `Subject`, canonical JSON = `json.dumps(model_dump(mode="json", exclude={"signature"}), sort_keys=True, separators=(",",":"), ensure_ascii=False, allow_nan=False)` SHA-256(prev ‖ "\n" ‖ canonical). `ts` validator: naive→UTC, aware→UTC 정규화
 - gate: `make check`
 - design: §4.1 Event, §4.2
-- notes: D-04, D-05, D-19. **PC-1 이후 이 파일은 추가만.**
+- notes: D-04, D-05, D-19, D-25, D-26, D-27, D-28, D-29, D-31. **PC-1 이후 이 파일은 추가만.**
 
 ### P1.2 Store 모델 + 전이 테이블
 - depends_on: PC-0
 - owned_paths: `control_plane/store/models.py`, `control_plane/store/enums.py`, `control_plane/store/transitions.py`, `tests/store/test_models.py`, `tests/store/test_transitions.py`
-- red: `test_transitions.py` — (a) §6.1의 **모든** 화살표가 `ALLOWED`에 있고 표에 없는 전이는 없음(리터럴 비교; `ready→ready` 자기 전이 포함, `in_review→done`만) (b) `assert_transition`이 불허 시 `InvalidTransition`(메시지에 두 상태 이름) (c) `any → cancelled` (d) `blocked`에서 나가는 전이는 `ready`, `cancelled`뿐 (e) `GOAL_ALLOWED`(draft→planning→awaiting_plan_approval→active→done, awaiting→planning, active/blocked 왕복, any→cancelled), `DECISION_ALLOWED`(§6.2). `test_models.py` — aiosqlite로 (f) 8개 테이블 (g) Project→Goal→Epic→Task→Run 왕복 (h) `Task.status`에 Enum 밖 문자열 → 예외 (i) `events` 행 저장 후 `ts`가 tz-aware UTC로 돌아옴
-- green: SQLAlchemy 2.x async `DeclarativeBase`, §4.1 필드 전부, JSON은 `JSON().with_variant(JSONB(), "postgresql")`, Enum은 `Enum(cls, values_callable, create_constraint=True, validate_strings=True)`, `UTCDateTime(TypeDecorator)`, `events`에 `published_at / projected_at / projection_error` nullable 부기 컬럼. `enums.py`: TaskStatus, GoalStatus, EpicStatus, RunOutcome, DecisionStatus, DecisionType, AgentStatus, TaskKind, Role, RiskTier. `transitions.py`: PEP 695 제네릭 `assert_transition[S: StrEnum](src, dst, table=None)`
+- red: `test_transitions.py` — (a) §6.1의 **모든** 화살표가 `ALLOWED`에 있고 표에 없는 전이는 없음(리터럴 비교; `ready→ready` 자기 전이, `assigned→ready`, `assigned→blocked`(D-28), `blocked→ready` 포함, `in_review→done`만) (b) `assert_transition`이 불허 시 `InvalidTransition`(메시지에 두 상태 이름) (c) `any → cancelled` (d) `blocked`에서 나가는 전이는 `ready`, `cancelled`뿐 (e) `GOAL_ALLOWED`(draft→planning→awaiting_plan_approval→active→done, awaiting→planning, active/blocked 왕복, any→cancelled), `EPIC_ALLOWED`(pending→active, active→active 멱등, active→done), `DECISION_ALLOWED`(§6.2). `test_models.py` — aiosqlite로 (f) 9개 테이블(§4.1 8개 + `tool_calls`) (g) Project→Goal→Epic→Task→Run 왕복 (h) `Task.status`에 Enum 밖 문자열 → 예외 (i) `events` 행 저장 후 `ts`가 tz-aware UTC로 돌아옴, `seq`가 insert 순으로 증가 (j) `Task.pr_merged_at` nullable
+- green: SQLAlchemy 2.x async `DeclarativeBase`, §4.1 필드 전부, JSON은 `JSON().with_variant(JSONB(), "postgresql")`, Enum은 `Enum(cls, values_callable, create_constraint=True, validate_strings=True)`, `UTCDateTime(TypeDecorator)`, `events`에 `seq`(autoincrement, unique) / `canonical_json`(Text, not null) / `stream_id` / `published_at / projected_at / projection_error` 부기 컬럼(D-29), `tool_calls` 테이블(D-31), `tasks.pr_merged_at`(D-30). `enums.py`: TaskStatus, GoalStatus, EpicStatus, RunOutcome, DecisionStatus, DecisionType, AgentStatus, TaskKind, Role, RiskTier. `transitions.py`: PEP 695 제네릭 `assert_transition[S: StrEnum](src, dst, table=None)`
 - gate: `make check`
 - design: §4.1, §6.1, §6.2
-- notes: D-05, D-08.
+- notes: D-05, D-08, D-28, D-29, D-30, D-31.
 
 ### P1.3 Alembic
 - depends_on: P1.2
 - owned_paths: `alembic.ini`, `alembic/**`, `control_plane/store/session.py`, `tests/store/test_migrations.py`, `tests/integration/**`
-- red: (a) aiosqlite로 `upgrade head` → 8 테이블 → `downgrade base` → 0 (b) `compare_metadata` diff == [] (c) `create_engine(settings)` / `create_session_factory` / `get_session()` async context manager (d) integration: Postgres에서 `events` UPDATE(부기 컬럼 외)/DELETE 시 트리거 거부, `published_at` UPDATE는 허용. raw INSERT는 `ts`를 명시할 것
+- red: (a) aiosqlite로 `upgrade head` → 9 테이블 → `downgrade base` → 0 (b) `compare_metadata` diff == [] (c) `create_engine(settings)` / `create_session_factory` / `get_session()` async context manager (d) integration: Postgres에서 `events` UPDATE(부기 컬럼 외)/DELETE 시 트리거 거부, `published_at`/`stream_id`/`projected_at`/`projection_error` UPDATE는 허용. raw INSERT는 `ts`를 명시할 것 (e) integration **(D-29 필수)**: payload에 `1e-5`, `0.1+0.2`, `2**53+1`, `-0.0`, 한글·이모지·공백 문자열, `{}`, `[]`, `[[1,[2,[3]]]]`, 키 순서 뒤섞인 dict, 긴 문자열을 담은 이벤트 10건을 `append_signed`로 저장 → 새 세션에서 읽기 → `verify_chain` True **그리고** `json.loads(canonical_json) == payload`(sqlite에서는 절대 안 잡히는 케이스)
 - green: `env.py` async(이미 실행 중인 루프 안이면 스레드로 격리), `alembic.ini`에 `path_separator = os`, revision 0001(Postgres 공유 enum `role`/`risk_tier`는 `_pg_enums(create)`로 한 번만 생성, `postgresql.ENUM(create_type=False)` variant), revision 0002 트리거(`dialect != postgresql`이면 no-op)
 - gate: `make check` && (`docker compose up -d --wait postgres && make test-integration` — Docker 있으면)
 - design: §4.1 append-only, §14
-- notes: D-05, D-17. autogenerate는 `HITL_DATABASE_URL=sqlite+aiosqlite:///tmp.db`로.
+- notes: D-05, D-17, D-29, D-31. autogenerate는 `HITL_DATABASE_URL=sqlite+aiosqlite:///tmp.db`로.
 
 ### P1.4 Event Bus + Outbox
 - depends_on: P1.1, P1.3
-- owned_paths: `control_plane/events/bus.py`, `control_plane/events/outbox.py`, `tests/events/test_bus.py`
-- red: fakeredis(`fakeredis.aioredis.FakeRedis(decode_responses=True)`) + aiosqlite로 (a) `publish(session, event)` → `events` 행 insert, `signature`는 같은 project의 직전 이벤트에 체인(세션 넘어서도) (b) insert 직후 `published_at IS NULL`, `OutboxRelay.relay_once()` 후 XADD + `published_at` (c) `_mark_published`를 monkeypatch로 죽이면 XADD만 되고 재실행 시 한 번 더 XADD(at-least-once) (d) `subscribe(group, handler, consumer=, project_id=, block_ms=, reclaim_idle_ms=)` — consumer group 생성, 정상 반환 시 XACK, 예외 시 ack 안 함 → XCLAIM 재전달, `Delivery.attempt` 1,2,3 증가 (e) `replay(project_id, since=None)` XRANGE 순서, event.id 중복 제거 (f) `stream_key("P1") == "events:P1"`
-- green: `EventBus(redis)`: publish(insert + flush, asyncio.Lock으로 체인 직렬화), subscribe(`project_id=None`이면 `SCAN events:*`), replay. `OutboxRelay(session_factory, redis, poll_interval, batch)`: `relay_once`, `run`, `start/stop`. redis-py 결과는 `cast`(decode_responses 전제)
+- owned_paths: `control_plane/events/chain.py`, `control_plane/events/bus.py`, `control_plane/events/outbox.py`, `tests/events/test_chain.py`, `tests/events/test_bus.py`
+- red: fakeredis(`fakeredis.aioredis.FakeRedis(decode_responses=True)`) + aiosqlite로. `test_chain.py` — (a) `append_signed(session, event)` → `signature`가 None이었던 이벤트에 같은 project의 직전 행(`seq` 최대) signature로 서명해 insert, `canonical_json`·`seq` 채워짐(세션 넘어서도 체인) (b) 이미 `signature`가 있으면 `ValueError`(발행자 서명 금지) (c) `run.tool_called`는 `tool_calls`에만 insert, `events`에 없음(D-31) (d) `PAYLOAD_TYPES` 필수 키 빠지면 `PayloadError` (e) 동시 `append_signed` 20개(`asyncio.gather`) → `verify_chain` True(락) (f) AST: `control_plane/` 아래에서 `Event`/`ToolCall`을 `session.add`하는 곳은 `chain.py`뿐. `test_bus.py` — (g) `publish(session, event)`는 `append_signed` 호출 후 flush, insert 직후 `published_at IS NULL`, `OutboxRelay.relay_once()` 후 XADD + `published_at`·`stream_id` (h) `_mark_published`를 monkeypatch로 죽이면 XADD만 되고 재실행 시 한 번 더 XADD(at-least-once) (i) `subscribe(group, handler, consumer=, project_id=, block_ms=, reclaim_idle_ms=)` — consumer group 생성, 정상 반환 시 XACK, 예외 시 ack 안 함 → XCLAIM 재전달, `Delivery.attempt` 1,2,3 증가 (j) `replay(session, project_id, since_seq=None)`는 DB `seq` 순, `run.tool_called` 제외 (k) `stream_key("P1") == "events:P1"`, `retry_stream_key("P1") == "events:P1:retry"` (l) `schedule_retry(redis, project_id, event_id, attempt)` → `not_before` = now + {1:5s, 2:30s, 3:5m, 4:30m, 5:2h}[attempt], `due_retries(redis, project_id, now)`가 기한 지난 것만 반환·제거, attempt>5면 `RetryExhausted`
+- green: `chain.py`: `append_signed`(pg면 `pg_advisory_xact_lock(hashtext(:pid))`, 아니면 모듈 `asyncio.Lock`; `UNCHAINED`면 `ToolCall` insert), `verify_chain_db(session, project_id)`. `EventBus(redis)`: publish, subscribe(`project_id=None`이면 `SCAN events:*`), replay, schedule_retry/due_retries. `OutboxRelay(session_factory, redis, poll_interval, batch)`: `relay_once`, `run`, `start/stop`. redis-py 결과는 `cast`(decode_responses 전제)
 - gate: `make check`
 - design: §3.2 Event Bus, §1.3-2
-- notes: D-06, D-07. `Handler = Callable[[Delivery], Awaitable[None]]`.
+- notes: D-06, D-26, D-29, D-30, D-31. `Handler = Callable[[Delivery], Awaitable[None]]`.
 
 ### P1.5 Projection
 - depends_on: P1.4
 - owned_paths: `control_plane/events/projection.py`, `tests/events/test_projection.py`, `tests/test_projection_guard.py`
-- red: (a) `project.created → goal.created → task.created(issue_number) → task.assigned → run.started → task.started → run.tool_called → pr.opened → run.finished → task.completed → pr.merged` 순서 → Task `ready→assigned→running→in_review→done`, Run outcome/tokens/tool_calls 반영, `events.projected_at` 채워짐 (b) 같은 event id 두 번 → 동일 (c) `task.completed`가 `task.started`보다 먼저 → `apply`는 `InvalidTransition`; `handle(Delivery(attempt=1))` → `ProjectionRetry`; `attempt=3` → 정상 반환 + `events.projection_error` 기록 (d) `decision.*`, `policy.*`, `budget.*` 등 MVP 1 미사용 타입은 `noop` 핸들러가 등록(함수 이름 `noop`) (e) 모든 EventType이 `HANDLERS`에 있고, 빠지면 `UnhandledEvent`. `test_projection_guard.py` — (f) AST: `control_plane/` 아래 `projection.py` 외 파일에서 `session.add/add_all/merge/delete(`, `session.execute(update|delete(...))` 없음 (D-24 예외 적용, 수신자 이름이 `session`류일 때만)
-- green: `HANDLERS: dict[EventType, Handler]`, `@on(...)` 데코레이터, 모든 전이는 `assert_transition`, `Projection(session_factory, max_attempts=3).apply(event, force=False)` / `.handle(delivery)`, `apply(force=True)`는 replay 재구축용
+- red: (a) `project.created → goal.created → goal.plan_proposed → goal.activated → epic.created → task.created(issue_number) → task.assigned → epic.activated → task.started → run.started → run.tool_called → pr.opened → task.completed → run.finished → pr.merged` 순서 → Goal `draft→…→active`, Epic `pending→active`, Task `ready→assigned→running→in_review→done`, Run outcome/tokens/tool_calls(`tool_calls` 행 수) 반영, `events.projected_at` 채워짐 (b) 같은 event id 두 번 → 동일 (c) `task.completed`가 `task.started`보다 먼저 → `apply`는 `InvalidTransition`; `handle(Delivery)` → `schedule_retry` 호출(attempt 1..5), 6회째 → 정상 반환 + `events.projection_error` 기록; DB 예외(monkeypatch)면 `schedule_retry` 안 부르고 `ProjectionTransient` (D-30) (d) `pr.merged`가 `running`에 오면 전이 없이 `tasks.pr_merged_at`만, 이어서 `task.completed` → `done` (D-30 b) (e) `task.failed` from `assigned`(reason launch_failed) → ready; attempt≥max → blocked (D-28) (f) `task.retried` blocked→ready; `task.cancelled` any→cancelled(+`cascade_from`); `epic.activated` 두 번 → active 유지; `epic.completed` → done; `run.tool_denied` → Run.denied_count+1 (g) `goal.plan_proposed`가 `awaiting_plan_approval`에서 오면(revision 2) awaiting→planning→awaiting (h) `pr.closed`, `decision.*`, `policy.*`, `budget.*` 등 MVP 1 미사용 타입은 `noop` 핸들러가 등록(함수 이름 `noop`) (i) 모든 EventType이 `HANDLERS`에 있고, 빠지면 `UnhandledEvent`(즉시 `projection_error`). `test_projection_guard.py` — (j) AST: `control_plane/` 아래 `projection.py` 외 파일에서 `session.add/add_all/merge/delete(`, `session.execute(update|delete(...))` 없음 (D-24 예외 적용, 수신자 이름이 `session`류일 때만)
+- green: `HANDLERS: dict[EventType, Handler]`, `@on(...)` 데코레이터, 모든 전이는 `assert_transition`, `Projection(session_factory, bus, max_attempts=5).apply(event, force=False)` / `.handle(delivery)`, `apply(force=True)`는 replay 재구축용. `run.finished`의 `outcome`은 RunOutcome으로 저장, `agent_outcome`은 Run.agent_outcome 컬럼
 - gate: `make check`
 - design: §3.2 State Store, §6.1
-- notes: D-07, D-08, D-20, D-24. `task.failed`는 payload.attempt로 `attempt_count` 갱신 후 ready/blocked 분기. `goal.plan_proposed`는 draft→planning→awaiting을 한 번에.
+- notes: D-08, D-20, D-24, D-27, D-28, D-30, D-31. `task.failed`는 payload.attempt로 `attempt_count` 갱신 후 ready/blocked 분기. `goal.plan_proposed`는 draft(또는 awaiting)→planning→awaiting을 한 번에.
 
 ### PC-1 이벤트 한 바퀴 + 스키마 동결
-- 자동: `make docker-up` → `uv run alembic upgrade head` → `scripts/pc1_roundtrip.py`(이 PC가 소유, `scripts/**`): `project.created` + `goal.created` + `task.created`×3 + Task별 `assigned→started→completed→pr.merged` 발행 → relay → projection consumer → Postgres `tasks` 3행 `done` → `verify_chain` True → `TRUNCATE tasks, runs, epics, goals CASCADE` → `replay` + `apply(force=True)` → 동일 → `make docker-down`
+- 자동: `make docker-up` → `uv run alembic upgrade head` → `scripts/pc1_roundtrip.py`(이 PC가 소유, `scripts/**`): `project.created` + `goal.created` + `goal.plan_proposed` + `goal.activated` + `epic.created` + `task.created`×3 + Task별 `assigned→started→run.started→run.tool_called×2→completed→run.finished→pr.merged` 발행(`run.tool_called`는 `tool_calls`에만) → relay → projection consumer → Postgres `tasks` 3행 `done` → `verify_chain_db` True → `TRUNCATE tasks, runs, epics, goals, tool_calls CASCADE` → `replay`(seq 순) + `apply(force=True)` → 동일 → `make docker-down`
 - 자동: `make check`, `make test-integration`
 - 사람: `git tag event-schema-v1`, `docs/pc/PC-1.md`에 결과 붙여넣기 (에이전트가 대신 해도 됨 — 로컬 태그)
 - pass: 자동 전부 + 태그 존재
@@ -385,7 +392,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 ### P3.4 그래프
 - depends_on: P3.2, P3.3
 - owned_paths: `control_plane/orchestrator/graph.py`, `control_plane/orchestrator/state.py`, `tests/orchestrator/test_graph.py`
-- red: FakeProvider + `MemorySaver` + DryRun GitHub으로 (a) `analyze_repo → draft_plan → wait_plan_approval`에서 **interrupt**(`__interrupt__` in output, `aget_state().next == ("wait_plan_approval",)`), 상태에 `plan`(§5.2 6섹션 검사, 빠지면 1회 재요청, 또 빠지면 `PlanError`)과 `plan_discussion_number`(dry), 이벤트 `goal.plan_proposed` (b) `Command(resume={"approved": True, "by": …})` → `decompose → emit_issues → END`, `goal.activated`, causation 체인 (c) `resume={"approved": False, "reason": …}` → END, `goal.cancelled`, decompose 호출 없음 (d) 같은 체크포인터로 그래프를 다시 빌드해 resume → `analyze_repo`/`draft_plan` 재실행 없음(provider.calls 수로 확인) (e) `goal.created`는 발행하지 않음(API가 함) (f) `get_checkpointer(settings)`: sqlite URL이면 MemorySaver; `postgres_conn_string("postgresql+asyncpg://…") == "postgresql://…"`, `open_postgres_checkpointer(settings)`는 `AsyncPostgresSaver.from_conn_string`
+- red: FakeProvider + `MemorySaver` + DryRun GitHub으로 (a) `analyze_repo → draft_plan → wait_plan_approval`에서 **interrupt**(`__interrupt__` in output, `aget_state().next == ("wait_plan_approval",)`), 상태에 `plan`(§5.2 6섹션 검사, 빠지면 1회 재요청, 또 빠지면 `PlanError`)과 `plan_discussion_number`(dry), 이벤트 `goal.plan_proposed` (b) `Command(resume={"approved": True, "by": …})` → **`goal.activated` 발행(decompose 전, B5)** → `decompose → emit_issues → END`, 이벤트 순서 `goal.activated → epic.created… → task.created…`, causation 체인 (c) `resume={"approved": False, "reason": …}` → END, `goal.cancelled`, decompose 호출 없음 (d) 같은 체크포인터로 그래프를 다시 빌드해 resume → `analyze_repo`/`draft_plan` 재실행 없음(provider.calls 수로 확인) (e) `goal.created`는 발행하지 않음(API가 함) (f) `get_checkpointer(settings)`: sqlite URL이면 MemorySaver; `postgres_conn_string("postgresql+asyncpg://…") == "postgresql://…"`, `open_postgres_checkpointer(settings)`는 `AsyncPostgresSaver.from_conn_string`
 - green: `OrchestratorState(TypedDict, total=False)`(JSON 직렬화 가능한 값만), `initial_state(...)`, `OrchestratorDeps(provider, github, discussions, publish, emit, model)`, `build_graph(deps, checkpointer=)`. **부작용(Discussion 생성, 이벤트)은 `draft_plan`에**, `wait_plan_approval`은 interrupt만(resume 시 노드가 처음부터 재실행됨). `emit_issues`는 주입된 `deps.emit(state)` 호출(기본은 dry 로그)
 - gate: `make check`
 - design: §15.1, §3.3
@@ -394,11 +401,11 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 ### P3.5 emit_issues
 - depends_on: P3.4
 - owned_paths: `control_plane/orchestrator/emit.py`, `tests/orchestrator/test_emit.py`
-- red: (a) TaskDraft 4개(A→B, A→C, B,C→D) → 위상 정렬(준비된 노드는 입력 순서 유지) 순으로 `task.created` 4건(payload: epic_id, epic_title, title, spec, kind, role_required, depends_on=**task id**, owned_paths, risk_tier, issue_number, issue_url; causation 체인) + dry Issue 4개 + milestone/labels (b) 사이클(A→B→A) → `task.*` 0건, `goal.blocked` 1건(reason에 "cycle"), 결과 `{"issues": [], "error": …}` (c) owned_paths 겹치는 B, C → C.depends_on에 B(반대 방향 의존이 이미 있으면 유지) — `paths_overlap(a, b)`는 고정 접두 경로 포함 관계로 보수적 판정 (d) owned_paths 빈 Task → ValidationError(TaskDraft) (e) 같은 state로 재실행 → `issues` 동일, Issue·이벤트 중복 없음(state["issues"]의 task_id 재사용)
+- red: (a) TaskDraft 4개(A→B, A→C, B,C→D, Epic 2개) → `epic.created` 2건(milestone_number 포함) 선행 → 위상 정렬(준비된 노드는 입력 순서 유지) 순으로 `task.created` 4건(payload: epic_id, epic_title, title, spec, kind, role_required, depends_on=**task id**, owned_paths, risk_tier, issue_number, issue_url; causation 체인) + dry Issue 4개 + milestone/labels (b) 사이클(A→B→A) → `epic.*`·`task.*` 0건, `goal.blocked` 1건(reason에 "cycle"), 결과 `{"issues": [], "error": …}` (c) owned_paths 겹치는 B, C → C.depends_on에 B(반대 방향 의존이 이미 있으면 유지) — `paths_overlap(a, b)`는 고정 접두 경로 포함 관계로 보수적 판정 (d) owned_paths 빈 Task → ValidationError(TaskDraft) (e) 같은 state로 재실행 → `issues` 동일, Issue·이벤트 중복 없음(state["issues"]의 task_id 재사용)
 - green: `toposort`, `paths_overlap`, `serialize_overlaps`, `emit(state, *, github, publish) -> {"issues", "last_event_id"} | {"issues": [], "error", "last_event_id"}`
 - gate: `make check`
 - design: §10.1, §5.2 emit
-- notes: D-19, D-20.
+- notes: D-19, D-20, D-27.
 
 ### PC-3 그래프 완주 + 눈검사
 - 자동: `make check`; `uv run python scripts/pc3_plan_dryrun.py --fake tests/fixtures/sample_repo "goal"` → interrupt → auto-approve → Issue 4개 dry, exit 0
@@ -411,47 +418,47 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 ### P4.1 Agent 툴
 - depends_on: PC-3
 - owned_paths: `agents/tools/**`, `tests/agents/conftest.py`, `tests/agents/tools/**`, `tests/fixtures/make_remote.sh`
-- red: **거부 > 허용.** `tests/agents/conftest.py`(P4 공용): `remote`(make_remote.sh → tmp bare), `worktree`(sample_repo 사본 + git init + `.env`/`id_rsa`/`*.pem` 미끼 + origin push), `spy`, `ctx`. `fs.py` — (a) 절대경로 밖/`../` 탈출 → `ToolDenied("outside")` (b) `.env`, `.env.*`, `*.pem`, `id_rsa*`, `.git/config` read → 거부("secret") (c) owned_paths 밖 write → 거부("owned_paths"); secrets는 owned여도 write 거부 (d) 허용 read/write(중간 디렉토리 생성)/list(`.git` 제외) 정상, 없는 파일 → FileNotFoundError. `shell.py` — (e) `ALLOWED_PREFIXES == {pytest, ruff, mypy, npm test, npm run test, make, uv run pytest}`, `pytest -q`가 worktree에서 실제 통과 (f) `rm`, `curl`, `python -c`, `pytest; rm`, `&&`, `|`, `$(…)`, 백틱, `>`, `npm install`, `sudo make`, 앞뒤 공백 → 거부; 셸 없이 `create_subprocess_exec` (g) 타임아웃(1초 테스트) → `ToolTimeout`. `git.py` — (h) `branch(name)` `ai/<epic>/<n>-<slug>` 정규식 아니면 거부, 있으면 checkout (i) `push`가 `main`/`master`/default면 거부 (j) `commit(msg, issue_number=)` 트레일러 `Task #<n> / Run <id>`, 변경 없으면 None (k) bare remote에 push 성공, `changed_files()`, `diff()`. `github.py` — (l) 공개 메서드는 `open_pr`, `comment`뿐; base가 default 아니면 거부. 공통 — (m) 모든 호출이 `run.tool_called`(subject=run), 거부 시 `payload.denied=true, reason`; causation 체인; 비밀값이 payload에 없음
+- red: **거부 > 허용.** `tests/agents/conftest.py`(P4 공용): `remote`(make_remote.sh → tmp bare), `worktree`(sample_repo 사본 + git init + `.env`/`id_rsa`/`*.pem` 미끼 + origin push), `spy`, `ctx`. `fs.py` — (a) 절대경로 밖/`../` 탈출 → `ToolDenied("outside")` (b) `.env`, `.env.*`, `*.pem`, `id_rsa*`, `.git/config` read → 거부("secret") (c) owned_paths 밖 write → 거부("owned_paths"); secrets는 owned여도 write 거부 (d) 허용 read/write(중간 디렉토리 생성)/list(`.git` 제외) 정상, 없는 파일 → FileNotFoundError. `shell.py` — (e) `ALLOWED_PREFIXES == {pytest, ruff, mypy, npm test, npm run test, make, uv run pytest}`, `pytest -q`가 worktree에서 실제 통과 (f) `rm`, `curl`, `python -c`, `pytest; rm`, `&&`, `|`, `$(…)`, 백틱, `>`, `npm install`, `sudo make`, 앞뒤 공백 → 거부; 셸 없이 `create_subprocess_exec` (g) 타임아웃(1초 테스트) → `ToolTimeout`. `git.py` — (h) `branch(name)` `ai/<epic>/<n>-<slug>` 정규식 아니면 거부, 있으면 checkout (i) `push`가 `main`/`master`/default면 거부 (j) `commit(msg, issue_number=)` 트레일러 `Task #<n> / Run <id>`, 변경 없으면 None (k) bare remote에 push 성공, `changed_files()`, `diff()`. `github.py` — (l) 공개 메서드는 `open_pr`, `comment`뿐; base가 default 아니면 거부. 공통 — (m) 허용된 호출은 `run.tool_called`(subject=run, `args_digest`), 거부는 **`run.tool_denied`**(tool, reason, args_digest; D-31); causation 체인; 비밀값·파일 내용이 payload에 없음(digest만)
 - green: `base.py`(`ToolContext(worktree, owned_paths, run_id, task_id, project_id, goal_id, publish, default_branch, agent_id)`, `resolve/is_owned/record`, `guarded()` 헬퍼, `Tool` Protocol), 파일 하나 = 툴 하나
 - gate: `make check`
 - design: §5.2, §10.3, §12
-- notes: D-01, D-14. `git.push`는 대상 브랜치가 비동기로 정해지므로 `guarded` 대신 직접 `record`.
+- notes: D-01, D-14, D-31. `git.push`는 대상 브랜치가 비동기로 정해지므로 `guarded` 대신 직접 `record`.
 
 ### P4.2 BaseAgent
 - depends_on: P4.1
 - owned_paths: `agents/base.py`, `agents/context.py`, `tests/agents/test_base.py`
-- red: (a) `AgentInput(task: TaskRef, project_context: ProjectContext, memory, budget: RunBudget, run_id, agent_id)` / `AgentOutput(outcome: done|needs_decision|blocked|failed, artifacts, decision_request, new_tasks, notes_for_memory, summary, tokens_in, tokens_out, cost_usd)` §5.1 (b) `assemble_context(input, token_budget=, system=, related_files=)` 순서 system → policy(빈 문자열) → CONTEXT.md → Role 노트 → Task spec → 관련 요약 → 관련 파일; 예산 초과 시 **뒤에서부터** 비움(예산을 아주 작게 주면 system만 남음 — 테스트 예산은 system 토큰 수 기준으로 계산) (c) CONTEXT.md 없으면 `context.missing_context_md` warning + 계속 (d) `BaseAgent.run(input)`이 `run.started` → `execute` → `run.finished(outcome, tokens_in/out, cost_usd, duration_s, error)`; 예외 → `outcome=failed` (e) `agents/`에 `control_plane.config` import 없음
+- red: (a) `AgentInput(task: TaskRef, project_context: ProjectContext, memory, budget: RunBudget, run_id, agent_id)` / `AgentOutput(outcome: done|needs_decision|blocked|failed, artifacts, decision_request, new_tasks, notes_for_memory, summary, tokens_in, tokens_out, cost_usd)` §5.1 (b) `assemble_context(input, token_budget=, system=, related_files=)` 순서 system → policy(빈 문자열) → CONTEXT.md → Role 노트 → Task spec → 관련 요약 → 관련 파일; 예산 초과 시 **뒤에서부터** 비움(예산을 아주 작게 주면 system만 남음 — 테스트 예산은 system 토큰 수 기준으로 계산) (c) CONTEXT.md 없으면 `context.missing_context_md` warning + 계속 (d) `BaseAgent.run(input)`이 `run.started` → `execute` → `run.finished(outcome=RunOutcome, agent_outcome, tokens_in/out, cost_usd, duration_s, error)`; 매핑 done→success, failed→failed, needs_decision/blocked→escalated(D-28); 예외 → `agent_outcome=failed, outcome=failed` (e) `agents/`에 `control_plane.config` import 없음
 - green: 토큰 추정 `len/4`(`agents/llm/base.estimate_tokens`)
 - gate: `make check`
 - design: §5.1, §5.3
-- notes: D-23.
+- notes: D-23, D-28.
 
 ### P4.3 Coding Agent
 - depends_on: P4.2
 - owned_paths: `agents/coding.py`, `tests/agents/test_coding.py`, `tests/fixtures/coding_scripts/*.json`
-- red: FakeProvider 스크립트(JSON 파일: 순서대로 plan 텍스트, `EditPlan{files:[{path,content}], message}` dict, …, summary 텍스트) + `worktree` + `remote` 픽스처로 (a) **pass**: `load_context`(CONTEXT.md가 **첫 툴 호출**) → 브랜치 `ai/<epic_slug>/<issue>-<slug(title)>` → `task.started` → plan → edit → commit → `pytest -q` pass → push(bare) → `open_pr`(dry, draft, §7.3 meta) + `pr.opened` → summarize(comment key `summary:<run>`) + `task.completed` → `outcome=done`, artifacts branch/pr/comment (b) **fail→pass**: 1회차 실패 → 2회차 edit 프롬프트에 테스트 출력 포함 → pass; WIP 커밋도 브랜치에 남음 (c) **3회 실패** → `outcome=failed`, `task.failed(attempt=3)`, WIP push됨, PR 없음 (d) **owned_paths 밖 파일** → 쓰기 전에 거부 → `outcome=failed`, `task.failed(reason=scope_violation, files=[…])`, 커밋 0 (e) **의존성 파일**(`is_dependency_file`: pyproject.toml, requirements*.txt, uv.lock, poetry.lock, Pipfile*, package.json, *-lock, go.mod/sum, Cargo.*) diff → `outcome=needs_decision`, Issue 코멘트 "승인 필요"(key `needs-decision:<run>`), `task.blocked(reason=needs_decision)`, `decision_request.type == "dependency"` (f) 이벤트 순서 `run.started` … `run.finished`
+- red: FakeProvider 스크립트(JSON 파일: 순서대로 plan 텍스트, `EditPlan{files:[{path,content}], message}` dict, …, summary 텍스트) + `worktree` + `remote` 픽스처로 (a) **pass**: 브랜치 `ai/<epic_slug>/<issue>-<slug(title)>` → **`task.started {run_id}` → `run.started`**(이 순서, C절) → `load_context`(CONTEXT.md가 **첫 툴 호출**) → plan → edit → commit → `pytest -q` pass → push(bare) → `open_pr`(dry, draft, §7.3 meta) + `pr.opened` → summarize(comment key `summary:<run>`) + `task.completed` → `outcome=done`, artifacts branch/pr/comment (b) **fail→pass**: 1회차 실패 → 2회차 edit 프롬프트에 테스트 출력 포함 → pass; WIP 커밋도 브랜치에 남음 (c) **3회 실패** → `outcome=failed`, `task.failed(attempt=3)`, WIP push됨, PR 없음 (d) **owned_paths 밖 파일** → 쓰기 전에 거부(`run.tool_denied`) → `outcome=failed`, `task.failed(reason=scope_violation, files=[…])`, 커밋 0 (e) **의존성 파일**(`is_dependency_file`: pyproject.toml, requirements*.txt, uv.lock, poetry.lock, Pipfile*, package.json, *-lock, go.mod/sum, Cargo.*) diff → `outcome=needs_decision`, Issue 코멘트 "승인 필요"(key `needs-decision:<run>`), `task.blocked(reason=needs_decision)`, `decision_request.type == "dependency"` (f) 이벤트 순서 `task.started → run.started` … `run.finished`(마지막)
 - green: LangGraph `load_context → plan_changes → edit(EditPlan 구조화 출력, owned 사전 검사) → check_scope → commit → run_tests → {pass: push → open_pr → summarize, fail∧attempt<max: edit, fail∧attempt≥max: fail(WIP push)}`; `CodingAgent(publish, provider, github, repo, model, test_command, shell_timeout, token_budget)`, `last_state` 노출
 - gate: `make check`
 - design: §5.2 Coding Agent, §15.1 루프, §9.2, §10.1
-- notes: D-16, D-20. 그래프 결과는 dict — `cast(CodingState, raw)`.
+- notes: D-16, D-20, D-28, D-31. 그래프 결과는 dict — `cast(CodingState, raw)`.
 
 ### P4.4 Worker
 - depends_on: P4.3
 - owned_paths: `worker/**`, `docker-compose.yml`, `Makefile`, `tests/worker/**`, `tests/integration/test_worker.py`
-- red: (a) `python -m worker <task_id>` / `worker/entrypoint.py`: 환경변수 `WORKER_REPO_URL, WORKER_BRANCH, WORKER_TASK_JSON(TaskRef+ProjectContext 직렬화), WORKER_REDIS_URL, WORKER_TOKEN(옵션, 빈 값), WORKER_TIMEOUT_MIN=45`, 인자 외 설정 없음 — AST 가드가 `control_plane.config` import 잡음 (b) worktree 준비(clone → branch) → `CodingAgent.run` → `run.finished` → exit code(0 done / 1 failed / 2 needs_decision / 3 timeout) (c) 타임아웃(테스트 1초) → `outcome=timeout`, WIP 커밋+push (d) 워커의 publish는 Redis XADD 직접(`events:{project_id}`) — DB 없음; `--publish-file <path>`로 이벤트를 파일에 적는 테스트 모드 (e) integration: `docker build` → sample_repo + bare remote 볼륨 마운트 → 컨테이너가 브랜치 push → exit 0. Docker 없으면 skip
+- red: (a) `python -m worker <task_id>` / `worker/entrypoint.py`: 환경변수 `WORKER_REPO_URL, WORKER_BRANCH, WORKER_TASK_JSON(TaskRef+ProjectContext 직렬화), WORKER_REDIS_URL, WORKER_TOKEN(옵션, 빈 값), WORKER_TIMEOUT_MIN=45`, 인자 외 설정 없음 — AST 가드가 `control_plane.config` import 잡음 (b) worktree 준비(clone → branch) → `CodingAgent.run` → `run.finished` → exit code(0 done / 1 failed / 2 needs_decision / 3 timeout) (c) 타임아웃(테스트 1초) → WIP 커밋+push → `task.failed {reason:"timeout", attempt}` + `run.finished {outcome:"timeout", agent_outcome:"timeout"}`(D-28) (d) 워커의 publish는 Redis XADD 직접(`events:{project_id}`) — DB 없음; `--publish-file <path>`로 이벤트를 파일에 적는 테스트 모드 (e) integration: `docker build` → sample_repo + bare remote 볼륨 마운트 → 컨테이너가 브랜치 push → exit 0. Docker 없으면 skip
 - green: `Dockerfile`(python:3.12-slim + git + node, non-root `worker`), compose에 `worker` 서비스(빌드만), `worker/publish.py`(Redis XADD, `stream_fields` 재사용)
 - gate: `make check` && `make test-integration`(Docker 있으면)
 - design: §10.3, §15.1
-- notes: D-14, D-17. 워커가 XADD한 이벤트는 outbox를 거치지 않으므로 DB `events`에는 projection consumer가 append 한다(P4.5에서 `ingest` 핸들러) — 이 결정은 P4.4 착수 시 `[착수]`에 명시.
+- notes: D-14, D-17, D-28. 워커가 XADD한 이벤트는 outbox를 거치지 않으므로 DB `events`에는 Scheduler의 `ingest`가 `append_signed`로 append 한다(D-26) — 이 결정은 P4.4 착수 시 `[착수]`에 명시.
 
 ### P4.5 Scheduler
 - depends_on: P4.4
 - owned_paths: `control_plane/scheduler/**`, `tests/scheduler/**`
-- red: (a) `task.created` 구독 → `depends_on` 전부 `done`(projection 상태 조회)이고 `status == ready`인 Task만 배정 (b) 위상 정렬, 사이클 → `SchedulerError` (c) owned_paths 겹치는 Task 동시 배정 금지 (`emit.paths_overlap` 재사용) (d) `max_workers` 초과 시 대기 (e) 배정 시 `task.assigned` 발행 후 `WorkerLauncher.launch(task)` — `DockerCliLauncher`(D-15, `docker run … --format json`)와 `FakeLauncher`; 테스트는 Fake (f) `run.finished` 수신 → 슬롯 반환 (g) 워커가 직접 XADD한 이벤트를 DB `events`에 append 하는 `ingest`(멱등, event.id 기준)
+- red: (a) `task.created` 구독 → `depends_on` 전부 `done`(projection 상태 조회)이고 `status == ready`인 Task만 배정 (b) 위상 정렬, 사이클 → `SchedulerError` (c) owned_paths 겹치는 Task 동시 배정 금지 (`emit.paths_overlap` 재사용) (d) `max_workers` 초과 시 대기 (e) 배정 시 `task.assigned` 발행 후 `WorkerLauncher.launch(task)` — `DockerCliLauncher`(D-15, `docker run … --format json`)와 `FakeLauncher`; 테스트는 Fake (f) `run.finished` 수신 → 슬롯 반환 (g) 워커가 직접 XADD한 이벤트를 DB에 append 하는 `ingest` — 반드시 `chain.append_signed` 호출(멱등, event.id 기준; `run.tool_called`는 `tool_calls`로) (h) 같은 Epic의 Task 2개를 연속 배정 → `epic.activated` 1건, `task.assigned` 2건(중복 없음) — projection 반영 전이라도 프로세스 내 `in_flight`/`activated_epics` memo로 (B11) (i) 기동 실패(`FakeLauncher(fail=True)`) → `task.failed {reason:"launch_failed"}`
 - green: `queue.py`, `graph.py`, `launcher.py`, `scheduler.py` 루프
 - gate: `make check`
 - design: §3.2 Scheduler, §10.1
-- notes: D-15, D-20.
+- notes: D-15, D-20, D-26, D-27, D-28.
 
 ### PC-4 브랜치 3개 push
 - 자동: `make check`, `make test-integration`
@@ -464,10 +471,11 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 ### P5.1 API
 - depends_on: PC-4
 - owned_paths: `control_plane/api/**`, `tests/api/**`
-- red: httpx AsyncClient로 (a) `POST /projects {name, repo_path|repo_full_name}` → 201 + `project.created`(D-19) (b) `GET /projects/{id}` (c) `POST /projects/{id}/goals` → 202 + `goal.created` (d) `GET /projects/{id}/goals/{gid}` 진행률(Task 상태 카운트) (e) `GET /tasks?status=&epic=` (f) `GET /events?since=&type=` 커서 (g) `Idempotency-Key` 같은 키 재요청 → 동일 응답, publish 1회; 다른 본문 같은 키 → 422 (h) `/health` 유지
+- red: httpx AsyncClient로 (a) `POST /projects {name, repo_path|repo_full_name}` → 201 + `project.created`(D-19) (b) `GET /projects/{id}` (c) `POST /projects/{id}/goals` → 202 + `goal.created` (d) `GET /projects/{id}/goals/{gid}` 진행률(Task 상태 카운트) (e) `GET /tasks?status=&epic=` (f) `GET /events?since=<seq>&type=` 커서(D-29; event id 아님) (g) `Idempotency-Key` 같은 키 재요청 → 동일 응답, publish 1회; 다른 본문 같은 키 → 422 (h) `/health` 유지 (i) `PATCH /tasks/{tid} {action:"cancel"}` → `task.cancelled`; `POST /goals/{gid}/cancel` → `goal.cancelled` + 미완 Task마다 `task.cancelled(cascade_from=gid)` (D-27)
 - green: 라우터 분리, `deps.py`(session, bus, settings, projection), Idempotency 미들웨어(메모리 dict + TTL)
 - gate: `make check`
 - design: §13
+- notes: D-25(루트 이벤트 causation None), D-27, D-29.
 
 ### P5.2 Goal 실행 + 승인 재개
 - depends_on: P5.1
