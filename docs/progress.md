@@ -180,3 +180,7 @@
 | 2026-09-13T21:10 | P6.6 | Green | repo_cache.py, Settings.repo_root, runner/scheduler/runtime/app 배선, 434 passed | d70a254 |
 | 2026-09-13T21:12 | P6.6 | Gate | make check pass (434), mypy clean, 시도 3/3 | |
 | 2026-09-13T21:12 | P6.6 | 완료 | 보드 done | d70a254 |
+| 2026-09-13T21:20 | P6.7 | Red | coding/worker/projection/pr_opener/runtime/e2e 6건 | 5b0af4b |
+| 2026-09-13T21:45 | P6.7 | Green | pr_opener.py, coding.py 그래프 분할, 스키마 additive, Runtime 체인, 438 passed | d5b1b10 |
+| 2026-09-13T21:50 | P6.7 | Gate | make check pass (438) && test-integration 6 passed, pc4 --fake PASS, 시도 3/3 | |
+| 2026-09-13T21:50 | P6.7 | 완료 | 보드 done | d5b1b10 |
