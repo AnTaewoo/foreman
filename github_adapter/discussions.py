@@ -4,8 +4,8 @@
 - https://docs.github.com/en/graphql/guides/using-the-graphql-api-for-discussions
 - https://docs.github.com/public/fpt/schema.docs.graphql (공개 SDL)
   - ``Repository.discussionCategories(first, after, ...): DiscussionCategoryConnection!``
-  - ``Repository.discussions(first, after, categoryId: ID, orderBy: DiscussionOrder, states, answered)``
-  - ``DiscussionCategory { id name slug description }``, ``Discussion { id number title body url category }``
+  - ``Repository.discussions(first, after, categoryId, orderBy, states, answered)``
+  - ``DiscussionCategory { id name slug }``, ``Discussion { id number title body url category }``
   - ``createDiscussion(input: {repositoryId!, categoryId!, title!, body!}) { discussion { … } }``
   - ``addDiscussionComment(input: {discussionId!, body!, replyToId}) { comment { id url } }``
 
