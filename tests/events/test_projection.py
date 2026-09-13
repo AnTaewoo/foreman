@@ -524,3 +524,17 @@ async def test_tool_called_before_run_started_is_tolerated(
     async with factory() as s:
         run = await s.get(m.Run, "R1")
         assert run is not None and run.tool_call_count == 2
+
+
+# D-26: relay를 거치지 않은 미서명 이벤트(워커 XADD)는 projection consumer가 건너뛴다 — ingest가 처리
+async def test_handle_skips_unsigned_events_without_seq(
+    factory: async_sessionmaker[AsyncSession], bus: EventBus, projection: Projection
+) -> None:
+    events = await publish_all(bus, factory, SEQUENCE[:7])
+    for e in events:
+        await projection.apply(e)
+    unsigned = SEQUENCE[8]  # task.started, signature None, DB에 없음
+    await projection.handle(
+        Delivery(event=unsigned, message_id="9-0", attempt=1, group="g", consumer="c", seq=None)
+    )
+    assert (await _task(factory)).status is TaskStatus.ASSIGNED  # 적용 안 됨

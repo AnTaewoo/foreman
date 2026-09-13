@@ -412,8 +412,15 @@ class Projection:
             return True
 
     async def handle(self, delivery: Delivery) -> None:
-        """consumer group 핸들러 (D-30 분기). 정상 반환 = ack."""
+        """consumer group 핸들러 (D-30 분기). 정상 반환 = ack.
+
+        워커가 직접 XADD한 이벤트(서명 없음, seq 없음)는 여기서 건너뛴다 — Scheduler.ingest가
+        append_signed로 DB에 넣은 뒤 apply 한다 (D-26). 두 번 적용되면 불허 전이가 난다.
+        """
         event = delivery.event
+        if event.signature is None and delivery.seq is None:
+            log.debug("projection.skip_unsigned", event_id=event.id, type=event.type.value)
+            return
         try:
             await self.apply(event)
         except (InvalidTransition, OrderingError) as exc:

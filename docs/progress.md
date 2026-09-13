@@ -118,3 +118,4 @@
 | 2026-09-13T15:58 | P4.4 | 완료 | 보드 done | 1c9a026 |
 | 2026-09-13T15:58 | P4.5 | 착수 | scheduler queue/graph/launcher/scheduler + ingest | |
 | 2026-09-13T15:59 | P4.5 | Red | test_scheduler 6 (a~i), ModuleNotFoundError scheduler.graph | |
+| 2026-09-13T16:03 | P4.5 | Green | scheduler graph/launcher/queue/scheduler + ingest, projection unsigned skip, 378 passed | |

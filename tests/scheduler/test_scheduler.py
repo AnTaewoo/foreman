@@ -119,20 +119,21 @@ class Harness:
         return out
 
     async def pump(self) -> list[str]:
-        """relay → projection → scheduler(handle) 한 바퀴. 처리한 이벤트 타입 목록."""
+        """relay → projection+scheduler → (배정으로 새 outbox 행이 생기면) 다시 relay … 조용해질 때까지."""
         seen: list[str] = []
-        while await self.relay.relay_once():
-            pass
 
         async def both(d: Any) -> None:
             await self.projection.handle(d)
             await self.scheduler.handle(d)
             seen.append(d.event.type.value)
 
-        idle = 0
-        while idle < 2:
-            n = await self.bus.poll_once("sched", both, consumer="t", project_id=PID)
-            idle = idle + 1 if n == 0 else 0
+        for _ in range(20):
+            relayed = 0
+            while (n := await self.relay.relay_once()) > 0:
+                relayed += n
+            consumed = await self.bus.poll_once("sched", both, consumer="t", project_id=PID)
+            if relayed == 0 and consumed == 0:
+                break
         await self.projection.apply_retries(PID, now=datetime.now(UTC) + timedelta(hours=3))
         return seen
 
@@ -260,24 +261,20 @@ async def test_slots_and_release(factory: async_sessionmaker[AsyncSession], redi
     assert h.scheduler.in_flight == {"T2"}
 
 
-# (i) 기동 실패 → task.failed(launch_failed), assigned→ready, 슬롯 반환
+# (i) 기동 실패 → task.failed(launch_failed): task.failed가 트리거라 ready로 돌아온 Task를 다시 배정하고,
+#     attempt가 max(3)에 닿으면 blocked — 더 이상 배정하지 않는다 (D-28)
 async def test_launch_failure(factory: async_sessionmaker[AsyncSession], redis: Redis) -> None:
     h = Harness(factory, redis, launcher=FakeLauncher(fail=True))
     await h.publish(*BOOTSTRAP, task_created("T1", [], ["src/a/**"]))
     await h.pump()
     failed = await h.events("task.failed")
-    assert (
-        len(failed) == 1
-        and failed[0].payload["reason"] == "launch_failed"
-        and failed[0].payload["attempt"] == 1
-    )
+    assert [e.payload["attempt"] for e in failed] == [1, 2, 3]
+    assert all(e.payload["reason"] == "launch_failed" for e in failed)
     t = await h.task("T1")
-    assert t.status is TaskStatus.READY and t.attempt_count == 1
-    assert h.scheduler.in_flight == set()
+    assert t.status is TaskStatus.BLOCKED and t.attempt_count == 3
+    assert h.scheduler.in_flight == set() and len(await h.events("task.assigned")) == 3
     with pytest.raises(LaunchError):
         await FakeLauncher(fail=True).launch(
-            h.launcher.specs[0]
-        ) if h.launcher.specs else FakeLauncher(fail=True).launch(
             LaunchSpec(
                 task_id="x",
                 run_id="r",
