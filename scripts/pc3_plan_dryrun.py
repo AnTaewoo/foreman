@@ -1,11 +1,11 @@
 """PC-3 — Orchestrator 그래프 완주 (dry GitHub, MemorySaver).
 
     uv run python scripts/pc3_plan_dryrun.py --fake tests/fixtures/sample_repo "goal"
-    HITL_ANTHROPIC_API_KEY=... uv run python scripts/pc3_plan_dryrun.py tests/fixtures/sample_repo "goal"
+    uv run python scripts/pc3_plan_dryrun.py tests/fixtures/sample_repo "goal"   # 실 LLM
 
-analyze → draft_plan(Plan 마크다운 + Discussion dry) → interrupt → 자동 approve → decompose(TaskDraft JSON)
-→ emit(Dry Issue, epic/task 이벤트). 출력: Plan, TaskDraft JSON, "would …" 로그, 이벤트 순서, 토큰 합계.
-종료 코드 0 = 완주. 실 LLM은 `--fake`가 없을 때만 (Settings의 HITL_ANTHROPIC_API_KEY).
+analyze → draft_plan(Plan + Discussion dry) → interrupt → 자동 approve → decompose(TaskDraft JSON)
+→ emit(Dry Issue, epic/task 이벤트). 출력: Plan, TaskDraft JSON, would 로그, 이벤트, 토큰 합계.
+종료 코드 0 = 완주. 실 LLM은 `--fake`가 없을 때 Settings.llm_provider가 고른다 (D-33).
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from langgraph.types import Command
 from ulid import ULID
 
 from agents.llm import get_provider
-from agents.llm.base import Completion, Message, ModelProvider
+from agents.llm.base import Completion, ModelProvider
 from agents.llm.fake import FakeProvider
 from control_plane.config import Settings
 from control_plane.events.schema import Event
@@ -169,9 +169,8 @@ async def main() -> int:
     snap = await graph.aget_state(cfg)
     print("\n=== 1. Plan (Discussion body) ===")
     print(snap.values["plan"])
-    print(
-        f"\n[interrupt] next={snap.next} discussion=#{snap.values['plan_discussion_number']} → auto-approve"
-    )
+    disc = snap.values["plan_discussion_number"]
+    print(f"\n[interrupt] next={snap.next} discussion=#{disc} → auto-approve")
     final = await graph.ainvoke(Command(resume={"approved": True, "by": "pc3-auto"}), cfg)
     print("\n=== 2. TaskDraft JSON ===")
     print(
@@ -182,16 +181,17 @@ async def main() -> int:
     print("\n=== 3. Issues (dry) ===")
     for issue in final.get("issues", []):
         print(
-            f"  #{issue['issue_number']} {issue['title']}  (epic: {issue['epic_title']}, milestone {issue['milestone_number']})"
+            f"  #{issue['issue_number']} {issue['title']}  "
+            f"(epic: {issue['epic_title']}, milestone {issue['milestone_number']})"
         )
     print("\n=== 4. Events ===")
     for e in events:
         print(
-            f"  {e.type.value:<20} subject={e.subject.entity}:{e.subject.id[-6:]} causation={str(e.causation_id)[-6:]}"
+            f"  {e.type.value:<20} subject={e.subject.entity}:{e.subject.id[-6:]} "
+            f"causation={str(e.causation_id)[-6:]}"
         )
-    print(
-        f"\n=== 5. Tokens === calls={provider.calls} in={provider.tokens_in} out={provider.tokens_out}"
-    )
+    print(f"\n=== 5. Tokens === calls={provider.calls}", end=" ")
+    print(f"in={provider.tokens_in} out={provider.tokens_out}")
     ok = not final.get("error") and len(final.get("issues", [])) >= 3
     if final.get("error"):
         print("error:", final["error"])

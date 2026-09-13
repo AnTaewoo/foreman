@@ -88,11 +88,15 @@ def _message_response(
     text: str, *, stop_reason: str = "end_turn", model: str = "claude-opus-5"
 ) -> dict[str, Any]:
     return {
-        "id": "msg_1", "type": "message", "role": "assistant", "model": model,
+        "id": "msg_1",
+        "type": "message",
+        "role": "assistant",
+        "model": model,
         "content": [{"type": "text", "text": text}] if text else [],
-        "stop_reason": stop_reason, "stop_sequence": None,
+        "stop_reason": stop_reason,
+        "stop_sequence": None,
         "usage": {"input_tokens": 12, "output_tokens": 7},
-    }  # fmt: skip
+    }
 
 
 class Recorder:
@@ -160,9 +164,12 @@ def test_anthropic_sdk_imported_only_in_adapter() -> None:
         tree = ast.parse(p.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
             names = (
-                [a.name for a in node.names] if isinstance(node, ast.Import)
-                else [node.module or ""] if isinstance(node, ast.ImportFrom) else []
-            )  # fmt: skip
+                [a.name for a in node.names]
+                if isinstance(node, ast.Import)
+                else [node.module or ""]
+                if isinstance(node, ast.ImportFrom)
+                else []
+            )
             if any(n == "anthropic" or n.startswith("anthropic.") for n in names):
                 offenders.append(str(p.relative_to(ROOT)))
     assert offenders == [], offenders
@@ -193,16 +200,24 @@ def test_agents_llm_does_not_import_control_plane_config() -> None:
         assert "control_plane.config" not in p.read_text(encoding="utf-8"), p
 
 
-# ---------------------------------------------------------------- D-33: OpenAI 호환(Ollama) provider
+# ---------------------------------------------------------------- D-33: OpenAI 호환 provider
 from agents.llm.ollama import OllamaCompatProvider  # noqa: E402
 
 
 def _chat_response(content: str, *, finish: str = "stop") -> dict[str, Any]:
     return {
-        "id": "chatcmpl-1", "object": "chat.completion", "model": "qwen2.5-coder:7b",
-        "choices": [{"index": 0, "message": {"role": "assistant", "content": content}, "finish_reason": finish}],
+        "id": "chatcmpl-1",
+        "object": "chat.completion",
+        "model": "qwen2.5-coder:7b",
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": content},
+                "finish_reason": finish,
+            }
+        ],
         "usage": {"prompt_tokens": 21, "completion_tokens": 9, "total_tokens": 30},
-    }  # fmt: skip
+    }
 
 
 class ChatRecorder:
@@ -249,9 +264,21 @@ async def test_ollama_invalid_json_enters_retry_path() -> None:
     """잘못된 JSON → parsed None → decompose_with_retry가 재요청(2회차)으로 들어간다."""
     from control_plane.orchestrator.drafts import DecomposeResult, decompose_with_retry
 
-    good = {"epics": [{"title": "E", "order": 1, "summary": ""}],
-            "tasks": [{"title": "A", "spec": "s", "kind": "feature", "role_required": "coding",
-                       "depends_on": [], "owned_paths": ["src/a.py"], "estimated_tier": "T1", "epic": "E"}]}  # fmt: skip
+    good = {
+        "epics": [{"title": "E", "order": 1, "summary": ""}],
+        "tasks": [
+            {
+                "title": "A",
+                "spec": "s",
+                "kind": "feature",
+                "role_required": "coding",
+                "depends_on": [],
+                "owned_paths": ["src/a.py"],
+                "estimated_tier": "T1",
+                "epic": "E",
+            }
+        ],
+    }
     rec = ChatRecorder(
         [_chat_response("Sure! Here is the plan: {oops"), _chat_response(json.dumps(good))]
     )

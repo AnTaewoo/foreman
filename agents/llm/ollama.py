@@ -1,9 +1,9 @@
 """OpenAI 호환 엔드포인트 provider — 로컬 Ollama 등 (D-33). ``POST {base_url}/chat/completions``.
 
 - httpx 직접 호출(provider SDK 없음). 테스트는 ``transport_handler``로 ``httpx.MockTransport`` 주입.
-- ``schema``가 있으면 ``response_format={"type": "json_schema", ...}``를 보내고, 응답은 코드펜스·앞뒤
-  잡음을 걷어낸 뒤 pydantic으로 파싱한다. 실패하면 ``parsed=None`` — 호출자(drafts)의 재시도 경로가 처리.
-- thinking 모델이 ``reasoning`` 필드에 추론을 넣고 content를 비우는 경우가 있어 비-thinking 모델을 권장.
+- ``schema``가 있으면 ``response_format`` json_schema를 보내고, 응답은 코드펜스·앞뒤 잡음을
+  걷어낸 뒤 pydantic으로 파싱한다. 실패하면 ``parsed=None`` — 호출자(drafts)의 재시도 경로가 처리.
+- thinking 모델은 ``reasoning``에 추론을 넣고 content를 비우기도 하므로 비-thinking 모델 권장.
 """
 
 from __future__ import annotations

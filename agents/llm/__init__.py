@@ -1,4 +1,4 @@
-"""LLM 추상화: ModelProvider 인터페이스와 어댑터. ``get_provider``가 설정으로 고른다 (D-23, D-33)."""
+"""LLM 추상화: ModelProvider 인터페이스와 어댑터. ``get_provider``가 설정으로 고른다 (D-33)."""
 
 from __future__ import annotations
 
