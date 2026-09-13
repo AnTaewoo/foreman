@@ -104,3 +104,6 @@
 | 2026-09-13T15:40 | P4.2 | 착수 | agents/base.py + context.py | |
 | 2026-09-13T15:40 | P4.2 | Red | test_base 8, ModuleNotFoundError agents.base | |
 | 2026-09-13T15:42 | P4.2 | Green | agents/base.py(계약+BaseAgent.run) + context.py(조립·예산), 356 passed | |
+| 2026-09-13T15:44 | P4.2 | Gate | make check pass (356), pre-commit pass, 시도 2/3 | |
+| 2026-09-13T15:44 | P4.2 | 완료 | 보드 done | 6be7531 |
+| 2026-09-13T15:44 | P4.3 | 착수 | agents/coding.py LangGraph 루프 + 스크립트 픽스처 | |
