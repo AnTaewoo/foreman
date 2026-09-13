@@ -140,3 +140,25 @@ async def test_decompose_retry_on_validation_error_then_fail() -> None:
         await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
     assert len(provider.calls) == 2
     assert "itself" in provider.calls[1].messages[-1].content
+
+
+# X.2: 최소 Task 수는 코드가 검증하고 오류를 붙여 재요청한다 (PC-5 14b: Task 2개로 분해)
+async def test_decompose_min_tasks_retry() -> None:
+    provider = FakeProvider(script=[
+        result(task("A"), task("B", ["A"])),  # 2개 → 거부
+        result(task("A"), task("B", ["A"]), task("C")),  # 3개 → 통과
+    ])  # fmt: skip
+    out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G", min_tasks=3)
+    assert [t.title for t in out.tasks] == ["A", "B", "C"] and len(provider.calls) == 2
+    assert "at least 3" in provider.calls[1].messages[-1].content
+
+
+# X.2: 프롬프트 세트 규칙 — 심볼 색인 재사용, 기대값·fresh state, 겹치지 않으면 의존 금지, T-n
+def test_prompt_set_rules_x2() -> None:
+    analyze = (PROMPTS / "analyze.md").read_text(encoding="utf-8")
+    assert "Symbols" in analyze and "already exist" in analyze
+    plan = (PROMPTS / "plan.md").read_text(encoding="utf-8")
+    assert "T-1" in plan
+    dec = (PROMPTS / "decompose.md").read_text(encoding="utf-8")
+    for hint in ("Symbols", "already exist", "expected", "fresh", "must NOT depend", "at least 3"):
+        assert hint in dec, hint

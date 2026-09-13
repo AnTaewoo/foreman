@@ -88,3 +88,21 @@ def test_non_python_repo(tmp_path: Path) -> None:
     s = build_summary(tmp_path)
     assert s.language == "javascript" and s.framework == "express" and s.test_runner == "jest"
     assert s.readme_head == ""
+
+
+# X.2 (입력부터): 요약에 공개 심볼 색인 — 본문 없이 이름만. 계획자가 기존 심볼을 다시 만들지 않게
+def test_symbol_index(summary: RepoSummary, tmp_path: Path) -> None:
+    assert "src/app/models.py" in summary.symbols
+    models = summary.symbols["src/app/models.py"]
+    assert any(s.startswith("class User") for s in models)
+    assert any(s.startswith("class UserStore") and "add" in s and "all" in s for s in models)
+    assert any(s == "def greet" for s in summary.symbols["src/app/main.py"])
+    assert any(s.startswith("def test_") for s in summary.symbols["tests/test_main.py"])
+    md = render_summary(summary)
+    assert "### Symbols" in md and "class UserStore" in md
+    assert "return" not in md.split("### Symbols")[1]  # 본문은 없다
+    # 파이썬이 아니거나 문법 오류인 파일은 조용히 건너뛴다
+    (tmp_path / "bad.py").write_text("def (broken")
+    (tmp_path / "ok.py").write_text("class A:\n    def m(self): ...\n")
+    s = build_summary(tmp_path)
+    assert "bad.py" not in s.symbols and s.symbols["ok.py"] == ("class A: m",)

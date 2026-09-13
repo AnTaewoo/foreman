@@ -298,3 +298,43 @@ def test_parse_edit_plan_blocks_and_json_fallback() -> None:
     js = '{"files": [{"path": "a.py", "content": "x = 1\\n"}], "message": "m"}'
     assert parse_edit_plan(js).message == "m"  # type: ignore[union-attr]
     assert parse_edit_plan("no files here") is None
+
+
+# X.2: Coding Agent 프롬프트는 파일(agents/prompts/*.md, 근거 주석 포함)에서 읽고, 재시도 프롬프트는
+# "테스트가 틀렸는지 코드가 틀렸는지" 진단을 요구한다 (PC-4/PC-5: 모델이 쓴 테스트의 잘못된 기대값)
+def test_prompt_files_have_rationale() -> None:
+    from agents.prompts import PROMPTS_DIR, load_prompt
+
+    for name in ("system", "edit", "retry"):
+        raw = (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
+        assert raw.lstrip().startswith("<!--") and "근거" in raw
+        assert "<!--" not in load_prompt(name)
+    system = load_prompt("system", test_command="pytest -q")
+    assert "pytest -q" in system and "fresh" in system.lower()
+    assert "{test_command}" not in system
+
+
+async def test_retry_prompt_asks_for_diagnosis(worktree: Path, remote: Path, spy: Spy) -> None:
+    from agents.llm.base import Completion, Message
+
+    calls: list[list[Message]] = []
+    inner = FakeProvider(script=script("fail_then_pass"))
+
+    class Capture:
+        async def complete(self, messages: list[Message], **kw: Any) -> Completion:
+            calls.append(messages)
+            return await inner.complete(messages, **kw)
+
+    agent = CodingAgent(
+        publish=spy.publish,
+        provider=Capture(),  # type: ignore[arg-type]
+        github=DryRunGitHubClient(),
+        repo=REPO,
+        worktree=worktree,
+        test_command="pytest -q",
+    )
+    out = await agent.run(make_input(worktree))
+    assert out.outcome == "done"
+    retry = calls[2][-1].content  # plan, edit 1, edit 2(재시도)
+    assert "Previous attempt 1 failed" in retry
+    assert "test you wrote" in retry and "expectation" in retry
