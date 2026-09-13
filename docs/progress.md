@@ -65,3 +65,4 @@
 | 2026-09-13T14:01 | P2.5 | Gate | make check pass (238), pre-commit pass, 시도 2/3 | |
 | 2026-09-13T14:01 | P2.5 | 완료 | 보드 done | 2069ef5 |
 | 2026-09-13T14:02 | PC-2 | 결과 | adapter 59 passed, grep 상수 1건, factory Dry → pass | |
+| 2026-09-13T14:12 | PC-2 | 추가 | P0~P2 e2e 통합 테스트 pass (pg+redis), make check 238, pc1 PASS | |

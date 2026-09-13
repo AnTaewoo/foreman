@@ -31,3 +31,19 @@
 
 - 실 GitHub 연결 시 `discussion_comment` 웹훅(Plan Discussion의 `/approve`)을 `issue_comment`와 같은 슬래시 경로에 붙인다.
 - `check_suite`에 task_id를 붙이려면 PR 번호 → Task 조회 훅이 필요하다.
+
+## 추가 점검 (2026-09-13, 사용자 요청: P0~P2를 실체 위에서 한 번에)
+
+`tests/integration/test_p0_p2_flow.py` — 진짜 Postgres + Redis, 네트워크 0:
+
+| 단계 | 확인 |
+|---|---|
+| P0 | `create_app()` + 웹훅 라우터 마운트, `GET /health` 200 |
+| P1 | project/goal/epic/task×2 이벤트 → outbox relay → projection consumer → Task ready(issue_number 반영) |
+| P2 Dry GitHub | ensure_labels, milestone, Issue×2(멱등 재호출 확인), branch×2, PR×2, key 코멘트×2 — `snapshot()`으로 검증 |
+| P2 webhook | 서명된 `/approve` → 슬래시 훅 202 / 앱 봇의 `pull_request.opened` 204(B10) / 사람의 `closed(merged)` 202 → `pr.merged` / 같은 delivery 재전송 200 duplicate |
+| D-30(b) | Task 2는 `pr.merged` 웹훅이 `task.completed`보다 먼저 → `pr_merged_at`만 → completed 후 done |
+| 봉투 | 웹훅 이벤트의 correlation = goal_id(`resolve_goal`), actor = github:alice, projection_error 0 |
+| 체인 | `verify_chain_db` True → TRUNCATE → replay → force apply → Task 2개 done 재구축 |
+
+함께 재실행: `make check` 238 passed, `make test-integration` 4 passed, `scripts/pc1_roundtrip.py` PASS.
