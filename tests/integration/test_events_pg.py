@@ -37,6 +37,7 @@ def _row(i: int, payload: dict[str, Any], prev: str | None) -> tuple[m.Event, st
 # (d) 트리거: 부기 컬럼 외 UPDATE / DELETE 거부
 async def test_events_append_only_trigger(pg_session: AsyncSession) -> None:
     row, _ = _row(0, {"title": "t", "description": "d"}, None)
+    row_id = row.id  # rollback 뒤 만료된 속성을 읽으면 동기 IO(MissingGreenlet)
     pg_session.add(row)
     await pg_session.commit()
 
@@ -48,7 +49,7 @@ async def test_events_append_only_trigger(pg_session: AsyncSession) -> None:
         ("projection_error", "x"),
     ):
         await pg_session.execute(
-            text(f"UPDATE events SET {col} = :v WHERE id = :id"), {"v": val, "id": row.id}
+            text(f"UPDATE events SET {col} = :v WHERE id = :id"), {"v": val, "id": row_id}
         )
         await pg_session.commit()
 
@@ -61,7 +62,7 @@ async def test_events_append_only_trigger(pg_session: AsyncSession) -> None:
         "DELETE FROM events WHERE id = :id",
     ):
         with pytest.raises(DBAPIError, match="append-only"):
-            await pg_session.execute(text(stmt), {"id": row.id})
+            await pg_session.execute(text(stmt), {"id": row_id})
         await pg_session.rollback()
 
     assert (await pg_session.execute(select(m.Event))).scalar_one().signature is not None
@@ -110,9 +111,7 @@ async def test_chain_survives_jsonb_roundtrip(pg_session: AsyncSession) -> None:
 
     # JSONB가 실제로 표기를 바꾸는지 확인 (D-29의 근거): 1e-5는 텍스트로 0.00001이 된다
     raw = (
-        await pg_session.execute(
-            text("SELECT payload::text FROM events ORDER BY seq LIMIT 1")
-        )
+        await pg_session.execute(text("SELECT payload::text FROM events ORDER BY seq LIMIT 1"))
     ).scalar_one()
     assert raw == '{"f": 0.00001}'
     assert '"f":1e-05' in rows[0].canonical_json

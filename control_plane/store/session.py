@@ -20,7 +20,9 @@ def create_engine(settings: Settings) -> AsyncEngine:
     """``database_url``로 AsyncEngine. sqlite ``:memory:``는 연결을 공유해야 테이블이 보인다."""
     url = settings.database_url
     if url.startswith("sqlite") and url.endswith(":memory:"):
-        return create_async_engine(url, poolclass=StaticPool, connect_args={"check_same_thread": False})
+        return create_async_engine(
+            url, poolclass=StaticPool, connect_args={"check_same_thread": False}
+        )
     return create_async_engine(url, pool_pre_ping=True)
 
 

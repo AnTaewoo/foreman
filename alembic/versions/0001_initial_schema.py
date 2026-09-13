@@ -74,7 +74,7 @@ ENUMS: dict[str, list[str]] = {
 
 
 def _enum(name: str) -> sa.types.TypeEngine[str]:
-    """sqlite: CHECK 제약이 붙은 VARCHAR. postgresql: 미리 만든 enum 타입 참조(create_type=False)."""
+    """sqlite: CHECK 제약 VARCHAR. postgresql: 미리 만든 enum 타입 참조(create_type=False)."""
     values = ENUMS[name]
     return sa.Enum(*values, name=name, create_constraint=True).with_variant(
         postgresql.ENUM(*values, name=name, create_type=False), "postgresql"

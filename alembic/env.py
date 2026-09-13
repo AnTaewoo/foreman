@@ -1,4 +1,4 @@
-"""Alembic async env. URL 우선순위: `-x url=` > alembic.ini sqlalchemy.url > Settings().database_url.
+"""Alembic async env. URL 우선순위: `-x url=` > alembic.ini sqlalchemy.url > Settings.database_url.
 
 이미 실행 중인 이벤트 루프 안에서 호출되면(pytest-asyncio 등) 별도 스레드에서 새 루프로 돌린다.
 """

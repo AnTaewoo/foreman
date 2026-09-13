@@ -1,7 +1,7 @@
 """events append-only 트리거 (설계 §4.1 append-only, D-26/D-29)
 
-UPDATE는 부기 컬럼(stream_id, published_at, projected_at, projection_error)만 허용, DELETE 거부.
-TRUNCATE는 행 트리거를 타지 않으므로 테스트/재구축(PC-1)에서 쓸 수 있다. sqlite 등 다른 dialect는 no-op.
+UPDATE는 부기 컬럼(stream_id/published_at/projected_at/projection_error)만, DELETE 거부.
+TRUNCATE는 행 트리거를 타지 않아 테스트/재구축(PC-1)에 쓸 수 있다. 다른 dialect는 no-op.
 
 Revision ID: 0002
 Revises: 0001
