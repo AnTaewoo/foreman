@@ -57,15 +57,33 @@ async def test_entity_roundtrip(session: AsyncSession) -> None:
     session.add(m.Epic(id="E1", goal_id="G1", title="epic", order=1, milestone_number=7))
     session.add(
         m.Task(
-            id="T1", epic_id="E1", project_id="P1", goal_id="G1", title="task", spec="spec",
-            kind=TaskKind.FEATURE, role_required=Role.CODING, depends_on=[], owned_paths=["src/**"],
-            risk_tier=RiskTier.T1, status=TaskStatus.READY, issue_number=12,
+            id="T1",
+            epic_id="E1",
+            project_id="P1",
+            goal_id="G1",
+            title="task",
+            spec="spec",
+            kind=TaskKind.FEATURE,
+            role_required=Role.CODING,
+            depends_on=[],
+            owned_paths=["src/**"],
+            risk_tier=RiskTier.T1,
+            status=TaskStatus.READY,
+            issue_number=12,
         )  # fmt: skip
     )
     session.add(
         m.Run(
-            id="R1", task_id="T1", project_id="P1", agent_id="A1", outcome=RunOutcome.SUCCESS,
-            agent_outcome="done", tokens_in=10, tokens_out=20, cost_usd=0.01, model="claude-opus-5",
+            id="R1",
+            task_id="T1",
+            project_id="P1",
+            agent_id="A1",
+            outcome=RunOutcome.SUCCESS,
+            agent_outcome="done",
+            tokens_in=10,
+            tokens_out=20,
+            cost_usd=0.01,
+            model="claude-opus-5",
         )  # fmt: skip
     )
     await session.commit()
@@ -93,8 +111,15 @@ async def test_task_status_rejects_unknown_string(session: AsyncSession) -> None
     session.add(m.Epic(id="E1", goal_id="G1", title="e", order=1))
     session.add(
         m.Task(
-            id="T1", epic_id="E1", project_id="P1", goal_id="G1", title="t", spec="s",
-            kind=TaskKind.FEATURE, role_required=Role.CODING, risk_tier=RiskTier.T0,
+            id="T1",
+            epic_id="E1",
+            project_id="P1",
+            goal_id="G1",
+            title="t",
+            spec="s",
+            kind=TaskKind.FEATURE,
+            role_required=Role.CODING,
+            risk_tier=RiskTier.T0,
             status="flying",  # type: ignore[arg-type]
         )  # fmt: skip
     )
@@ -109,10 +134,19 @@ async def test_event_rows_ts_utc_and_seq_increase(session: AsyncSession) -> None
     for i in range(3):
         session.add(
             m.Event(
-                id=f"01EV{i}", project_id="P1", ts=naive + timedelta(seconds=i),
-                actor_type="system", actor_id="api", type="goal.created",
-                subject_entity="goal", subject_id="G1", payload={"i": i},
-                canonical_json="{}", correlation_id="G1", causation_id=None, signature=None,
+                id=f"01EV{i}",
+                project_id="P1",
+                ts=naive + timedelta(seconds=i),
+                actor_type="system",
+                actor_id="api",
+                type="goal.created",
+                subject_entity="goal",
+                subject_id="G1",
+                payload={"i": i},
+                canonical_json="{}",
+                correlation_id="G1",
+                causation_id=None,
+                signature=None,
             )  # fmt: skip
         )
         await session.flush()
@@ -131,9 +165,18 @@ async def test_event_id_is_unique(session: AsyncSession) -> None:
     for _ in range(2):
         session.add(
             m.Event(
-                id="01DUP", project_id="P1", ts=datetime.now(UTC), actor_type="system",
-                actor_id="api", type="goal.created", subject_entity="goal", subject_id="G1",
-                payload={}, canonical_json="{}", correlation_id="G1", causation_id=None,
+                id="01DUP",
+                project_id="P1",
+                ts=datetime.now(UTC),
+                actor_type="system",
+                actor_id="api",
+                type="goal.created",
+                subject_entity="goal",
+                subject_id="G1",
+                payload={},
+                canonical_json="{}",
+                correlation_id="G1",
+                causation_id=None,
             )  # fmt: skip
         )
     with pytest.raises(Exception, match="(?i)unique|integrity"):
@@ -144,8 +187,13 @@ async def test_tool_call_row(session: AsyncSession) -> None:
     session.add(_project())
     session.add(
         m.ToolCall(
-            id="01TC", run_id="R1", project_id="P1", tool="fs.read", args_digest="ab" * 32,
-            duration_ms=3, ts=datetime.now(UTC),
+            id="01TC",
+            run_id="R1",
+            project_id="P1",
+            tool="fs.read",
+            args_digest="ab" * 32,
+            duration_ms=3,
+            ts=datetime.now(UTC),
         )  # fmt: skip
     )
     await session.commit()
@@ -155,9 +203,7 @@ async def test_tool_call_row(session: AsyncSession) -> None:
 
 async def test_utc_datetime_rejects_nothing_but_normalizes(session: AsyncSession) -> None:
     session.add(_project())
-    kst = datetime(2026, 9, 13, 12, 0, 0, tzinfo=UTC).astimezone(
-        datetime.now().astimezone().tzinfo
-    )
+    kst = datetime(2026, 9, 13, 12, 0, 0, tzinfo=UTC).astimezone(datetime.now().astimezone().tzinfo)
     session.add(m.Goal(id="G1", project_id="P1", title="g", description="d", created_at=kst))
     await session.commit()
     goal = await session.get(m.Goal, "G1")

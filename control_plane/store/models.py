@@ -1,9 +1,9 @@
-"""SQLAlchemy 모델 (설계 §4.1 + D-29/D-30/D-31). 이 모듈은 갱신 로직을 갖지 않는다 — 갱신은 events/projection.py만.
+"""SQLAlchemy 모델 (설계 §4.1 + D-29/D-30/D-31). 갱신 로직 없음 — 갱신은 events/projection.py만.
 
 - JSON 컬럼은 Postgres에서 JSONB, sqlite에서 JSON.
 - Enum 컬럼은 문자열 값으로 저장하고 ``validate_strings=True``로 Enum 밖 문자열을 거부한다.
-- 모든 datetime은 ``UTCDateTime``: 저장 시 UTC로 정규화, 읽을 때 tz-aware UTC 보장 (D-05, sqlite는 tz를 버린다).
-- ``events``/``tool_calls``의 PK는 append 순번 ``seq``(autoincrement; sqlite는 INTEGER PK에만 붙는다).
+- 모든 datetime은 ``UTCDateTime``: 저장 시 UTC 정규화, 읽을 때 tz-aware UTC 보장 (D-05).
+- ``events``/``tool_calls``의 PK는 append 순번 ``seq`` (sqlite autoincrement는 INTEGER PK만).
   ULID ``id``는 unique. 커서·replay·검증 순서는 ``seq`` (D-29).
 """
 
@@ -242,7 +242,7 @@ class Agent(Base):
 
 
 class Event(Base):
-    """append-only. UPDATE는 부기 컬럼(stream_id, published_at, projected_at, projection_error)만 (P1.3 트리거)."""
+    """append-only. UPDATE는 부기 컬럼(stream_id/published_at/projected_at/projection_error)뿐."""
 
     __tablename__ = "events"
     __table_args__ = (UniqueConstraint("id", name="uq_events_id"),)
@@ -260,7 +260,7 @@ class Event(Base):
     canonical_json: Mapped[str] = mapped_column(Text)  # 서명·검증 대상 (D-29)
     correlation_id: Mapped[str] = mapped_column(String(26), index=True)
     causation_id: Mapped[str | None] = mapped_column(String(26), nullable=True)
-    signature: Mapped[str | None] = mapped_column(String(64), nullable=True)  # 저장 시점에 채움 (D-26)
+    signature: Mapped[str | None] = mapped_column(String(64), nullable=True)  # 저장 시점 (D-26)
     # 부기 컬럼 (append-only 예외)
     stream_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     published_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)

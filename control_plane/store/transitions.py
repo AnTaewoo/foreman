@@ -1,6 +1,6 @@
 """상태 전이 표 — 유일한 정의 지점 (D-08). projection과 API 양쪽이 ``assert_transition``을 호출한다.
 
-설계 §6.1(Task), §6.2(Decision), Goal/Epic은 §4.1 상태값 + ROADMAP P1.2 (e). D-28로 ``assigned`` 실패 경로 추가.
+설계 §6.1(Task), §6.2(Decision), Goal/Epic은 §4.1 + ROADMAP P1.2 (e). D-28: ``assigned`` 실패 경로.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ _G = GoalStatus
 _E = EpicStatus
 _D = DecisionStatus
 
-# §6.1 — "any → cancelled"에서 done/cancelled는 제외 (머지된 것은 취소할 수 없고, 자기 전이는 무의미).
+# §6.1 — "any → cancelled"에서 done/cancelled 제외 (머지된 것은 취소 불가, 자기 전이 무의미).
 TASK_ALLOWED: frozenset[tuple[TaskStatus, TaskStatus]] = frozenset(
     {
         (_T.DRAFT, _T.READY),
@@ -98,7 +98,7 @@ def _table_for(src: StrEnum) -> frozenset[tuple[StrEnum, StrEnum]]:
 def assert_transition[S: StrEnum](
     src: S, dst: S, table: frozenset[tuple[S, S]] | None = None
 ) -> None:
-    """``src → dst``가 허용 전이가 아니면 ``InvalidTransition``. 서로 다른 Enum이면 ``TypeError``."""
+    """허용 전이가 아니면 ``InvalidTransition``. 서로 다른 Enum이면 ``TypeError``."""
     if type(src) is not type(dst):
         raise TypeError(f"mixed enums: {type(src).__name__} vs {type(dst).__name__}")
     allowed = table if table is not None else _table_for(src)

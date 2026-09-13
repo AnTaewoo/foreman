@@ -28,7 +28,7 @@ G = GoalStatus
 E = EpicStatus
 D = DecisionStatus
 
-# 설계 §6.1의 화살표 전부 (D-28 assigned→ready/blocked 포함). "any → cancelled"는 done/cancelled 제외.
+# 설계 §6.1 화살표 전부 (D-28 assigned→ready/blocked 포함). any→cancelled는 done/cancelled 제외.
 TASK_ARROWS: set[tuple[TaskStatus, TaskStatus]] = {
     (T.DRAFT, T.READY),
     (T.READY, T.READY),  # depends_on 미해소 자기 전이
@@ -152,9 +152,19 @@ def test_task_status_values_are_design_6_1() -> None:
         "blocked", "cancelled",
     }  # fmt: skip
     assert {m.value for m in GoalStatus} == {
-        "draft", "planning", "awaiting_plan_approval", "active", "blocked", "done", "cancelled"
+        "draft",
+        "planning",
+        "awaiting_plan_approval",
+        "active",
+        "blocked",
+        "done",
+        "cancelled",
     }
     assert {m.value for m in EpicStatus} == {"pending", "active", "done"}
     assert {m.value for m in DecisionStatus} == {
-        "open", "approved", "rejected", "changes_requested", "expired"
+        "open",
+        "approved",
+        "rejected",
+        "changes_requested",
+        "expired",
     }

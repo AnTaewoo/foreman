@@ -1,4 +1,4 @@
-"""상태·분류 Enum (설계 §4.1, §6). 값은 DB에 문자열로 저장된다. Run/Agent outcome은 schema.py를 미러(D-28)."""
+"""상태·분류 Enum (설계 §4.1, §6). DB에는 문자열 값으로 저장. outcome 값은 schema.py 미러(D-28)."""
 
 from __future__ import annotations
 
