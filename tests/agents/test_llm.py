@@ -1,4 +1,4 @@
-"""P3.1 — agents/llm (red a~g): ModelProvider, Completion, FakeProvider, AnthropicProvider, get_provider."""
+"""P3.1 — agents/llm (red a~g): ModelProvider, Fake/Anthropic provider, get_provider."""
 
 from __future__ import annotations
 

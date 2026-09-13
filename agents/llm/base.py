@@ -1,7 +1,7 @@
 """LLM 추상화 (설계 §1.3-4, §14). Agent 로직은 이 인터페이스만 본다 — provider SDK는 어댑터 안에만.
 
 ``ModelProvider.complete(messages, *, system, schema, model, max_tokens) -> Completion``.
-``schema``(pydantic 모델)를 주면 provider가 구조화 출력을 강제하고 ``Completion.parsed``에 인스턴스를 넣는다.
+``schema``(pydantic 모델)를 주면 구조화 출력을 강제하고 ``Completion.parsed``에 인스턴스를 넣는다.
 """
 
 from __future__ import annotations

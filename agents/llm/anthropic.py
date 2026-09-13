@@ -1,8 +1,8 @@
 """Anthropic 어댑터 — provider SDK를 import하는 유일한 곳 (ruff banned-api, D-23).
 
 SDK 사용법은 claude-api 스킬(2026-09-13)에서 확인:
-- anthropic 1.x는 httpx2 기반. 테스트는 ``DefaultAsyncHttpxClient(transport=httpx2.MockTransport(h))`` 주입 (D-21).
-- 구조화 출력은 ``messages.parse(output_format=Model)`` → ``output_config.format.type == "json_schema"``.
+- anthropic 1.x는 httpx2 기반. 테스트는 ``DefaultAsyncHttpxClient(transport=…)`` 주입 (D-21).
+- 구조화 출력은 ``messages.parse(output_format=Model)`` → ``output_config.format`` json_schema.
   tool_use 강제(``tool_choice: any/tool``)는 최신 모델에서 400이라 쓰지 않는다.
 - Opus 5는 thinking이 기본 adaptive — ``thinking`` 인자는 생략. prefill 없음.
 - ``stop_reason == "refusal"`` → ``ProviderRefusal``.
@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 
 import httpx2
-from anthropic import AsyncAnthropic, DefaultAsyncHttpxClient
+from anthropic import AsyncAnthropic, DefaultAsyncHttpxClient, omit
 from anthropic.types import MessageParam
 from pydantic import BaseModel
 
@@ -61,7 +61,7 @@ class AnthropicProvider:
                 model=use_model,
                 max_tokens=max_tokens,
                 messages=params,
-                **({"system": system} if system is not None else {}),
+                system=system if system is not None else omit,
             )
             if res.stop_reason == "refusal":
                 raise ProviderRefusal(f"{use_model} refused")
@@ -76,7 +76,7 @@ class AnthropicProvider:
             max_tokens=max_tokens,
             messages=params,
             output_format=schema,
-            **({"system": system} if system is not None else {}),
+            system=system if system is not None else omit,
         )
         if parsed_res.stop_reason == "refusal":
             raise ProviderRefusal(f"{use_model} refused")
