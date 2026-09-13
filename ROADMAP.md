@@ -90,13 +90,13 @@
 
 **MVP 1 — Repo → Goal → Orchestrator → Issue → Coding Agent → PR** (설계 §15). "Issue/PR"은 DRY_RUN 로그와 로컬 git으로 검증하고, 실 GitHub 연결은 PC-5 통과 후 **후속 세션**(§8)에서 한다.
 
-완료 = PC-5 pass.
+완료 = **PC-6 pass + PC-5 pass** (D-40: P6 운영 조립이 먼저, PC-5의 Anthropic 판정은 그 뒤).
 
 ## 2. Plan 구조
 
 ```
 P0 스캐폴딩 ─PC-0─► P1 이벤트+Store ─PC-1─► P2 GitHub Adapter(mock) ─PC-2─► P3 Orchestrator ─PC-3─►
-P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후속] 실 GitHub 검증
+P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6 운영 조립 ─PC-6─► PC-5(Anthropic) = MVP 1 (dev) ─► [후속] 실 GitHub 검증
 ```
 
 ## 3. Task 형식
@@ -146,8 +146,9 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 | D-35 | **PC-4 판정은 7B 로컬 모델 기준 "간단한 수준"** (사용자 결정 2026-09-13). `scripts/pc4_run_tasks.py`의 Task 3개는 새 파일 위주에 import 문·기대값·테스트 구성을 spec에 명시한 것으로 바꾸고 3/3 통과로 `pass (조건부)`. 기존 파일을 크게 고치는 Task(UserStore.update/delete)는 7B에서 2/3 편차라 PC-5(Anthropic)에서 판정한다 — 서비스는 Claude API 위에서 움직인다. PC-4에서 발견한 플랫폼 결함 6건(§6 (기록) PC-4)은 모델과 무관하므로 그대로 수정 유지 | PC-4, PC-5 |
 | D-36 | **Dry 자동 머지** (사용자 결정 2026-09-13, 리뷰 A7). `dry_run=true`면 상주 프로세스의 `DryMerger`가 `pr.opened`를 받아 `pr.merged {task_id, pr_number, merged_by: "dry-run"}`(actor `system:dry-merge`, causation=pr.opened)를 발행해 사람 머지를 흉내 낸다. 상태 머신·§6.1·`pick_ready`는 그대로. 실 모드에서는 등록되지 않는다. e2e 스크립트의 자체 자동 머지는 이 컴포넌트로 대체 | P6.3, P5.4 |
 | D-37 | **PR 생성은 control plane** (사용자 결정 2026-09-13, 리뷰 A4). 워커(CodingAgent)는 push → `run.artifact_produced {kind: "branch", ref}` → `task.completed {run_id, branch, summary}`까지만 하고 GitHub 쓰기를 하지 않는다. 상주 프로세스의 `PrOpener`가 `task.completed`를 받아 `open_pr`(draft, §7.3 메타) → `pr.opened {task_id, run_id, pr_number, head, base}` + Issue 요약 코멘트. Dry/실 선택(`get_github_client`)은 control plane에서만. 워커에 토큰을 주지 않는 §12 원칙 유지 | P6.7 |
-| D-38 | **repo 확보는 control plane `RepoCache`** (리뷰 A8). `project.repo`가 존재하는 로컬 경로면 그대로 쓰고, `owner/name`·URL이면 `HITL_REPO_ROOT/<owner>/<name>`에 `git clone`(있으면 `fetch`). Orchestrator 분석 경로와 Scheduler `LaunchSpec.repo_url`이 같은 경로를 쓴다(A3: 프로젝트 행에서 읽음). clone 인증(App 토큰)과 워커 push 토큰은 X.1 | P6.6, P6.1 |
+| D-38 | **repo 확보는 control plane `RepoCache`** (리뷰 A8). `project.repo`가 존재하는 로컬 경로면 그대로 쓰고, `owner/name`·URL이면 `HITL_REPO_ROOT/<owner>/<name>`에 `git clone`(있으면 `fetch`). Orchestrator 분석 경로와 Scheduler `LaunchSpec.repo_url`이 같은 경로를 쓴다(A3: 프로젝트 행에서 읽음). **docker 런처는 `HITL_REPO_ROOT`를 컨테이너에 `-v <root>:<root>`로 마운트**해 워커가 그 경로를 clone·push 대상으로 쓴다 — non-bare clone에 `ai/*` 브랜치 push는 허용되므로 Dry에서 동작한다(`main`은 툴이 거부). 실 GitHub URL clone 인증(App 토큰)과 워커 push 토큰은 X.1 | P6.6, P6.1 |
 | D-39 | **비용 = 토큰 × 설정 단가** (리뷰 C6). `HITL_LLM_PRICE_IN_PER_MTOK` / `HITL_LLM_PRICE_OUT_PER_MTOK`(USD per 1M tokens, 기본 0 → `cost_usd` 0). 코드에 단가표를 박지 않는다(변동·검증 불가). 워커는 `WORKER_LLM_PRICE_IN/OUT`. PC-5 사람 (3)은 토큰 수 + 설정 단가로 판정 | P6.5 |
+| D-40 | **PC-5 판정은 PC-6 이후, Anthropic으로** (검토 2026-09-13). PC-5는 Anthropic 크레딧 부족으로 pending인데 P6는 플랫폼을 돌리기 위한 전제이므로 §0.1의 "PC pass 전 다음 Plan 금지"를 이 한 번 예외로 한다: P6.1은 P5.5에 의존하고, PC-5의 실 LLM 항목·사람 항목은 PC-6 통과 뒤 `HITL_LLM_PROVIDER=anthropic`으로 한 번에 판정한다. MVP 1(dev) 완료 = PC-6 pass + PC-5 pass | P6.1, PC-5, PC-6 |
 | D-33 | **LLM provider 선택** (사용자 결정 2026-09-13, 사용자는 D-29로 불렀으나 D-29는 canonical_json이라 D-33으로 기록). `agents/llm/ollama.py` `OllamaCompatProvider` — OpenAI 호환 엔드포인트(`{base_url}/chat/completions`, json_schema response_format, 코드펜스 관용 파싱, 실패 시 `parsed=None`→drafts 재시도 경로). `Settings.llm_provider ∈ {anthropic, openai_compat, fake}` + `llm_base_url`/`llm_model`/`llm_api_key`. 개발·PC-3 1차 검증은 로컬 Ollama(`qwen2.5-coder:7b`, 비-thinking 모델 — thinking 모델은 content가 빈다), **PC-5 최종 판정만 Anthropic**. Anthropic 크레딧이 채워지면 `.env`의 `HITL_LLM_PROVIDER=anthropic`으로 바꾸기만 하면 된다 | P3.1, PC-3, PC-5 |
 | D-32 | **테스트 Redis는 진짜 Redis** (사용자 결정 2026-09-13). fakeredis 제거. `tests/events/conftest.py`의 `redis` 픽스처가 `FOREMAN_TEST_REDIS_URL`(기본 `redis://localhost:6379/15`, 테스트 전용 DB)에 붙고 테스트마다 FLUSHDB. 연결 불가면 skip이 아니라 **fail** — `make test`는 Redis 컨테이너를 요구한다(`docker compose up -d --wait redis`). Postgres 통합 테스트는 D-17대로 skip 유지 | P1.4 이후 전부 |
 | D-31 | `run.tool_called`는 **감사 체인 밖**: `append_signed`가 이 타입은 `tool_calls` 테이블(id, run_id, project_id, seq, tool, args_digest, duration_ms, ts; 서명·락 없음)에 쓰고 스트림에는 그대로 흘림(Run Viewer·WS). `events`에는 안 들어감. 거부된 호출은 새 타입 `run.tool_denied {tool, reason, args_digest}`로 체인에. 기각 대안: 배치(`run.tools_batch`, 실시간성·타임아웃 유실), 체인 유지(호출당 락, 감사 로그 오염) | P1.1, P1.3, P1.4, P1.5, P4.1 |
@@ -219,14 +220,19 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 | P5.4 | `scripts/e2e_dry_run.py` | P5.2 | done | e3322f6 |
 | P5.5 | `docs/runbook.md` | P5.4 | done | aa90ad5 |
 | **PC-5 = MVP 1 (dev)** | e2e dry-run 완주 + 품질 서명 | P5.3, P5.5 | pending (자동: check/integration/--fake pass, 실 LLM은 Ollama만 → 기준 미달; Anthropic 재실행 + 사람 판정 대기) | 5ad94a7 |
-| P6.1 | `runtime.py` — 상주 control plane(relay+projection+scheduler+retry), 프로젝트별 repo, launcher 설정 | PC-5 | todo | |
+
+### P6 — 운영 조립 + as-built 리뷰 반영 (§7 P6, `docs/review/as-built-2026-09-13.md`)
+
+| ID | 제목 | depends_on | status | commit |
+|---|---|---|---|---|
+| P6.1 | `runtime.py` — 상주 control plane(relay+projection+scheduler+retry), 프로젝트별 repo, launcher 설정 | P5.5 | todo | |
 | P6.2 | `runner.py` — 승인 대기 복원(startup) | P6.1 | todo | |
 | P6.3 | `dry_merge.py` — Dry 자동 머지 (D-36) | P6.1 | todo | |
 | P6.4 | `webhooks.py`·`approvals.py` — discussion_comment + Discussion 번호 매칭 | P6.2 | todo | |
 | P6.5 | `llm/pricing.py` — cost_usd (D-39) | P6.1 | todo | |
 | P6.6 | `repo_cache.py` — repo 확보 (D-38) | P6.1 | todo | |
 | P6.7 | `pr_opener.py` — PR 생성 control plane으로 (D-37) | P6.3, P6.6 | todo | |
-| P6.8 | ROADMAP·runbook 정리 (리뷰 C1~C5) | P6.7 | todo | |
+| P6.8 | ROADMAP·runbook 정리 (리뷰 C1~C5) | P6.4, P6.5, P6.7 | todo | |
 | **PC-6** | 상주 프로세스 + API로 Goal→브랜치→done 완주 | P6.8 | pending | |
 
 ---
@@ -550,16 +556,16 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 
 ---
 
-## 7b. Plan P6 — 운영 조립과 as-built 리뷰 반영 (2026-09-13)
+### P6 — 운영 조립과 as-built 리뷰 반영 (2026-09-13 추가, ## 7의 하위)
 
 근거: 코드 기준 아키텍처 리뷰(`docs/review/as-built-2026-09-13.md`)의 A1~A8, C6. 원칙은 §0 그대로 — Task마다 Red → Green → Gate(`make check`) → `main` 커밋. 설계 결정은 D-36~D-39.
 
 ### P6.1 상주 control plane 프로세스
-- depends_on: PC-5
-- owned_paths: `control_plane/runtime.py`, `control_plane/__main__.py`, `control_plane/scheduler/**`, `control_plane/config.py`, `Makefile`, `tests/runtime/**`, `tests/scheduler/**`, `tests/integration/test_launcher.py`
-- red: (a) `Runtime(settings, factory, redis).start()`가 asyncio Task 4개 — outbox relay 루프, projection 컨슈머(group `projection`), scheduler 컨슈머(group `scheduler`), retry 적용(주기 1s) — 를 띄우고 `stop()`으로 전부 내린다. 테스트는 `project.created → goal.created → epic/task.created`를 outbox에 넣고 `Runtime`만 돌려 Task가 `assigned`까지 가는 것을 본다(스크립트의 pump 없이) (b) **프로젝트별 repo**(리뷰 A3): `Scheduler._spec`이 `repo_url/default_branch`를 생성자 상수가 아니라 `projects` 행(`repo_full_name`→`RepoCache` 경로는 P6.6 전까지 그대로 경로, `default_branch`)에서 읽는다 — 프로젝트 2개를 한 Scheduler로 배정하면 `LaunchSpec.repo_url`이 각자 다르다 (c) `Settings.worker_launcher: Literal["docker","inprocess"]`(기본 `docker`), `worker_image`(기본 `foreman-worker:dev`), `scheduler_max_workers`(기본 4) (d) `InProcessLauncher`: control plane 프로세스 안에서 `CodingAgent`를 asyncio Task로 실행(Dry GitHub, provider는 `get_provider(settings)`), `run.finished`가 Redis로 나온다 — Docker 없는 개발 환경용 (e) `python -m control_plane`이 `build_runtime(settings)`를 띄우고 SIGINT/SIGTERM에 `stop()` (f) 통합(Docker): `DockerCliLauncher.launch(spec)`이 실제 `foreman-worker:test` 컨테이너를 띄우고 그 컨테이너가 `task.started`를 XADD 한다(지금까지 호출자 0이던 경로)
-- green: `runtime.py`(`Runtime`, `build_runtime`), `launcher.py`에 `InProcessLauncher`, `scheduler.py`에 프로젝트 행 조회(세션당 1회 캐시), Makefile `run-control-plane`
-- gate: `make check`
+- depends_on: P5.5 (D-40: PC-5는 PC-6 이후 Anthropic으로 판정)
+- owned_paths: `control_plane/runtime.py`, `control_plane/__main__.py`, `control_plane/scheduler/**`, `control_plane/config.py`, `.env.example`, `Makefile`, `tests/runtime/**`, `tests/scheduler/**`, `tests/integration/test_launcher.py`
+- red: (a) `Runtime(settings, factory, redis).start()`가 asyncio Task 4개 — outbox relay 루프, projection 컨슈머(group `projection`), scheduler 컨슈머(group `scheduler`), retry 적용(주기 1s, `Projection.apply_retries(project_id)`가 프로젝트 단위이므로 `events:*:retry` 키를 SCAN 해 **모든 project**를 순회) — 를 띄우고 `stop()`으로 전부 내린다. 테스트는 `project.created → goal.created → epic/task.created`를 outbox에 넣고 `Runtime`만 돌려 Task가 `assigned`까지 가는 것을 본다(스크립트의 pump 없이) (b) **프로젝트별 repo**(리뷰 A3): `Scheduler._spec`이 `repo_url/default_branch`를 생성자 상수가 아니라 `projects` 행(`repo_full_name`→`RepoCache` 경로는 P6.6 전까지 그대로 경로, `default_branch`)에서 읽는다 — 프로젝트 2개를 한 Scheduler로 배정하면 `LaunchSpec.repo_url`이 각자 다르다 (c) `Settings.worker_launcher: Literal["docker","inprocess"]`(기본 `docker`), `worker_image`(기본 `foreman-worker:dev`), `scheduler_max_workers`(기본 4) (d) `InProcessLauncher`: control plane 프로세스 안에서 `CodingAgent`를 asyncio Task로 실행(Dry GitHub, provider는 `get_provider(settings)`), `run.finished`가 Redis로 나온다 — Docker 없는 개발 환경용 (e) `python -m control_plane`이 `build_runtime(settings)`를 띄우고 SIGINT/SIGTERM에 `stop()` (f) 통합(Docker): `DockerCliLauncher(mounts=[(repo_root, repo_root)])`가 실제 `foreman-worker:test` 컨테이너를 `-v`로 띄우고 그 컨테이너가 마운트된 로컬 repo를 clone해 `task.started`를 XADD 한다(지금까지 호출자 0이던 경로, D-38)
+- green: `runtime.py`(`Runtime`, `build_runtime`), `launcher.py`에 `InProcessLauncher` + `DockerCliLauncher(mounts=)`, `scheduler.py`에 프로젝트 행 조회(세션당 1회 캐시), Makefile `run-control-plane`
+- gate: `make check && make test-integration` (Docker 있으면; 없으면 (f)는 skip 마커로 기록)
 - notes: D-15, D-38(경로는 P6.6에서 RepoCache로). runbook 기동 순서 갱신은 P6.8.
 
 ### P6.2 승인 대기 복원
@@ -573,7 +579,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 ### P6.3 Dry 자동 머지
 - depends_on: P6.1
 - owned_paths: `control_plane/dry_merge.py`, `control_plane/runtime.py`, `scripts/e2e_dry_run.py`, `tests/runtime/test_dry_merge.py`, `tests/test_e2e_script.py`
-- red: (a) `DryMerger(factory, bus, settings).handle(delivery)`: `dry_run=true` + `pr.opened{task_id, pr_number}` → `pr.merged{task_id, pr_number, merged_by:"dry-run"}` 1건(actor `system:dry-merge`, causation=pr.opened id); 같은 PR이 두 번 와도 1건(이미 `tasks.pr_merged_at`이면 no-op) (b) `dry_run=false` → 발행 0 (c) `Runtime`은 dry_run일 때만 group `dry-merge` 컨슈머를 띄운다 (d) `scripts/e2e_dry_run.py`의 자체 자동 머지 코드 삭제 → `DryMerger`를 조립해 사용; `--fake` 전체 흐름 PASS 유지, 출력 `(auto-merge)` 줄은 `(dry-merge)`로
+- red: (a) `DryMerger(factory, bus, settings).handle(delivery)`: `dry_run=true` + `pr.opened{task_id, pr_number}` → `pr.merged{task_id, pr_number, merged_by:"dry-run"}` 1건(actor `system:dry-merge`, causation=pr.opened id); 같은 PR이 두 번 와도 1건 — 프로세스 내 `(project_id, pr_number)` memo **와** `tasks.pr_merged_at` 둘 다 확인(projection 지연 대비; 새어 나가도 projection이 전이 없이 흡수) (b) `dry_run=false` → 발행 0 (c) `Runtime`은 dry_run일 때만 group `dry-merge` 컨슈머를 띄운다 (d) `scripts/e2e_dry_run.py`의 자체 자동 머지 코드 삭제 → `DryMerger`를 조립해 사용; `--fake` 전체 흐름 PASS 유지, 출력 `(auto-merge)` 줄은 `(dry-merge)`로
 - green: `dry_merge.py`
 - gate: `make check`
 - notes: D-36. 의존 Task는 이제 Dry에서도 `done`을 거쳐 배정된다.
@@ -584,11 +590,11 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 - red: (a) `discussion_comment.created` 본문 `/approve` → `SlashCommand(source="discussion", number=<discussion.number>, …)`; `issue_comment`는 `source="issue"`, `number=issue.number`(`issue_number` 필드는 유지) (b) `ApprovalService.on_slash`: `source="discussion"`이면 `plan_discussion_number == number`인 대기 Goal만 매칭(없으면 no-op 202); `issue`는 기존 규칙 (c) 서명·중복·봇·권한(403) 규칙 동일 (d) 픽스처 2개(approve/reject), `sender.type`·`repository.full_name` 형식은 GitHub 문서의 discussion_comment payload
 - green: `SlashCommand`에 `source`, `number` 추가, `_discussion_comment` 핸들러
 - gate: `make check`
-- notes: 리뷰 A5. 실 Discussion 웹훅 구독 설정은 X.1.
+- notes: 리뷰 A5. `discussion_comment` payload는 추측하지 않는다(CLAUDE.md): D-09처럼 docs.github.com 웹훅 이벤트 페이지를 fetch로 확인하고 출처 URL·확인일을 핸들러 docstring과 픽스처 머리에 적는다. 실 Discussion 웹훅 구독 설정은 X.1.
 
 ### P6.5 비용 계산
 - depends_on: P6.1
-- owned_paths: `agents/llm/pricing.py`, `agents/base.py`, `control_plane/config.py`, `worker/entrypoint.py`, `scripts/e2e_dry_run.py`, `scripts/pc4_run_tasks.py`, `tests/agents/test_base.py`, `tests/agents/test_llm.py`, `tests/worker/**`
+- owned_paths: `agents/llm/pricing.py`, `agents/base.py`, `control_plane/config.py`, `.env.example`, `control_plane/runtime.py`(단가를 `DockerCliLauncher(worker_env=)`에 전달), `worker/entrypoint.py`, `scripts/e2e_dry_run.py`, `scripts/pc4_run_tasks.py`, `tests/agents/test_base.py`, `tests/agents/test_llm.py`, `tests/worker/**`, `tests/runtime/**`
 - red: (a) `estimate_cost(tokens_in, tokens_out, price_in_per_mtok, price_out_per_mtok) -> float`(반올림 6자리) (b) `BaseAgent(prices=Prices(0,0))` 기본, `run.finished.cost_usd` = 계산값 (c) 워커 env `WORKER_LLM_PRICE_IN_PER_MTOK/OUT`, Settings `llm_price_in_per_mtok/llm_price_out_per_mtok`(기본 0) → `LaunchSpec.env`에 전달 (d) e2e/pc4 토큰 합계 줄에 `≈ $x.xx`(단가 0이면 `$0.00 (단가 미설정)`)
 - green: `pricing.py`(`Prices`, `estimate_cost`), `BaseAgent` 인자
 - gate: `make check`
@@ -596,7 +602,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 
 ### P6.6 repo 확보
 - depends_on: P6.1
-- owned_paths: `control_plane/repo_cache.py`, `control_plane/orchestrator/runner.py`, `control_plane/scheduler/scheduler.py`, `control_plane/config.py`, `tests/test_repo_cache.py`, `tests/api/test_goal_flow.py`
+- owned_paths: `control_plane/repo_cache.py`, `control_plane/orchestrator/runner.py`, `control_plane/scheduler/scheduler.py`, `control_plane/config.py`, `.env.example`, `tests/test_repo_cache.py`, `tests/api/test_goal_flow.py`
 - red: (a) `RepoCache(root, url_for=).ensure(repo) -> Path`: 존재하는 로컬 경로 → 그 경로, clone 없음 (b) `owner/name` → `root/owner/name`에 `git clone <url_for(repo)>`(기본 `https://github.com/<owner>/<name>.git`; 테스트는 로컬 bare remote를 돌려주는 `url_for`) (c) 이미 있으면 `git fetch` 후 그 경로 (d) `GoalRunner`의 분석 경로(`repo_path_for` 기본값)와 `Scheduler._spec`의 `repo_url`이 둘 다 `RepoCache.ensure`를 쓴다 (e) clone 실패 → `goal.blocked{reason:"repo_unavailable", detail}`, Scheduler는 `task.failed{reason:"launch_failed"}` (f) `Settings.repo_root`(기본 `./repos`)
 - green: `repo_cache.py`
 - gate: `make check`
@@ -605,13 +611,13 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 ### P6.7 PR 생성 control plane으로
 - depends_on: P6.3, P6.6
 - owned_paths: `agents/coding.py`, `agents/base.py`, `control_plane/pr_opener.py`, `control_plane/runtime.py`, `control_plane/events/schema.py`(additive 키만), `control_plane/events/projection.py`, `worker/entrypoint.py`, `scripts/e2e_dry_run.py`, `scripts/pc4_run_tasks.py`, `tests/agents/test_coding.py`, `tests/runtime/test_pr_opener.py`, `tests/worker/**`, `tests/integration/test_worker.py`, `tests/events/test_projection.py`
-- red: (a) `CodingAgent` pass 경로 이벤트: `task.started → run.started → … → run.artifact_produced{kind:"branch", ref:<branch>} → task.completed{run_id, branch, summary} → run.finished`; `pr.opened`·Issue 코멘트 발행 0, `GitHubTool` 호출 0 (b) `PrOpener(factory, bus, github).handle(task.completed)`: `open_pr(head=branch, base=<project.default_branch>, draft, §7.3 메타)` → `pr.opened{task_id, run_id, pr_number, head, base}` + Issue 요약 코멘트(key `summary:<run>`, 본문은 `task.completed.summary`); 같은 `task.completed` 두 번 → PR 1건(client 멱등 + `tasks.pr_number` 확인) (c) `Runtime`이 group `pr-opener` 컨슈머로 등록, client는 `get_github_client(settings)`(Dry/실은 여기서만) (d) projection: `task.completed.branch` → `tasks.branch_name` (e) 워커 통합 테스트: 컨테이너는 push까지, 스트림에 `pr.opened` 없음 (f) e2e/pc4: `would open_pr`가 스크립트 안 Runtime 컴포넌트에서 나온다, 판정 기준(PR ≥ N) 유지
-- green: 스키마 `TaskCompletedPayload.branch/summary: NotRequired`, `RunArtifactProducedPayload{kind, ref}`(신규 TypedDict — 키 추가만), `pr_opener.py`, `coding.py` 그래프에서 `open_pr`·`summarize` 노드 제거(요약 텍스트는 `task.completed.summary`), `agents/tools/github.py`는 남기되 CodingAgent가 쓰지 않음
+- red: (a) `CodingAgent` pass 경로 이벤트: `task.started → run.started → … → run.artifact_produced{kind:"branch", ref:<branch>} → task.completed{run_id, branch, summary} → run.finished`; `summary`는 기존 `summarize` 노드의 LLM 요약 텍스트(호출 수 그대로 3), `pr.opened`·Issue 코멘트 발행 0, `GitHubTool` 호출 0 (b) `PrOpener(factory, bus, github).handle(task.completed)`: `open_pr(head=branch, base=<project.default_branch>, draft, §7.3 메타)` → `pr.opened{task_id, run_id, pr_number, head, base}` + Issue 요약 코멘트(key `summary:<run>`, 본문은 `task.completed.summary`); 같은 `task.completed` 두 번 → PR 1건(client 멱등 + `tasks.pr_number` 확인) (c) `Runtime`이 group `pr-opener` 컨슈머로 등록, client는 `get_github_client(settings)`(Dry/실은 여기서만) (d) projection: `task.completed.branch` → `tasks.branch_name` (e) 워커 통합 테스트: 컨테이너는 push까지, 스트림에 `pr.opened` 없음 (f) e2e/pc4: `would open_pr`가 스크립트 안 Runtime 컴포넌트에서 나온다, 판정 기준(PR ≥ N) 유지
+- green: 스키마 `TaskCompletedPayload.branch/summary: NotRequired`, `RunArtifactProducedPayload{kind, ref}`(신규 TypedDict — 키 추가만), `pr_opener.py`, `coding.py` 그래프에서 `open_pr` 노드 제거, `summarize` 노드는 남겨 LLM 요약 + `task.completed{branch, summary}` 발행만(Issue 코멘트 호출 제거), `agents/tools/github.py`는 남기되 CodingAgent가 쓰지 않음
 - gate: `make check`
 - notes: D-37. 리뷰 A4. 실 PR은 X.1에서 `DRY_RUN=false`만으로 켜진다.
 
 ### P6.8 ROADMAP·runbook 정리
-- depends_on: P6.7
+- depends_on: P6.4, P6.5, P6.7
 - owned_paths: `ROADMAP.md`, `docs/runbook.md`
 - red: 없음(문서)
 - green: (1) §4 D 번호 순 재정렬(C1) (2) P5.1 red (a) 필드를 `{name, repo, default_branch?, members?}`로(C2) (3) P4.3 green·P4.5 (e)에 현재 상태 각주(C3) (4) PC-5 pending과 X.2 Anthropic 대기를 §6 한 행으로(C5) (5) §8 X.1을 남은 항목(App 체크리스트, `.env` 실값, 토큰 전달, Discussion 웹훅 구독, cleanup 스크립트)으로 축소(C4) (6) runbook 기동 순서 `docker-up → migrate → run-control-plane → run-api`, 워커 실행 설명을 `HITL_WORKER_LAUNCHER`로
@@ -620,6 +626,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 ### PC-6 상주 프로세스 + API로 Goal → 브랜치 → done 완주
 - 자동: `make check`, `make test-integration`, `scripts/check_runbook.sh`, `scripts/e2e_dry_run.py --fake`
 - 자동: 두 프로세스(`make run-control-plane`(`HITL_WORKER_LAUNCHER=inprocess`), `make run-api`)를 띄운 뒤 `scripts/pc6_via_api.py <repo_path> "<goal>"`: `POST /projects` → `POST /goals` → `GET /goals/{gid}`가 `awaiting_plan_approval` → 서명된 `discussion_comment` `/approve` → 폴링으로 Task 전부 `done`(Dry 자동 머지) → `GET /events?since=0` 재계산 `verify_chain` True → bare remote 브랜치 수 ≥ Task 수, `pr.opened` 수 == Task 수. 스크립트는 HTTP·git만 쓰고 relay/projection/scheduler/dry-merge/pr-opener를 조립하지 않는다. LLM은 로컬(`qwen2.5-coder:14b`), Goal은 D-35 수준(예: "Add a maths helpers module with add/mul and tests")
+- 소유: `scripts/pc6_via_api.py`, `docs/pc/PC-6.md` (PC-1처럼 PC 항목이 스크립트를 소유)
 - 사람: `git -C <remote> log --all --oneline`, `docs/pc/PC-6.md`
 - pass: 자동 전부
 
