@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -35,8 +36,15 @@ class Settings(BaseSettings):
     github_installation_id: int | None = None
     github_webhook_secret: SecretStr = SecretStr("")
 
+    # --- 로그/아티팩트 저장소 (MinIO, S3 호환) ---
+    minio_endpoint: str = "http://localhost:9000"
+    minio_access_key: str = "minioadmin"
+    minio_secret_key: SecretStr = SecretStr("minioadmin")
+    minio_bucket: str = "hitl-runs"
+
     # --- 로깅 ---
     log_level: str = "INFO"
+    log_format: Literal["json", "console"] = "console"
 
 
 @lru_cache(maxsize=1)
