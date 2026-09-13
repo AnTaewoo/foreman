@@ -1,4 +1,4 @@
-"""P4.5 — Scheduler (red a~i): ready 판정, 위상/사이클, 겹침, 슬롯, launcher, 슬롯 반환, ingest, epic memo, 기동 실패."""
+"""P4.5 — Scheduler (red a~i): ready 판정, 위상/사이클, 겹침, 슬롯, launcher, ingest, epic memo."""
 
 from __future__ import annotations
 
@@ -119,7 +119,7 @@ class Harness:
         return out
 
     async def pump(self) -> list[str]:
-        """relay → projection+scheduler → (배정으로 새 outbox 행이 생기면) 다시 relay … 조용해질 때까지."""
+        """relay → projection+scheduler → 새 outbox 행이 생기면 다시 relay … 조용해질 때까지."""
         seen: list[str] = []
 
         async def both(d: Any) -> None:
@@ -165,7 +165,7 @@ def test_topo_order_and_cycle() -> None:
         topo_order({"A": ["B"], "B": ["A"]})
 
 
-# (a)(e)(h) ready ∧ deps done만 배정, task.assigned 후 launch, 같은 Epic 두 Task → epic.activated 1건
+# (a)(e)(h) ready ∧ deps done만 배정, assigned 후 launch, 같은 Epic 두 Task → epic.activated 1건
 async def test_assigns_ready_tasks_and_launches(
     factory: async_sessionmaker[AsyncSession], redis: Redis
 ) -> None:
@@ -261,7 +261,7 @@ async def test_slots_and_release(factory: async_sessionmaker[AsyncSession], redi
     assert h.scheduler.in_flight == {"T2"}
 
 
-# (i) 기동 실패 → task.failed(launch_failed): task.failed가 트리거라 ready로 돌아온 Task를 다시 배정하고,
+# (i) 기동 실패 → task.failed(launch_failed): 트리거라 ready로 돌아온 Task를 다시 배정하고,
 #     attempt가 max(3)에 닿으면 blocked — 더 이상 배정하지 않는다 (D-28)
 async def test_launch_failure(factory: async_sessionmaker[AsyncSession], redis: Redis) -> None:
     h = Harness(factory, redis, launcher=FakeLauncher(fail=True))
@@ -288,7 +288,7 @@ async def test_launch_failure(factory: async_sessionmaker[AsyncSession], redis: 
         )
 
 
-# (g) ingest: 워커가 XADD한 미서명 이벤트 → append_signed(멱등) + projection 적용; tool_called는 tool_calls로
+# (g) ingest: 워커 미서명 이벤트 → append_signed(멱등) + projection 적용; tool_called는 tool_calls로
 async def test_ingest_worker_events(
     factory: async_sessionmaker[AsyncSession], redis: Redis
 ) -> None:

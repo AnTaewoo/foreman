@@ -1,4 +1,4 @@
-"""워커 기동 (D-15): ``DockerCliLauncher``는 subprocess로 ``docker`` CLI, 테스트는 ``FakeLauncher``."""
+"""워커 기동 (D-15): ``DockerCliLauncher``는 subprocess로 docker CLI, 테스트는 ``FakeLauncher``."""
 
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ class FakeLauncher:
 
 
 class DockerCliLauncher:
-    """``docker run -d --rm -e WORKER_* <image> <task_id>`` → 컨테이너 id. ``docker inspect``로 기동 확인."""
+    """``docker run -d --rm -e WORKER_* <image> <task_id>`` → 컨테이너 id. inspect로 기동 확인."""
 
     def __init__(
         self,
@@ -100,9 +100,16 @@ class DockerCliLauncher:
         for k, v in spec.env(redis_url=self._redis_url, extra=self._worker_env).items():
             env_args += ["-e", f"{k}={v}"]
         container = await self._run(
-            "run", "-d", "--rm", "--name", f"foreman-worker-{spec.run_id.lower()}",
-            *self._extra, *env_args, self._image, spec.task_id,
-        )  # fmt: skip
+            "run",
+            "-d",
+            "--rm",
+            "--name",
+            f"foreman-worker-{spec.run_id.lower()}",
+            *self._extra,
+            *env_args,
+            self._image,
+            spec.task_id,
+        )
         state = json.loads(await self._run("inspect", "--format", "{{json .State}}", container))
         if not state.get("Running") and state.get("ExitCode", 0) not in (0, None):
             raise LaunchError(f"container {container[:12]} exited immediately: {state}")

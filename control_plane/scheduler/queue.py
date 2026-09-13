@@ -33,11 +33,20 @@ class Candidate:
 
 def _candidate(t: m.Task) -> Candidate:
     return Candidate(
-        id=t.id, epic_id=t.epic_id, goal_id=t.goal_id, title=t.title, spec=t.spec,
-        kind=t.kind.value, role_required=t.role_required.value, owned_paths=tuple(t.owned_paths),
-        depends_on=tuple(str(d) for d in t.depends_on), issue_number=t.issue_number,
-        risk_tier=t.risk_tier.value, attempt_count=t.attempt_count, max_attempts=t.max_attempts,
-    )  # fmt: skip
+        id=t.id,
+        epic_id=t.epic_id,
+        goal_id=t.goal_id,
+        title=t.title,
+        spec=t.spec,
+        kind=t.kind.value,
+        role_required=t.role_required.value,
+        owned_paths=tuple(t.owned_paths),
+        depends_on=tuple(str(d) for d in t.depends_on),
+        issue_number=t.issue_number,
+        risk_tier=t.risk_tier.value,
+        attempt_count=t.attempt_count,
+        max_attempts=t.max_attempts,
+    )
 
 
 async def load_project_tasks(session: AsyncSession, project_id: str) -> list[m.Task]:
@@ -57,7 +66,7 @@ def pick_ready(
     in_flight: set[str],
     free_slots: int,
 ) -> list[Candidate]:
-    """배정 후보 (위상 순): status=ready ∧ 의존 전부 done ∧ 실행 중·이번 선택과 owned_paths 비겹침."""
+    """배정 후보 (위상 순): ready ∧ 의존 전부 done ∧ 실행 중·이번 선택과 owned_paths 비겹침."""
     if free_slots <= 0:
         return []
     by_id = {t.id: t for t in tasks}

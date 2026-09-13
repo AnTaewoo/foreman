@@ -1,11 +1,11 @@
-"""Scheduler 루프 (설계 §3.2): 이벤트 구독 → ready 판정 → task.assigned(+epic.activated) → 워커 기동.
+"""Scheduler 루프 (설계 §3.2): 이벤트 구독 → ready 판정 → task.assigned(+epic.activated) → 기동.
 
 - 배정 순서: ``task.assigned`` 발행 → (Epic 첫 배정이면) ``epic.activated`` → ``launcher.launch``.
   기동 실패 → ``task.failed {reason: launch_failed, attempt}`` (D-28: assigned→ready/blocked).
-- read-your-writes (B11): projection이 아직 반영 전이어도 ``in_flight``/``activated_epics`` memo로 중복 배정을 막는다.
+- read-your-writes (B11): projection 반영 전이어도 in_flight/activated_epics memo로 중복 방지.
 - ``run.finished``(또는 ``task.failed``/``task.blocked``)로 슬롯을 돌려받는다.
-- ingest (D-26): 워커가 XADD한 **미서명** 이벤트는 ``chain.append_signed``로 DB에 넣고(event.id 멱등) projection을
-  적용한다. relay가 보낸 서명된 이벤트는 projection consumer가 처리하므로 여기서는 배정 판단에만 쓴다.
+- ingest (D-26): 워커가 XADD한 **미서명** 이벤트는 ``chain.append_signed``로 DB에 넣고(event.id
+  멱등) projection을 적용한다. relay가 보낸 서명된 이벤트는 projection consumer가 처리한다.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from ulid import ULID
 from control_plane.events.bus import Delivery, EventBus
 from control_plane.events.chain import append_signed
 from control_plane.events.projection import Projection
-from control_plane.events.schema import UNCHAINED, Actor, Event, EventType, Subject
+from control_plane.events.schema import UNCHAINED, Actor, EntityType, Event, EventType, Subject
 from control_plane.scheduler.launcher import LaunchError, LaunchSpec, WorkerLauncher
 from control_plane.scheduler.queue import Candidate, load_project_tasks, pick_ready
 from control_plane.store import models as m
@@ -31,10 +31,16 @@ log = structlog.get_logger(__name__)
 SCHEDULER_ACTOR = Actor(type="system", id="scheduler")
 TRIGGERS = frozenset(
     {
-        EventType.TASK_CREATED, EventType.TASK_RETRIED, EventType.TASK_FAILED, EventType.TASK_BLOCKED,
-        EventType.TASK_CANCELLED, EventType.RUN_FINISHED, EventType.PR_MERGED, EventType.GOAL_ACTIVATED,
+        EventType.TASK_CREATED,
+        EventType.TASK_RETRIED,
+        EventType.TASK_FAILED,
+        EventType.TASK_BLOCKED,
+        EventType.TASK_CANCELLED,
+        EventType.RUN_FINISHED,
+        EventType.PR_MERGED,
+        EventType.GOAL_ACTIVATED,
     }
-)  # fmt: skip
+)
 RELEASERS = frozenset(
     {
         EventType.RUN_FINISHED,
@@ -142,8 +148,15 @@ class Scheduler:
             run_id = self._new_run_id()
             self.in_flight.add(cand.id)
             self._run_to_task[run_id] = cand.id
-            prev = await self._publish(project_id, cand, EventType.TASK_ASSIGNED, "task", cand.id,
-                                       {"agent_id": self._agent_id, "run_id": run_id}, None)  # fmt: skip
+            prev = await self._publish(
+                project_id,
+                cand,
+                EventType.TASK_ASSIGNED,
+                "task",
+                cand.id,
+                {"agent_id": self._agent_id, "run_id": run_id},
+                None,
+            )
             epic = epics.get(cand.epic_id)
             if (
                 epic is not None
@@ -163,8 +176,19 @@ class Scheduler:
                 log.error("scheduler.launch_failed", task_id=cand.id, error=str(exc))
                 self.in_flight.discard(cand.id)
                 self._run_to_task.pop(run_id, None)
-                await self._publish(project_id, cand, EventType.TASK_FAILED, "task", cand.id,
-                                    {"run_id": run_id, "reason": "launch_failed", "attempt": cand.attempt_count + 1}, prev)  # fmt: skip
+                await self._publish(
+                    project_id,
+                    cand,
+                    EventType.TASK_FAILED,
+                    "task",
+                    cand.id,
+                    {
+                        "run_id": run_id,
+                        "reason": "launch_failed",
+                        "attempt": cand.attempt_count + 1,
+                    },
+                    prev,
+                )
                 continue
             assigned.append(cand.id)
         if assigned:
@@ -180,33 +204,58 @@ class Scheduler:
         branch = f"ai/{_slugify(epic_title)}/{cand.issue_number or 0}-{_slugify(cand.title)}"
         task_json = {
             "task": {
-                "id": cand.id, "title": cand.title, "spec": cand.spec, "kind": cand.kind,
-                "role_required": cand.role_required, "owned_paths": list(cand.owned_paths),
-                "issue_number": cand.issue_number, "epic_slug": _slugify(epic_title),
-                "risk_tier": cand.risk_tier, "depends_on": list(cand.depends_on),
-                "attempt": cand.attempt_count + 1, "max_attempts": cand.max_attempts,
+                "id": cand.id,
+                "title": cand.title,
+                "spec": cand.spec,
+                "kind": cand.kind,
+                "role_required": cand.role_required,
+                "owned_paths": list(cand.owned_paths),
+                "issue_number": cand.issue_number,
+                "epic_slug": _slugify(epic_title),
+                "risk_tier": cand.risk_tier,
+                "depends_on": list(cand.depends_on),
+                "attempt": cand.attempt_count + 1,
+                "max_attempts": cand.max_attempts,
             },
             "project_context": {
-                "project_id": project_id, "goal_id": cand.goal_id, "repo": self._repo_url,
+                "project_id": project_id,
+                "goal_id": cand.goal_id,
+                "repo": self._repo_url,
                 "default_branch": self._default_branch,
             },
             "run_id": run_id,
             "agent_id": self._agent_id,
-        }  # fmt: skip
+        }
         return LaunchSpec(
-            task_id=cand.id, run_id=run_id, project_id=project_id, goal_id=cand.goal_id, branch=branch,
-            repo_url=self._repo_url, task_json=task_json, timeout_min=self._timeout_min,
-        )  # fmt: skip
+            task_id=cand.id,
+            run_id=run_id,
+            project_id=project_id,
+            goal_id=cand.goal_id,
+            branch=branch,
+            repo_url=self._repo_url,
+            task_json=task_json,
+            timeout_min=self._timeout_min,
+        )
 
     async def _publish(
-        self, project_id: str, cand: Candidate, type_: EventType, entity: str, id_: str,
-        payload: dict[str, object], causation: str | None,
-    ) -> str:  # fmt: skip
+        self,
+        project_id: str,
+        cand: Candidate,
+        type_: EventType,
+        entity: EntityType,
+        id_: str,
+        payload: dict[str, object],
+        causation: str | None,
+    ) -> str:
         event = Event(
-            project_id=project_id, actor=SCHEDULER_ACTOR, type=type_,
-            subject=Subject(entity=entity, id=id_),  # type: ignore[arg-type]
-            payload=payload, correlation_id=cand.goal_id, causation_id=causation,
-        )  # fmt: skip
+            project_id=project_id,
+            actor=SCHEDULER_ACTOR,
+            type=type_,
+            subject=Subject(entity=entity, id=id_),
+            payload=payload,
+            correlation_id=cand.goal_id,
+            causation_id=causation,
+        )
         async with self._factory() as session:
             out = await self._bus.publish(session, event)
             await session.commit()
