@@ -342,7 +342,7 @@ async def main() -> int:
             E.PROJECT_CREATED,
             "project",
             pid,
-            {"name": "pc4", "repo": "local/sample-repo", "default_branch": "main"},
+            {"name": "pc4", "repo": str(remote), "default_branch": "main"},  # D-38: clone 대상
         ),
         ev(E.GOAL_CREATED, "goal", gid, {"title": "Users CRUD + helpers", "description": "PC-4"}),
         ev(E.GOAL_PLAN_PROPOSED, "goal", gid, {"plan_discussion_number": 1, "revision": 1}),

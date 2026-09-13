@@ -139,6 +139,7 @@ class Scheduler:
         async with self._factory() as session:
             tasks = await load_project_tasks(session, project_id)
             candidates = pick_ready(tasks, in_flight=self.in_flight, free_slots=free)
+            project = await session.get(m.Project, project_id) if candidates else None
             epics = (
                 {
                     e.id: e
@@ -179,7 +180,15 @@ class Scheduler:
                     project_id, cand, EventType.EPIC_ACTIVATED, "epic", cand.epic_id, {}, prev
                 )
             spec = self._spec(
-                project_id, cand, run_id, epic.title if epic is not None else cand.epic_id
+                project_id,
+                cand,
+                run_id,
+                epic.title if epic is not None else cand.epic_id,
+                # P6.1 (리뷰 A3): repo/브랜치는 프로젝트 행에서, 생성자 값은 행이 없을 때의 폴백
+                repo_url=project.repo_full_name if project is not None else self._repo_url,
+                default_branch=project.default_branch
+                if project is not None
+                else self._default_branch,
             )
             try:
                 await self._launcher.launch(spec)
@@ -212,7 +221,18 @@ class Scheduler:
             )
         return assigned
 
-    def _spec(self, project_id: str, cand: Candidate, run_id: str, epic_title: str) -> LaunchSpec:
+    def _spec(
+        self,
+        project_id: str,
+        cand: Candidate,
+        run_id: str,
+        epic_title: str,
+        *,
+        repo_url: str | None = None,
+        default_branch: str | None = None,
+    ) -> LaunchSpec:
+        repo_url = repo_url or self._repo_url
+        default_branch = default_branch or self._default_branch
         branch = f"ai/{_slugify(epic_title)}/{cand.issue_number or 0}-{_slugify(cand.title)}"
         task_json = {
             "task": {
@@ -232,8 +252,8 @@ class Scheduler:
             "project_context": {
                 "project_id": project_id,
                 "goal_id": cand.goal_id,
-                "repo": self._repo_url,
-                "default_branch": self._default_branch,
+                "repo": repo_url,
+                "default_branch": default_branch,
             },
             "run_id": run_id,
             "agent_id": self._agent_id,
@@ -244,7 +264,7 @@ class Scheduler:
             project_id=project_id,
             goal_id=cand.goal_id,
             branch=branch,
-            repo_url=self._repo_url,
+            repo_url=repo_url,
             task_json=task_json,
             timeout_min=self._timeout_min,
         )

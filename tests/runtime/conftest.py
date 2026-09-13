@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from tests.events import conftest as _events
-
 from control_plane.events.schema import Actor, EntityType, Event, EventType
+from tests.events import conftest as _events
 
 engine = _events.engine
 factory = _events.factory
@@ -43,12 +42,34 @@ def bootstrap(pid: str, gid: str, repo: str, default_branch: str = "main") -> li
     """project → goal → plan → activated → epic. Task는 호출자가 붙인다."""
     E = EventType
     return [
-        ev(pid, E.PROJECT_CREATED, "project", pid, {"name": pid, "repo": repo, "default_branch": default_branch}),
-        ev(pid, E.GOAL_CREATED, "goal", gid, {"title": "g", "description": "d"}, correlation_id=gid),
-        ev(pid, E.GOAL_PLAN_PROPOSED, "goal", gid, {"plan_discussion_number": 1, "revision": 1}, correlation_id=gid),
+        ev(
+            pid,
+            E.PROJECT_CREATED,
+            "project",
+            pid,
+            {"name": pid, "repo": repo, "default_branch": default_branch},
+        ),
+        ev(
+            pid, E.GOAL_CREATED, "goal", gid, {"title": "g", "description": "d"}, correlation_id=gid
+        ),
+        ev(
+            pid,
+            E.GOAL_PLAN_PROPOSED,
+            "goal",
+            gid,
+            {"plan_discussion_number": 1, "revision": 1},
+            correlation_id=gid,
+        ),
         ev(pid, E.GOAL_ACTIVATED, "goal", gid, {}, correlation_id=gid),
-        ev(pid, E.EPIC_CREATED, "epic", f"{pid}-E1", {"goal_id": gid, "title": "E1", "order": 1, "milestone_number": 1}, correlation_id=gid),
-    ]  # fmt: skip
+        ev(
+            pid,
+            E.EPIC_CREATED,
+            "epic",
+            f"{pid}-E1",
+            {"goal_id": gid, "title": "E1", "order": 1, "milestone_number": 1},
+            correlation_id=gid,
+        ),
+    ]
 
 
 def task_created(pid: str, gid: str, tid: str, owned: list[str], issue: int) -> Event:

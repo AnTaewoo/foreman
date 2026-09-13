@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     minio_secret_key: SecretStr = SecretStr("minioadmin")
     minio_bucket: str = "hitl-runs"
 
+    # --- 상주 control plane (P6.1) ---
+    # docker = DockerCliLauncher(D-15) / inprocess = 이 프로세스 안에서 CodingAgent(개발용)
+    worker_launcher: Literal["docker", "inprocess"] = "docker"
+    worker_image: str = "foreman-worker:dev"
+    scheduler_max_workers: int = 4
+
     # --- 로깅 ---
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "console"

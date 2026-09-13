@@ -199,7 +199,8 @@ async def test_assigns_ready_tasks_and_launches(
         spec.task_json["task"]["owned_paths"] == ["src/a/**"]
         and spec.task_json["run_id"] == spec.run_id
     )
-    assert spec.repo_url == "/tmp/remote.git" and spec.timeout_min == 45
+    # P6.1 (리뷰 A3): repo는 projects 행(BOOTSTRAP의 org/demo)에서, 생성자 값은 폴백
+    assert spec.repo_url == "org/demo" and spec.timeout_min == 45
     # task.assigned가 launch보다 먼저 (이벤트 seq < launch 순서 기록)
     assert h.launcher.order[0] == ("assigned_seen", "T1") or h.launcher.order[0][0] == "launch"
 

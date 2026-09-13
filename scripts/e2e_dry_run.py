@@ -231,6 +231,8 @@ async def run(argv: list[str]) -> Summary:
             if relayed == 0 and consumed == 0:
                 break
 
+    seed_remote(repo_path, remote, workdir)  # 워커 clone 대상 (project.repo)
+
     # ---- 0. Project / Goal 루트 이벤트
     pid, gid = str(ULID()), str(ULID())
     human = Actor(type="human", id="e2e")
@@ -240,7 +242,8 @@ async def run(argv: list[str]) -> Summary:
             actor=human,
             type=EventType.PROJECT_CREATED,
             subject=Subject(entity="project", id=pid),
-            payload={"name": repo_path.name, "repo": str(repo_path), "default_branch": "main"},
+            # D-38/A3: project.repo는 워커 clone·push 대상(bare remote); 분석 경로는 repo_path
+            payload={"name": repo_path.name, "repo": str(remote), "default_branch": "main"},
             correlation_id=pid,
             causation_id=None,
         )
@@ -320,7 +323,6 @@ async def run(argv: list[str]) -> Summary:
         return summary
 
     # ---- 4. Scheduler + 프로세스 내 Coding Agent
-    seed_remote(repo_path, remote, workdir)
     coding_counts: list[Counting] = []
     workers: set[asyncio.Task[None]] = set()
 

@@ -1,4 +1,4 @@
-"""P6.1 — 상주 control plane (red a~e). 스크립트의 pump 없이 Runtime만 돌려 Task가 assigned까지 간다."""
+"""P6.1 — 상주 control plane (red a~e). 스크립트 pump 없이 Runtime만 돌려 Task가 assigned까지."""
 
 from __future__ import annotations
 
@@ -59,32 +59,45 @@ async def test_runtime_assigns_tasks_without_pump(
     launcher = FakeLauncher()
     rt = Runtime(settings_for("sqlite+aiosqlite://"), factory, redis, launcher=launcher)
     await publish_all(
-        factory, redis,
-        [*bootstrap("P1", "G1", "org/demo"), task_created("P1", "G1", "T1", ["a/**"], 1), task_created("P1", "G1", "T2", ["b/**"], 2)],
-    )  # fmt: skip
+        factory,
+        redis,
+        [
+            *bootstrap("P1", "G1", "org/demo"),
+            task_created("P1", "G1", "T1", ["a/**"], 1),
+            task_created("P1", "G1", "T2", ["b/**"], 2),
+        ],
+    )
     await rt.start()
     try:
-        await until(lambda: asyncio.sleep(0, result=len(launcher.specs) >= 2))
-        async with factory() as s:
-            statuses = {t.id: t.status for t in (await s.execute(select(m.Task))).scalars().all()}
-        assert statuses == {"T1": TaskStatus.ASSIGNED, "T2": TaskStatus.ASSIGNED}
+
+        async def all_assigned() -> bool:  # task.assigned도 relay → projection을 거친다
+            async with factory() as s:
+                rows = (await s.execute(select(m.Task))).scalars().all()
+            return len(rows) == 2 and all(t.status is TaskStatus.ASSIGNED for t in rows)
+
+        await until(all_assigned)
         assert {sp.task_id for sp in launcher.specs} == {"T1", "T2"}
     finally:
         await rt.stop()
     assert all(t.done() for t in rt.tasks)  # 백그라운드 Task 전부 종료
 
 
-# (a-2) retry 루프: 모든 project의 :retry 스트림을 순회해 기한 지난 재시도를 적용한다
+# (a-2) retry 루프: 모든 project의 :retry 스트림을 순회해 기한 지난 재시도를 적용
 async def test_runtime_applies_due_retries_for_all_projects(
     factory: async_sessionmaker[AsyncSession], redis: Redis
 ) -> None:
     from control_plane.runtime import Runtime
 
     clock = {"now": datetime.now(UTC)}
+    launcher = FakeLauncher()
     rt = Runtime(
-        settings_for("sqlite+aiosqlite://"), factory, redis, launcher=FakeLauncher(),
-        retry_interval=0.1, clock=lambda: clock["now"],
-    )  # fmt: skip
+        settings_for("sqlite+aiosqlite://"),
+        factory,
+        redis,
+        launcher=launcher,
+        retry_interval=0.1,
+        clock=lambda: clock["now"],
+    )
     events = [*bootstrap("P1", "G1", "org/a"), task_created("P1", "G1", "T1", ["a/**"], 1)]
     # task.completed가 task.assigned/started보다 먼저 온 상황 (ready→in_review 불허 → retry 스트림)
     completed = ev(
@@ -94,9 +107,9 @@ async def test_runtime_applies_due_retries_for_all_projects(
     await rt.start()
     try:
         await until(lambda: redis.exists(retry_stream_key("P1")))  # projection이 retry에 넣었다
-        # 그 사이 워커 흐름: assigned → started (running) → 이제 task.completed 재시도가 통과해야 한다
-        await until(lambda: asyncio.sleep(0, result=len(rt.scheduler_launcher_specs()) >= 1))
-        run_id = rt.scheduler_launcher_specs()[0].run_id
+        # 워커 흐름 assigned → started(running) 뒤에는 task.completed 재시도가 통과해야 한다
+        await until(lambda: asyncio.sleep(0, result=len(launcher.specs) >= 1))
+        run_id = launcher.specs[0].run_id
         await publish_all(
             factory,
             redis,
@@ -132,10 +145,15 @@ async def test_scheduler_reads_repo_per_project(
     launcher = FakeLauncher()
     rt = Runtime(settings_for("sqlite+aiosqlite://"), factory, redis, launcher=launcher)
     await publish_all(
-        factory, redis,
-        [*bootstrap("P1", "G1", "/tmp/repo-one", "main"), task_created("P1", "G1", "T1", ["a/**"], 1),
-         *bootstrap("P2", "G2", "/tmp/repo-two", "develop"), task_created("P2", "G2", "T2", ["a/**"], 1)],
-    )  # fmt: skip
+        factory,
+        redis,
+        [
+            *bootstrap("P1", "G1", "/tmp/repo-one", "main"),
+            task_created("P1", "G1", "T1", ["a/**"], 1),
+            *bootstrap("P2", "G2", "/tmp/repo-two", "develop"),
+            task_created("P2", "G2", "T2", ["a/**"], 1),
+        ],
+    )
     await rt.start()
     try:
         await until(lambda: asyncio.sleep(0, result=len(launcher.specs) >= 2))
@@ -166,7 +184,7 @@ def test_settings_and_launcher_selection(redis: Redis) -> None:
         Settings(_env_file=None, worker_launcher="bogus")  # type: ignore[arg-type]
 
 
-# (d) InProcessLauncher: control plane 프로세스 안에서 CodingAgent 실행 → 브랜치 push + run.finished XADD
+# (d) InProcessLauncher: 이 프로세스 안에서 CodingAgent 실행 → 브랜치 push + run.finished XADD
 async def test_inprocess_launcher_runs_coding_agent(
     factory: async_sessionmaker[AsyncSession], redis: Redis, tmp_path: Path
 ) -> None:
@@ -195,20 +213,44 @@ async def test_inprocess_launcher_runs_coding_agent(
         ["git", "remote", "add", "origin", str(remote)],
         ["git", "push", "-q", "origin", "main"],
     ):
-        subprocess.run(cmd, cwd=seed, check=True, capture_output=True, env=genv)  # fmt: skip
+        subprocess.run(cmd, cwd=seed, check=True, capture_output=True, env=genv)
     script = json.loads((FIXTURES / "coding_scripts" / "pass.json").read_text())
     launcher = InProcessLauncher(
         redis, provider_factory=lambda: FakeProvider(script=script), workdir=tmp_path / "work"
     )
     task_json = {
-        "task": {"id": "T1", "title": "Add users module", "spec": "s", "kind": "feature", "role_required": "coding",
-                 "owned_paths": ["src/app/**", "tests/**"], "issue_number": 12, "epic_slug": "users-api",
-                 "risk_tier": "T1", "attempt": 1, "max_attempts": 3},
-        "project_context": {"project_id": "P1", "goal_id": "G1", "repo": str(remote), "default_branch": "main"},
-        "run_id": "01RUN", "agent_id": "coding-1",
-    }  # fmt: skip
-    spec = LaunchSpec(task_id="T1", run_id="01RUN", project_id="P1", goal_id="G1",
-                      branch="ai/users-api/12-add-users-module", repo_url=str(remote), task_json=task_json, timeout_min=5)  # fmt: skip
+        "task": {
+            "id": "T1",
+            "title": "Add users module",
+            "spec": "s",
+            "kind": "feature",
+            "role_required": "coding",
+            "owned_paths": ["src/app/**", "tests/**"],
+            "issue_number": 12,
+            "epic_slug": "users-api",
+            "risk_tier": "T1",
+            "attempt": 1,
+            "max_attempts": 3,
+        },
+        "project_context": {
+            "project_id": "P1",
+            "goal_id": "G1",
+            "repo": str(remote),
+            "default_branch": "main",
+        },
+        "run_id": "01RUN",
+        "agent_id": "coding-1",
+    }
+    spec = LaunchSpec(
+        task_id="T1",
+        run_id="01RUN",
+        project_id="P1",
+        goal_id="G1",
+        branch="ai/users-api/12-add-users-module",
+        repo_url=str(remote),
+        task_json=task_json,
+        timeout_min=5,
+    )
     worker_id = await launcher.launch(spec)
     assert worker_id.startswith("inprocess-")
     await launcher.wait_idle()

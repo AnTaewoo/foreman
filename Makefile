@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test test-integration check run-api run-worker migrate docker-up docker-down
+.PHONY: install lint typecheck test test-integration check run-api run-control-plane run-worker migrate docker-up docker-down
 
 UV ?= uv
 COMPOSE ?= docker compose
@@ -24,6 +24,9 @@ check: lint typecheck test
 
 run-api:
 	$(UV) run uvicorn control_plane.api.app:app --factory --host 0.0.0.0 --port $${API_PORT:-8000} --reload
+
+run-control-plane:
+	$(UV) run python -m control_plane
 
 run-worker:
 	$(UV) run python -m worker
