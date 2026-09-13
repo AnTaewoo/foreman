@@ -176,3 +176,7 @@
 | 2026-09-13T20:45 | P6.5 | Green | pricing.py, BaseAgent(prices), WORKER_LLM_PRICE_*, HITL_LLM_PRICE_*, 427 passed | abadc51 |
 | 2026-09-13T20:46 | P6.5 | Gate | make check pass (427), pc4 --fake PASS, 시도 2/3 | |
 | 2026-09-13T20:46 | P6.5 | 완료 | 보드 done | abadc51 |
+| 2026-09-13T20:50 | P6.6 | Red | test_repo_cache 5 + goal_flow 1 + scheduler 1 | 6c2c175 |
+| 2026-09-13T21:10 | P6.6 | Green | repo_cache.py, Settings.repo_root, runner/scheduler/runtime/app 배선, 434 passed | d70a254 |
+| 2026-09-13T21:12 | P6.6 | Gate | make check pass (434), mypy clean, 시도 3/3 | |
+| 2026-09-13T21:12 | P6.6 | 완료 | 보드 done | d70a254 |
