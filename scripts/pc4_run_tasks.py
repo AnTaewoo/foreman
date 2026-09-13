@@ -114,7 +114,7 @@ HARD_TASKS: list[dict[str, Any]] = [
             "`UserStore.update(user_id: int, name: str) -> User | None` and "
             "`UserStore.delete(user_id: int) -> bool`. Add `tests/test_models.py` covering both "
             "(update existing, update missing returns None, delete existing True, "
-# --tasks hard: PC-4 1차의 원래 Task(기존 파일 수정 포함). 7B는 실행마다 2/3, 큰 모델 비교용
+            # --tasks hard: PC-4 1차의 원래 Task(기존 파일 수정 포함). 7B는 실행마다 2/3, 큰 모델 비교용
         ),
         "owned_paths": ["src/app/models.py", "tests/test_models.py"],
         "depends_on": [],
