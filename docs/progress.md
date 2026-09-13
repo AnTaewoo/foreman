@@ -155,3 +155,8 @@
 | 2026-09-13T18:20 | PC-5 | 자동 | make check pass (401), test-integration 5 passed, e2e --fake PASS | |
 | 2026-09-13T18:30 | PC-5 | 자동 | 실 LLM(Ollama 7B) e2e FAIL — Task 8, 브랜치 1, PR 0 (Task 1 3회 실패, 나머지 의존 대기) | |
 | 2026-09-13T18:32 | PC-5 | 판정 | pending — docs/pc/PC-5.md, docs/postmortem/mvp1.md; Anthropic 재실행·사람 (1)~(3) 대기 | 5ad94a7 |
+| 2026-09-13T19:10 | P6.1 | 착수 | runtime.py, __main__, InProcessLauncher, mounts, settings | |
+| 2026-09-13T19:15 | P6.1 | Red | tests/runtime 6 + integration test_launcher, ModuleNotFoundError control_plane.runtime | 4787e91 |
+| 2026-09-13T19:40 | P6.1 | Green | Runtime 체인 컨슈머, per-project repo, launchers, 412 passed | 8309e7e |
+| 2026-09-13T19:45 | P6.1 | Gate | make check pass (412) && test-integration 6 passed (docker launcher 실제 기동), 시도 3/3 | |
+| 2026-09-13T19:45 | P6.1 | 완료 | 보드 done | 8309e7e |
