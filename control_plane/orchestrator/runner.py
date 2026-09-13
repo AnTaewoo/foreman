@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from agents.llm.base import ModelProvider
 from control_plane.events.bus import EventBus
-from control_plane.events.schema import Event
+from control_plane.events.schema import Actor, Event, EventType, Subject
 from control_plane.orchestrator import emit as emit_mod
 from control_plane.orchestrator.graph import (
     DiscussionsLike,
@@ -35,6 +35,7 @@ from control_plane.orchestrator.graph import (
     open_postgres_checkpointer,
 )
 from control_plane.orchestrator.state import OrchestratorState, initial_state
+from control_plane.repo_cache import RepoUnavailable
 from control_plane.store import models as m
 from control_plane.store.session import get_session
 from github_adapter.protocol import GitHubClient
@@ -199,6 +200,21 @@ class GoalRunner:
             )
             out = await self.graph().ainvoke(state, self._cfg(goal_id))
             self._after_invoke(project_id, goal_id, out)
+        except RepoUnavailable as exc:
+            # §6.1에 draft→blocked가 없으므로 Goal을 종료(cancelled)하고 사유를 남긴다 (P6.6 기록)
+            log.error("runner.repo_unavailable", goal_id=goal_id, error=str(exc))
+            self.errors[goal_id] = f"repo_unavailable: {exc.detail}"
+            await self.publish(
+                Event(
+                    project_id=project_id,
+                    actor=Actor(type="system", id="orchestrator"),
+                    type=EventType.GOAL_CANCELLED,
+                    subject=Subject(entity="goal", id=goal_id),
+                    payload={"reason": f"repo_unavailable: {exc.detail}", "by": "system"},
+                    correlation_id=goal_id,
+                    causation_id=None,
+                )
+            )
         except Exception as exc:
             log.error("runner.failed", goal_id=goal_id, error=repr(exc))
             self.errors[goal_id] = repr(exc)

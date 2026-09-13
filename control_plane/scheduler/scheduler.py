@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 
 import structlog
 from sqlalchemy import select
@@ -72,6 +73,7 @@ class Scheduler:
         timeout_min: int = 45,
         agent_id: str = "coding-1",
         run_id_factory: Callable[[], str] = lambda: str(ULID()),
+        repo_resolver: Callable[[str], str] | None = None,
     ) -> None:
         self._factory = session_factory
         self._bus = bus
@@ -83,6 +85,9 @@ class Scheduler:
         self._timeout_min = timeout_min
         self._agent_id = agent_id
         self._new_run_id = run_id_factory
+        self._repo_resolver = (
+            repo_resolver  # D-38: project.repo → 로컬 경로(RepoCache). None이면 그대로
+        )
         self.in_flight: set[str] = set()  # task_id
         self.activated_epics: set[str] = set()
         self._run_to_task: dict[str, str] = {}
@@ -179,18 +184,24 @@ class Scheduler:
                 prev = await self._publish(
                     project_id, cand, EventType.EPIC_ACTIVATED, "epic", cand.epic_id, {}, prev
                 )
+            # P6.1 (리뷰 A3): repo/브랜치는 프로젝트 행에서, 생성자 값은 행이 없을 때의 폴백
+            repo_name = project.repo_full_name if project is not None else self._repo_url
             spec = self._spec(
                 project_id,
                 cand,
                 run_id,
                 epic.title if epic is not None else cand.epic_id,
-                # P6.1 (리뷰 A3): repo/브랜치는 프로젝트 행에서, 생성자 값은 행이 없을 때의 폴백
-                repo_url=project.repo_full_name if project is not None else self._repo_url,
+                repo_url=repo_name,
                 default_branch=project.default_branch
                 if project is not None
                 else self._default_branch,
             )
             try:
+                if self._repo_resolver is not None:  # D-38: clone 대상은 로컬 경로
+                    try:
+                        spec = replace(spec, repo_url=self._repo_resolver(repo_name))
+                    except Exception as exc:
+                        raise LaunchError(f"repo unavailable: {exc}") from exc
                 await self._launcher.launch(spec)
             except LaunchError as exc:
                 log.error("scheduler.launch_failed", task_id=cand.id, error=str(exc))

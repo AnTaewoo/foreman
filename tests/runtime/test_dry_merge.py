@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 
 from redis.asyncio import Redis
 from sqlalchemy import select
@@ -103,7 +104,7 @@ async def test_dry_merger_disabled_in_real_mode(
 
 # (c) Runtime: dry_run이면 체인에 DryMerger가 붙고, in_review Task가 done까지 간다 → 의존 Task 배정
 async def test_runtime_dry_merge_unblocks_dependents(
-    factory: async_sessionmaker[AsyncSession], redis: Redis
+    factory: async_sessionmaker[AsyncSession], redis: Redis, tmp_path: Path
 ) -> None:
     from control_plane.dry_merge import DryMerger
     from control_plane.runtime import Runtime
@@ -123,7 +124,7 @@ async def test_runtime_dry_merge_unblocks_dependents(
     await publish_all(
         factory,
         redis,
-        [*bootstrap("P1", "G1", "/r"), task_created("P1", "G1", "T1", ["a/**"], 1), t2],
+        [*bootstrap("P1", "G1", str(tmp_path)), task_created("P1", "G1", "T1", ["a/**"], 1), t2],
     )
     await rt.start()
     try:

@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     worker_launcher: Literal["docker", "inprocess"] = "docker"
     worker_image: str = "foreman-worker:dev"
     scheduler_max_workers: int = 4
+    repo_root: str = (
+        "./repos"  # D-38: owner/name → repo_root/<owner>/<name> clone (docker 런처는 마운트)
+    )
 
     # --- 로깅 ---
     log_level: str = "INFO"

@@ -27,6 +27,7 @@ from control_plane.dry_merge import DryMerger
 from control_plane.events.bus import RETRY_SUFFIX, STREAM_PREFIX, Delivery, EventBus
 from control_plane.events.outbox import OutboxRelay
 from control_plane.events.projection import Projection
+from control_plane.repo_cache import RepoCache
 from control_plane.scheduler.launcher import DockerCliLauncher, InProcessLauncher, WorkerLauncher
 from control_plane.scheduler.scheduler import Scheduler
 from control_plane.store import session as sess
@@ -66,11 +67,12 @@ def build_launcher(
     settings: Settings, redis: Redis, *, mounts: list[tuple[str, str]] | None = None
 ) -> WorkerLauncher:
     if settings.worker_launcher == "docker":
+        root = str(Path(settings.repo_root).resolve())
         return DockerCliLauncher(
             image=settings.worker_image,
             redis_url=host_url(settings.redis_url),
             worker_env=worker_llm_env(settings),
-            mounts=mounts or [],
+            mounts=mounts if mounts is not None else [(root, root)],  # D-38: repo_root 마운트
         )
     from agents.llm import get_provider
 
@@ -100,6 +102,7 @@ class Runtime:
         self.factory = factory
         self.redis = redis
         self.launcher = launcher or build_launcher(settings, redis)
+        self.repo_cache = RepoCache(Path(settings.repo_root))  # D-38
         self.bus = EventBus(redis)
         self.relay = OutboxRelay(factory, redis)
         self.projection = Projection(factory, self.bus)
@@ -109,6 +112,7 @@ class Runtime:
             self.launcher,
             projection=self.projection,
             max_workers=settings.scheduler_max_workers,
+            repo_resolver=lambda repo: str(self.repo_cache.ensure(repo)),
         )
         self.handlers: list[Handler] = [self.projection.handle, self.scheduler.handle]
         self.dry_merger: DryMerger | None = None

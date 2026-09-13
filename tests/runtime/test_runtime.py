@@ -52,7 +52,7 @@ def settings_for(engine_url: str, **kw: Any) -> Settings:
 
 # (a) Runtime.start() 하나로 relay → projection → scheduler → launch. stop()으로 전부 내린다.
 async def test_runtime_assigns_tasks_without_pump(
-    factory: async_sessionmaker[AsyncSession], redis: Redis
+    factory: async_sessionmaker[AsyncSession], redis: Redis, tmp_path: Path
 ) -> None:
     from control_plane.runtime import Runtime
 
@@ -62,7 +62,7 @@ async def test_runtime_assigns_tasks_without_pump(
         factory,
         redis,
         [
-            *bootstrap("P1", "G1", "org/demo"),
+            *bootstrap("P1", "G1", str(tmp_path)),
             task_created("P1", "G1", "T1", ["a/**"], 1),
             task_created("P1", "G1", "T2", ["b/**"], 2),
         ],
@@ -84,7 +84,7 @@ async def test_runtime_assigns_tasks_without_pump(
 
 # (a-2) retry 루프: 모든 project의 :retry 스트림을 순회해 기한 지난 재시도를 적용
 async def test_runtime_applies_due_retries_for_all_projects(
-    factory: async_sessionmaker[AsyncSession], redis: Redis
+    factory: async_sessionmaker[AsyncSession], redis: Redis, tmp_path: Path
 ) -> None:
     from control_plane.runtime import Runtime
 
@@ -98,7 +98,7 @@ async def test_runtime_applies_due_retries_for_all_projects(
         retry_interval=0.1,
         clock=lambda: clock["now"],
     )
-    events = [*bootstrap("P1", "G1", "org/a"), task_created("P1", "G1", "T1", ["a/**"], 1)]
+    events = [*bootstrap("P1", "G1", str(tmp_path)), task_created("P1", "G1", "T1", ["a/**"], 1)]
     # task.completed가 task.assigned/started보다 먼저 온 상황 (ready→in_review 불허 → retry 스트림)
     completed = ev(
         "P1", EventType.TASK_COMPLETED, "task", "T1", {"run_id": "R1"}, correlation_id="G1"
@@ -138,19 +138,22 @@ async def test_runtime_applies_due_retries_for_all_projects(
 
 # (b) 프로젝트별 repo/default_branch는 projects 행에서 (리뷰 A3)
 async def test_scheduler_reads_repo_per_project(
-    factory: async_sessionmaker[AsyncSession], redis: Redis
+    factory: async_sessionmaker[AsyncSession], redis: Redis, tmp_path: Path
 ) -> None:
     from control_plane.runtime import Runtime
 
     launcher = FakeLauncher()
     rt = Runtime(settings_for("sqlite+aiosqlite://"), factory, redis, launcher=launcher)
+    one, two = tmp_path / "repo-one", tmp_path / "repo-two"
+    one.mkdir()
+    two.mkdir()
     await publish_all(
         factory,
         redis,
         [
-            *bootstrap("P1", "G1", "/tmp/repo-one", "main"),
+            *bootstrap("P1", "G1", str(one), "main"),
             task_created("P1", "G1", "T1", ["a/**"], 1),
-            *bootstrap("P2", "G2", "/tmp/repo-two", "develop"),
+            *bootstrap("P2", "G2", str(two), "develop"),
             task_created("P2", "G2", "T2", ["a/**"], 1),
         ],
     )
@@ -160,7 +163,9 @@ async def test_scheduler_reads_repo_per_project(
     finally:
         await rt.stop()
     by_task = {sp.task_id: sp for sp in launcher.specs}
-    assert by_task["T1"].repo_url == "/tmp/repo-one" and by_task["T2"].repo_url == "/tmp/repo-two"
+    assert by_task["T1"].repo_url == str(one.resolve()) and by_task["T2"].repo_url == str(
+        two.resolve()
+    )
     assert by_task["T1"].task_json["project_context"]["default_branch"] == "main"
     assert by_task["T2"].task_json["project_context"]["default_branch"] == "develop"
 

@@ -1,4 +1,4 @@
-"""P6.6 — RepoCache (D-38, red a~c, f): 로컬 경로는 그대로, owner/name은 root/owner/name에 clone·fetch."""
+"""P6.6 — RepoCache (D-38, red a~c, f): 로컬 경로는 그대로, owner/name은 root/owner/name에 clone."""
 
 from __future__ import annotations
 

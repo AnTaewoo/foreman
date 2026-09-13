@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from redis.asyncio import Redis
@@ -74,6 +75,7 @@ async def _close(state: AppState) -> None:
 def build_runner(settings: Settings, state: AppState) -> GoalRunner:
     """설정으로 실 실행기: provider(D-33), GitHub(DRY_RUN이면 Dry). 체크포인터는 startup."""
     from agents.llm import get_provider
+    from control_plane.repo_cache import RepoCache
     from github_adapter import get_discussions_client, get_github_client
 
     return GoalRunner(
@@ -83,6 +85,7 @@ def build_runner(settings: Settings, state: AppState) -> GoalRunner:
         github=get_github_client(settings),
         discussions=get_discussions_client(settings),
         model=settings.llm_model if settings.llm_provider != "anthropic" else None,
+        repo_path_for=RepoCache(Path(settings.repo_root)).ensure,  # D-38
     )
 
 
