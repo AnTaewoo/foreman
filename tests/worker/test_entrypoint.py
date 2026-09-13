@@ -68,7 +68,16 @@ def env_for(
 
 
 def read_events(path: Path) -> list[dict[str, Any]]:
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    """JSON-lines → 이벤트 dict(canonical 복원 + signature)."""
+    out: list[dict[str, Any]] = []
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        rec = json.loads(line)
+        event = json.loads(rec["canonical"])
+        event["signature"] = rec["signature"] or None
+        out.append(event)
+    return out
 
 
 # (a) 설정은 환경변수뿐 — 필수 누락 시 exit 64

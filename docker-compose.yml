@@ -48,6 +48,21 @@ services:
       timeout: 3s
       retries: 10
 
+  # Coding Agent 워커 이미지 (빌드만; 실행은 Scheduler의 DockerCliLauncher가 `docker run`)
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    image: foreman-worker:dev
+    profiles: ["worker"]
+    environment:
+      WORKER_TIMEOUT_MIN: "45"
+      WORKER_LLM_PROVIDER: "${WORKER_LLM_PROVIDER:-openai_compat}"
+      WORKER_LLM_BASE_URL: "${WORKER_LLM_BASE_URL:-http://host.docker.internal:11434/v1}"
+      WORKER_LLM_MODEL: "${WORKER_LLM_MODEL:-qwen2.5-coder:7b}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   postgres_data:
   redis_data:
