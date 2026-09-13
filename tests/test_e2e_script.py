@@ -1,4 +1,4 @@
-"""P5.4 — e2e dry-run 스크립트 (red a~c). ``--fake``면 LLM은 FakeProvider, GitHub은 Dry, remote는 tmp bare.
+"""P5.4 — e2e dry-run 스크립트 (red a~c). ``--fake``면 LLM은 Fake, GitHub은 Dry, remote는 tmp bare.
 
 스크립트는 패키지가 아니라서 파일 경로로 import 한다. 진짜 Redis(DB 14)가 필요하다(D-32).
 """
@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ def e2e() -> Any:
     )
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
+    sys.modules["e2e_dry_run"] = mod  # dataclass 주석(PEP 563) 해석에 필요
     spec.loader.exec_module(mod)
     return mod
 
