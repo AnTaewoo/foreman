@@ -46,3 +46,4 @@
 | 2026-09-13T13:49 | P2.1 | 완료 | 보드 done | 187bc62 |
 | 2026-09-13T13:49 | P2.2 | 착수 | client/protocol/markers | |
 | 2026-09-13T13:50 | P2.2 | Red | test_client 18, ImportError markers/client/protocol | |
+| 2026-09-13T13:51 | P2.2 | Green | protocol/markers/client 7 메서드 멱등, 204 passed | |
