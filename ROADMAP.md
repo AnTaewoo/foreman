@@ -162,7 +162,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 | ID | 제목 | depends_on | status | commit |
 |---|---|---|---|---|
 | P1.1 | `events/schema.py` — Event, EventType(§4.2 + D-19), 해시 체인 | PC-0 | done | b490bfa |
-| P1.2 | `store/models.py` + `store/enums.py` + `store/transitions.py` | PC-0 | todo | |
+| P1.2 | `store/models.py` + `store/enums.py` + `store/transitions.py` | PC-0 | running | |
 | P1.3 | Alembic 초기 마이그레이션 + pg append-only 트리거 + `store/session.py` | P1.2 | todo | |
 | P1.4 | `events/bus.py` + `events/outbox.py` — publish(outbox) / subscribe / replay | P1.1, P1.3 | todo | |
 | P1.5 | `events/projection.py` — 유일한 DB 갱신 지점 | P1.4 | todo | |
