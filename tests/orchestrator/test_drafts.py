@@ -69,6 +69,9 @@ def test_plan_draft_markdown() -> None:
     for section in PLAN_SECTIONS:
         assert f"### {section}" in md
     assert "- [ ] AC-1 GET /users returns list" in md
+    dup = plan.model_copy(update={"acceptance_criteria": ["AC-1: already prefixed", "ac2) other"]})
+    dup_md = dup.to_markdown(goal_title="g", goal_number=1)
+    assert "- [ ] AC-1 already prefixed" in dup_md and "- [ ] AC-2 other" in dup_md
     assert "1. Users API — Tasks: 3, est. risk: T1" in md
     assert missing_plan_sections(md) == []
     assert missing_plan_sections("## Plan\n### Understanding\nx") == list(PLAN_SECTIONS[1:])

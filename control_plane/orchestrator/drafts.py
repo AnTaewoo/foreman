@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
@@ -69,7 +70,10 @@ class PlanDraft(BaseModel):
             f"### {PLAN_SECTIONS[0]}",
             self.understanding.strip(),
             f"### {PLAN_SECTIONS[1]}",
-            *[f"- [ ] AC-{i} {ac}" for i, ac in enumerate(self.acceptance_criteria, start=1)],
+            *[
+                f"- [ ] AC-{i} {_strip_ac_prefix(ac)}"
+                for i, ac in enumerate(self.acceptance_criteria, start=1)
+            ],
             f"### {PLAN_SECTIONS[2]}",
         ]
         for i, epic in enumerate(sorted(self.epics, key=lambda e: e.order), start=1):
@@ -86,6 +90,14 @@ class PlanDraft(BaseModel):
             self.budget_estimate.strip() or "(not estimated)",
         ]
         return "\n".join(lines)
+
+
+_AC_PREFIX = re.compile(r"^\s*AC-?\d+\s*[:.)-]?\s*", re.IGNORECASE)
+
+
+def _strip_ac_prefix(text: str) -> str:
+    """모델이 'AC-1: …'처럼 접두를 이미 붙였으면 떼고 렌더링한다 (PC-3에서 발견)."""
+    return _AC_PREFIX.sub("", text.strip(), count=1)
 
 
 def missing_plan_sections(markdown: str) -> list[str]:

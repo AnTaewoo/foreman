@@ -134,7 +134,11 @@ async def main() -> int:
         mode = "fake"
     else:
         base = get_provider(settings)
-        mode = f"anthropic:{settings.anthropic_model}"
+        mode = (
+            f"anthropic:{settings.anthropic_model}"
+            if settings.llm_provider == "anthropic"
+            else f"{settings.llm_provider}:{settings.llm_model}@{settings.llm_base_url}"
+        )
     provider = CountingProvider(base)
     github = DryRunGitHubClient()
     discussions = DryRunDiscussionsClient()
