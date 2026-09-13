@@ -36,3 +36,5 @@
 | 2026-09-13T13:27 | P1.5 | 착수 | projection.py 44 핸들러 + D-30 + guard | |
 | 2026-09-13T13:29 | P1.5 | Red | test_projection 12 + guard 2, ImportError events.projection | |
 | 2026-09-13T13:31 | P1.5 | Green | projection.py 44 핸들러 + D-30 handle/apply_retries + schema NotRequired 수정, 178 passed | |
+| 2026-09-13T13:32 | P1.5 | Gate | make check pass (178), pre-commit pass, 시도 3/3 (E501 19건→1→0) | |
+| 2026-09-13T13:32 | P1.5 | 완료 | 보드 done | c32ff1f |

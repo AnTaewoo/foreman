@@ -166,7 +166,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 | P1.2 | `store/models.py` + `store/enums.py` + `store/transitions.py` | PC-0 | done | b1979cd |
 | P1.3 | Alembic 초기 마이그레이션 + pg append-only 트리거 + `store/session.py` | P1.2 | done | 02c7dc4 |
 | P1.4 | `events/bus.py` + `events/outbox.py` — publish(outbox) / subscribe / replay | P1.1, P1.3 | done | 4c244bd |
-| P1.5 | `events/projection.py` — 유일한 DB 갱신 지점 | P1.4 | running | |
+| P1.5 | `events/projection.py` — 유일한 DB 갱신 지점 | P1.4 | done | c32ff1f |
 | **PC-1** | 이벤트 한 바퀴 + 스키마 동결 | P1.5 | pending | |
 
 ### P2 — GitHub Adapter, mock only (`docs/prompts.md` P2)
@@ -219,6 +219,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 
 | 일시 | Task | 사유 | 옵션 / 필요한 조치 |
 |---|---|---|---|
+| 2026-09-13 | (기록) P1.5 | scope_expand + 구현 조정 | scope_expand: `control_plane/events/schema.py`·`tests/events/test_schema.py` — `required_payload_keys`가 PEP 563(문자열 어노테이션) 아래에서 `NotRequired`를 못 보던 버그 수정 + 회귀 테스트(스키마 필드 변경 없음). 조정: (1) 엔티티 미존재(선행 이벤트 미도착)는 `OrderingError`로 `InvalidTransition`과 같은 retry 경로 (2) `run.tool_called` projection은 `tool_calls` 행 수 재계산(멱등) (3) `epic.created`/`task.created`/`run.started`는 force replay를 위해 upsert |
 | 2026-09-13 | (기록) P1.4 | scope_expand + 구현 조정 | scope_expand: `pyproject.toml`(fakeredis 제거)·`uv.lock` — 사용자 결정 D-32. 조정: (1) sqlite 경로 락은 루프별 `WeakKeyDictionary` + 세션 재진입 통과 + commit/rollback 훅 해제 (2) `run.tool_called`는 publish가 outbox 없이 바로 XADD(D-31, 감사 대상 아님) (3) `subscribe`는 `poll_once` 반복, XAUTOCLAIM attempt는 XPENDING `times_delivered` |
 | 2026-09-13 | (기록) P1.2 | 구현 조정 2건 | (1) `any→cancelled`에서 `done`/`cancelled` 출발은 제외(머지된 Task 취소 불가, 자기 전이 무의미) — Goal도 동일 (2) `events.seq`/`tool_calls.seq`는 unique 컬럼이 아니라 **PK**(sqlite autoincrement는 INTEGER PK만). ULID `id`는 unique. D-29 취지 유지 |
 | 2026-09-13 | (기록) P1.1 전 | 스키마 동결 전 점검에서 확정한 구현 메모 (D-25~D-31 외) | A4 publish·ingest 모두 `append_signed` 경유(락 포함) / A7 §4.2 표의 행은 그룹, 프리픽스가 도메인 / B4 `task.retried`→blocked→ready 매핑(MVP 1 발행자 없음) / B5 `goal.activated`는 resume 직후 / B6 plan_proposed는 awaiting에서도(revision) / B7 `pr.closed`는 noop, in_review 탈출은 MVP 2 / B10 웹훅 sender가 앱 봇이면 무시(P2.4) / B11 Scheduler read-your-writes memo / C 값 집합: actor.id 규약, subject.pr id=PR 번호, 엔티티 id는 발행자 ULID, `append_signed`가 payload 필수 키 검사 |
