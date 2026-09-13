@@ -69,3 +69,6 @@
 | 2026-09-13T14:13 | P3.1 | 착수 | agents/llm ModelProvider/Fake/Anthropic/get_provider | |
 | 2026-09-13T14:13 | P3.1 | Red | test_llm 12 + conftest, ModuleNotFoundError agents.llm.fake | |
 | 2026-09-13T14:14 | P3.1 | Green | agents/llm base/fake/anthropic/get_provider, 250 passed | |
+| 2026-09-13T14:16 | P3.1 | Gate | make check pass (250), pre-commit pass, 시도 3/3 (E501·mypy omit) | |
+| 2026-09-13T14:16 | P3.1 | 완료 | 보드 done | 4815b4a |
+| 2026-09-13T14:16 | P3.2 | 착수 | context.py RepoSummary + sample_repo | |
