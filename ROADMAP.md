@@ -542,7 +542,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 | ID | 내용 | 비고 |
 |---|---|---|
 | X.1 | **실 GitHub 연결** — GitHub App 체크리스트, `.env` 실값, `sample_repo`를 테스트 repo에 push, `HITL_DRY_RUN=false`로 Goal 1개, `scripts/cleanup_repo.py`, `discussion_comment` 웹훅 매핑 추가 | 설계 §15 MVP 1 DoD의 진짜 판정 |
-| X.2 | 프롬프트 튜닝 (Task 크기 30분~2시간) | **진행 중** (2026-09-13, 9fd63de). 원칙(사용자): 프롬프트를 개별로 손대지 않고 세트 단위로 바꾸고 Goal 입력부터 브랜치까지 e2e로만 판정. 기록 `docs/pc/X-2.md` |
+| X.2 | 프롬프트 튜닝 (Task 크기 30분~2시간) | **1차 완료 — 로컬 판정** (2026-09-13, f6a3458). 원칙(사용자): 프롬프트를 개별로 손대지 않고 세트 단위로 바꾸고 Goal 입력부터 브랜치까지 e2e로만 판정. 14b 4회: 분해 개선, 코딩은 '전역 store import' 한 종류 실패 반복 → Anthropic 판정 대기. 기록 `docs/pc/X-2.md` |
 | X.3 | 설계 변경 절차 예: `awaiting_rebase` | `docs/design.md` diff 먼저 |
 | X.4 | MVP 2 진입 — CLAUDE.md "현재 단계" 갱신, Review Agent부터 | 이 파일에 P6~ 추가 |
 
