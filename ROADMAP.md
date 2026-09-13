@@ -229,7 +229,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P6.2 | `runner.py` — 승인 대기 복원(startup) | P6.1 | done | 725422e |
 | P6.3 | `dry_merge.py` — Dry 자동 머지 (D-36) | P6.1 | done | c6c9e88 |
 | P6.4 | `webhooks.py`·`approvals.py` — discussion_comment + Discussion 번호 매칭 | P6.2 | done | bb757c8 |
-| P6.5 | `llm/pricing.py` — cost_usd (D-39) | P6.1 | todo | |
+| P6.5 | `llm/pricing.py` — cost_usd (D-39) | P6.1 | done | abadc51 |
 | P6.6 | `repo_cache.py` — repo 확보 (D-38) | P6.1 | todo | |
 | P6.7 | `pr_opener.py` — PR 생성 control plane으로 (D-37) | P6.3, P6.6 | todo | |
 | P6.8 | ROADMAP·runbook 정리 (리뷰 C1~C5) | P6.4, P6.5, P6.7 | todo | |

@@ -172,3 +172,7 @@
 | 2026-09-13T20:28 | P6.4 | Green | _discussion_comment 핸들러(문서 확인), SlashCommand.source/number, 매칭 규칙, 423 passed | bb757c8 |
 | 2026-09-13T20:29 | P6.4 | Gate | make check pass (423), 시도 2/3 | |
 | 2026-09-13T20:29 | P6.4 | 완료 | 보드 done | bb757c8 |
+| 2026-09-13T20:35 | P6.5 | Red | pricing/base/worker/runtime/e2e 5건 | 0d45171 |
+| 2026-09-13T20:45 | P6.5 | Green | pricing.py, BaseAgent(prices), WORKER_LLM_PRICE_*, HITL_LLM_PRICE_*, 427 passed | abadc51 |
+| 2026-09-13T20:46 | P6.5 | Gate | make check pass (427), pc4 --fake PASS, 시도 2/3 | |
+| 2026-09-13T20:46 | P6.5 | 완료 | 보드 done | abadc51 |
