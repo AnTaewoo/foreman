@@ -144,3 +144,8 @@
 | 2026-09-13T17:42 | P5.3 | Green | 연결당 group($)+replay(seq)+dedupe, 399 passed | 5681505 |
 | 2026-09-13T17:43 | P5.3 | Gate | make check pass (399), mypy clean, 시도 3/3 | |
 | 2026-09-13T17:43 | P5.3 | 완료 | 보드 done | 5681505 |
+| 2026-09-13T17:50 | P5.4 | 착수 | scripts/e2e_dry_run.py | |
+| 2026-09-13T17:52 | P5.4 | Red | test_e2e_script 2건, FileNotFoundError | b227e4b |
+| 2026-09-13T18:05 | P5.4 | Green | e2e 스크립트(자동 머지 포함), 401 passed | e3322f6 |
+| 2026-09-13T18:06 | P5.4 | Gate | make check pass (401) && e2e --fake PASS (8 calls), 시도 3/3 | |
+| 2026-09-13T18:06 | P5.4 | 완료 | 보드 done | e3322f6 |
