@@ -91,11 +91,19 @@ def approve_body(repo_full_name: str, number: int, author: str) -> bytes:
     return json.dumps(payload).encode()
 
 
+def stuck(d: dict[str, Any]) -> bool:
+    """움직일 Task 없음: 실행·배정·리뷰 0, 남은 ready는 blocked 선행 때문에 대기(§9.2 미구현)."""
+    t = d.get("tasks") or {}
+    active = sum(t.get(s, 0) for s in ("running", "assigned", "in_review", "awaiting_decision"))
+    return d.get("total", 0) >= 1 and active == 0 and t.get("blocked", 0) > 0
+
+
 async def wait_for(
     client: httpx.AsyncClient, url: str, pred: Any, timeout: float, label: str
 ) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
     last = ""
+    stuck_since: float | None = None
     while True:
         r = await client.get(url)
         if r.status_code == 404 and time.monotonic() < deadline:  # projection 지연(§17 3)
@@ -109,6 +117,13 @@ async def wait_for(
             last = line
         if pred(data):
             return dict(data)
+        if label == "tasks" and stuck(data):  # blocked 선행 때문에 멈춘 상태가 60초 지속되면 종료
+            stuck_since = stuck_since or time.monotonic()
+            if time.monotonic() - stuck_since > 60:
+                print("  !! stuck: blocked Task의 후속이 영원히 대기 (사람 개입/task.retried 필요)")
+                return dict(data)
+        else:
+            stuck_since = None
         if time.monotonic() > deadline:
             raise TimeoutError(f"{label}: {data}")
         await asyncio.sleep(2)

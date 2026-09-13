@@ -233,7 +233,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P6.6 | `repo_cache.py` — repo 확보 (D-38) | P6.1 | done | d70a254 |
 | P6.7 | `pr_opener.py` — PR 생성 control plane으로 (D-37) | P6.3, P6.6 | done | d5b1b10 |
 | P6.8 | ROADMAP·runbook 정리 (리뷰 C1~C5) | P6.4, P6.5, P6.7 | done | 5f98754 |
-| **PC-6** | 상주 프로세스 + API로 Goal→브랜치→done 완주 | P6.8 | pending | |
+| **PC-6** | 상주 프로세스 + API로 Goal→브랜치→done 완주 | P6.8 | pending — 파이프라인 항목 전부 pass(5차), 'Task 전부 done'은 7B 한계로 미달 → 사용자 판정. 발견 3건 수정(§6 (기록) PC-6) | aa89d2f |
 
 ---
 
