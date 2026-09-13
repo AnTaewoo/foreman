@@ -1,12 +1,13 @@
-"""이벤트 스키마 (설계 §4.1 Event, §4.2). PC-1 이후 **추가만** 가능 — 필드·이름 삭제/변경 금지.
+"""이벤트 스키마 (설계 §4.1 Event, §4.2). PC-1 이후 **추가만** — 필드·이름 삭제/변경 금지.
 
 봉투 규약 (D-25, D-26, D-29):
-- ``correlation_id`` 필수. Goal 스코프 이벤트는 goal_id, Goal 밖(project/policy/budget/agent/control)은 project_id.
-- ``causation_id``는 직전 원인 이벤트 id. 루트 이벤트(사람·API 명령이 원인)는 ``None``. 필드 누락은 오류.
-- ``signature``는 발행자가 아니라 **저장 시점**에 ``events/chain.py``가 채운다. 발행자는 ``None``으로 만든다.
-  서명 대상은 ``canonical_json()`` 텍스트이며, 체인 순서는 DB append 순번(``seq``)이다.
-- payload 값은 JSON 원시형(str/int/float/bool/None/list/dict)만. NaN/Infinity/Decimal/datetime 금지 —
-  JSONB 왕복 후에도 canonical 텍스트가 안정적이어야 한다.
+- ``correlation_id`` 필수. Goal 스코프면 goal_id, Goal 밖(project/policy/budget/agent/control)은
+  project_id.
+- ``causation_id``는 직전 원인 이벤트 id. 루트(사람·API 명령이 원인)는 ``None``. 필드 누락은 오류.
+- ``signature``는 발행자가 아니라 **저장 시점**에 ``events/chain.py``가 채운다. 발행자는 ``None``.
+  서명 대상은 ``canonical_json()`` 텍스트, 체인 순서는 DB append 순번(``seq``).
+- payload 값은 JSON 원시형(str/int/float/bool/None/list/dict)만. NaN/Infinity/Decimal/datetime
+  금지 — JSONB 왕복 후에도 canonical 텍스트가 안정적이어야 한다.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from ulid import ULID
 
 
 class EventType(StrEnum):
-    """``<domain>.<name>``. 설계 §4.2 표 + D-19 + D-27 + D-31 = 44개. 표의 행은 그룹, 프리픽스가 도메인."""
+    """``<domain>.<name>``. 설계 §4.2 + D-19/D-27/D-31 = 44개. 표의 행은 그룹, 프리픽스가 도메인."""
 
     # goal
     GOAL_CREATED = "goal.created"
@@ -95,7 +96,7 @@ UNCHAINED: frozenset[EventType] = frozenset({EventType.RUN_TOOL_CALLED})
 ActorType = Literal["agent", "human", "system", "github"]
 EntityType = Literal["project", "goal", "epic", "task", "run", "decision", "pr", "agent", "policy"]
 
-# Run.outcome (설계 §4.1) / AgentOutput.outcome (§5.1) — D-28. store/enums.py(P1.2)가 이 값을 미러한다.
+# Run.outcome (설계 §4.1) / AgentOutput.outcome (§5.1) — D-28. store/enums.py(P1.2)가 미러한다.
 RUN_OUTCOMES: tuple[str, ...] = ("success", "failed", "timeout", "cancelled", "escalated")
 AGENT_OUTCOMES: tuple[str, ...] = ("done", "needs_decision", "blocked", "failed", "timeout")
 RunOutcomeValue = Literal["success", "failed", "timeout", "cancelled", "escalated"]
@@ -105,7 +106,7 @@ AgentOutcomeValue = Literal["done", "needs_decision", "blocked", "failed", "time
 
 
 class Actor(BaseModel):
-    """누가 일으켰나. id 규약: agent=agent_id, human=platform user id, system=컴포넌트명, github=login."""
+    """누가 일으켰나. id: agent=agent_id, human=user id, system=컴포넌트명, github=login."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -122,29 +123,25 @@ class Subject(BaseModel):
     id: str
 
 
-_JSON_SCALARS = (str, int, float, bool, type(None))
-
-
 def _check_json_value(value: object, path: str) -> None:
-    """JSON 원시형만 허용. bool은 int의 서브클래스지만 type() 비교라 별도 처리 불필요."""
-    t = type(value)
-    if t is float:
-        if not math.isfinite(value):  # type: ignore[arg-type]  # t is float 확인됨
+    """JSON 원시형만 허용. bool은 int의 서브클래스라 isinstance(int)에 걸리지만 그것도 허용 대상."""
+    if value is None or isinstance(value, str | bool | int):
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
             raise ValueError(f"payload{path}: non-finite float not allowed")
         return
-    if t in _JSON_SCALARS:
-        return
-    if t is list:
-        for i, item in enumerate(value):  # type: ignore[attr-defined]  # t is list 확인됨
+    if isinstance(value, list):
+        for i, item in enumerate(value):
             _check_json_value(item, f"{path}[{i}]")
         return
-    if t is dict:
-        for k, item in value.items():  # type: ignore[attr-defined]  # t is dict 확인됨
-            if type(k) is not str:
+    if isinstance(value, dict):
+        for k, item in value.items():
+            if not isinstance(k, str):
                 raise ValueError(f"payload{path}: non-str key {k!r}")
             _check_json_value(item, f"{path}.{k}")
         return
-    raise ValueError(f"payload{path}: {t.__name__} is not a JSON value")
+    raise ValueError(f"payload{path}: {type(value).__name__} is not a JSON value")
 
 
 def _new_ulid() -> str:
@@ -186,13 +183,15 @@ class Event(BaseModel):
         return v
 
 
-# --------------------------------------------------------------------------- canonical / sign / verify
+# ------------------------------------------------------------ canonical / sign / verify
 
 
 def canonical_json(event: Event) -> str:
     """서명 대상 텍스트. 키 정렬, 공백 없음, 비ASCII 유지, ``signature`` 제외, NaN 금지."""
     body = event.model_dump(mode="json", exclude={"signature"})
-    return json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+    return json.dumps(
+        body, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    )
 
 
 def sign(prev_signature: str | None, canonical: str) -> str:
@@ -219,7 +218,7 @@ def verify_chain(events: Sequence[Event]) -> bool:
 
 
 # --------------------------------------------------------------------------- payload 형태 (D-04)
-# TypedDict는 문서화 + append 시 필수 키 검사에만 쓴다. 값 타입은 강제하지 않는다 (동결 후 강타입화는 "추가").
+# TypedDict는 문서화 + append 시 필수 키 검사에만. 값 타입은 강제하지 않는다(강타입화는 "추가").
 
 
 class ProjectCreatedPayload(TypedDict):
@@ -275,7 +274,7 @@ class TaskCompletedPayload(TypedDict):
 
 
 class TaskFailedPayload(TypedDict):
-    run_id: str | None  # 기동 실패도 run_id를 가진다(Scheduler가 발급) — 없을 때만 None
+    run_id: str | None  # 기동 실패도 run_id가 있다(Scheduler 발급). 없을 때만 None
     reason: str  # launch_failed | scope_violation | tests_failed | timeout | ...
     attempt: int
     files: NotRequired[list[str]]
@@ -319,7 +318,7 @@ class PrOpenedPayload(TypedDict):
     url: NotRequired[str]
 
 
-PAYLOAD_TYPES: dict[EventType, type] = {
+PAYLOAD_TYPES: dict[EventType, type[Any]] = {  # Any: TypedDict 클래스들
     EventType.PROJECT_CREATED: ProjectCreatedPayload,
     EventType.GOAL_CREATED: GoalCreatedPayload,
     EventType.GOAL_PLAN_PROPOSED: GoalPlanProposedPayload,

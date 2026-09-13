@@ -1,4 +1,4 @@
-"""P1.1 — 이벤트 스키마: EventType 44개, 봉투, canonical/sign/verify, PAYLOAD_TYPES (ROADMAP §7 P1.1 red)."""
+"""P1.1 — 이벤트 스키마: EventType 44, 봉투, canonical/sign/verify, PAYLOAD_TYPES (P1.1 red)."""
 
 from __future__ import annotations
 
