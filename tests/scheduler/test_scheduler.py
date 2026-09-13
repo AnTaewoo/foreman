@@ -409,7 +409,7 @@ async def test_repo_resolver_and_failure(
     )  # 워커 표시용 이름은 원본
 
 
-# PC-6 발견: ingest가 적용하는 워커 이벤트가 순서 역전(task.assigned 미반영)이면 예외가 아니라 D-30 재시도 큐로
+# PC-6 발견: ingest의 워커 이벤트가 순서 역전(task.assigned 미반영)이면 예외 대신 D-30 재시도 큐
 async def test_ingest_out_of_order_goes_to_retry_queue(
     factory: async_sessionmaker[AsyncSession], redis: Redis
 ) -> None:

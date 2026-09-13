@@ -414,6 +414,20 @@ class Projection:
             await session.commit()
             return True
 
+    async def apply_or_retry(self, event: Event, attempt: int = 1) -> bool:
+        """``apply`` + D-30 분기 — 순서 역전은 예외가 아니라 retry 스트림으로 (ingest용, PC-6).
+
+        반환: 적용 True / 재시도 큐·이미 적용 False. DB·네트워크 예외는 그대로 전파.
+        """
+        try:
+            return await self.apply(event)
+        except (InvalidTransition, OrderingError) as exc:
+            await self._schedule_or_give_up(event, attempt, str(exc))
+            return False
+        except UnhandledEvent as exc:
+            await self._record_error(event, str(exc))
+            return False
+
     async def handle(self, delivery: Delivery) -> None:
         """consumer group 핸들러 (D-30 분기). 정상 반환 = ack.
 

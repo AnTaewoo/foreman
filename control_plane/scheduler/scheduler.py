@@ -112,11 +112,13 @@ class Scheduler:
                 )
             else:
                 exists = await session.scalar(select(m.Event.id).where(m.Event.id == event.id))
+            signed = event
             if exists is None:
-                await append_signed(session, event)
+                signed = await append_signed(session, event)
                 await session.commit()
         if self._projection is not None:
-            await self._projection.apply(event)
+            # PC-6: task.assigned가 아직 projection 전이면 순서 역전 → 예외 대신 D-30 재시도 큐
+            await self._projection.apply_or_retry(signed)
 
     def _release(self, event: Event) -> None:
         """슬롯 반환. 재배정 뒤에 도착한 **이전 run**의 종료 이벤트는 무시한다 (PC-4 기록)."""

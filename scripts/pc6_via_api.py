@@ -129,6 +129,7 @@ async def verify_chain(project_id: str) -> bool:
 
 
 async def main() -> int:
+    sys.stdout.reconfigure(line_buffering=True)  # 로그 파일로 보낼 때도 진행이 바로 보이게
     ap = argparse.ArgumentParser()
     ap.add_argument("repo_path")
     ap.add_argument("goal")
