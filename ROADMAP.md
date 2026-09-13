@@ -185,8 +185,8 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 | ID | 제목 | depends_on | status | commit |
 |---|---|---|---|---|
 | P3.1 | `agents/llm/` — ModelProvider, Anthropic 어댑터, FakeProvider | PC-2 | done | 4815b4a |
-| P3.2 | `orchestrator/context.py` — RepoSummary (로컬 경로) + `sample_repo` 픽스처 | PC-2 | running | |
-| P3.3 | `orchestrator/prompts/*.md` + `drafts.py` (TaskDraft, 검증·재시도) | P3.1 | todo | |
+| P3.2 | `orchestrator/context.py` — RepoSummary (로컬 경로) + `sample_repo` 픽스처 | PC-2 | done | 034f9ff |
+| P3.3 | `orchestrator/prompts/*.md` + `drafts.py` (TaskDraft, 검증·재시도) | P3.1 | running | |
 | P3.4 | `orchestrator/graph.py` + `state.py` — 5노드 그래프, interrupt, 체크포인터 | P3.2, P3.3 | todo | |
 | P3.5 | `orchestrator/emit.py` — 위상 정렬, 사이클, owned_paths 직렬화, Issue(dry) 생성 | P3.4 | todo | |
 | **PC-3** | Fake로 그래프 완주 + 실 LLM dry-run 눈검사 | P3.5 | pending | |
