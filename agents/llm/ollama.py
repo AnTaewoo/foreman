@@ -8,28 +8,15 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable, Sequence
 from typing import Any
 
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from agents.llm.base import DEFAULT_MAX_TOKENS, Completion, Message, ProviderError
+from agents.llm.base import DEFAULT_MAX_TOKENS, Completion, Message, ProviderError, extract_json
 
 TransportHandler = Callable[[httpx.Request], httpx.Response]
-_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
-
-
-def extract_json(text: str) -> str:
-    """코드펜스 안, 없으면 첫 '{'부터 마지막 '}'까지."""
-    m = _FENCE_RE.search(text)
-    if m:
-        return m.group(1).strip()
-    start, end = text.find("{"), text.rfind("}")
-    if start != -1 and end > start:
-        return text[start : end + 1]
-    return text.strip()
 
 
 class OllamaCompatProvider:

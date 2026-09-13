@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from typing import Literal, Protocol, runtime_checkable
 
@@ -62,3 +63,17 @@ class ModelProvider(Protocol):
 def estimate_tokens(text: str) -> int:
     """대략 4자 = 1토큰. 컨텍스트 예산 계산용 (§5.3), 정확도는 필요 없다."""
     return len(text) // 4
+
+
+_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL)
+
+
+def extract_json(text: str) -> str:
+    """코드펜스 안, 없으면 첫 '{'부터 마지막 '}'까지 (작은 모델의 JSON 응답 정리)."""
+    m = _FENCE_RE.search(text)
+    if m:
+        return m.group(1).strip()
+    start, end = text.find("{"), text.rfind("}")
+    if start != -1 and end > start:
+        return text[start : end + 1]
+    return text.strip()

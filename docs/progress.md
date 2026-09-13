@@ -121,3 +121,7 @@
 | 2026-09-13T16:03 | P4.5 | Green | scheduler graph/launcher/queue/scheduler + ingest, projection unsigned skip, 378 passed | |
 | 2026-09-13T16:04 | P4.5 | Gate | make check pass (378), pre-commit pass, 시도 3/3 | |
 | 2026-09-13T16:04 | P4.5 | 완료 | 보드 done | 2ad0f2e |
+| 2026-09-13T16:10 | PC-4 | 착수 | scripts/pc4_run_tasks.py — Ollama 실 코드 생성(D-34), --fake는 스모크 | |
+| 2026-09-13T16:14 | PC-4 | 자동 | make check pass (378), test-integration 5 passed, --fake PASS; Ollama 1차 0/3 (pycache 커밋, API 환각, 파일 전체 재작성 손상) | c728123 |
+| 2026-09-13T16:20 | PC-4 | 자동 | Ollama 2차: Scheduler 중복 배정 버그 발견 → 수정 | 1f1c460 |
+| 2026-09-13T16:27 | PC-4 | 자동 | Ollama 3차 2/3; Task 1(기존 파일 수정)은 JSON 안 코드 손상 → 파일 블록 형식으로 변경 → 단독 1회차 통과 | |

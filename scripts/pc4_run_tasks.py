@@ -4,7 +4,7 @@ D-34: 기본은 실 LLM(Settings.llm_provider), Fake 스크립트는 --fake 옵�
 
     uv run python scripts/pc4_run_tasks.py [--fake] [--remote DIR]
 
-sqlite(임시 파일) + 진짜 Redis(HITL_REDIS_URL, DB 15). GitHub은 Dry.
+sqlite(임시 파일) + 진짜 Redis(HITL_REDIS_URL, DB 14 — 테스트의 DB 15와 분리). GitHub은 Dry.
 워커는 FakeLauncher.on_launch에서
 프로세스 내로 실행되며 이벤트는 실제 워커처럼 Redis XADD(미서명) → Scheduler.ingest → projection.
 판정: 브랜치 ≥3 push, would open_pr ≥3, pr.opened ≥3, verify_chain_db True. 종료 코드 0 = PASS.
@@ -128,14 +128,25 @@ def seed_remote(remote: Path) -> None:
 
 
 class Counting:
-    def __init__(self, inner: ModelProvider) -> None:
+    def __init__(self, inner: ModelProvider, dump: Path | None = None) -> None:
         self.inner, self.calls, self.tin, self.tout = inner, 0, 0, 0
+        self.dump = dump
 
     async def complete(self, messages: Any, **kw: Any) -> Completion:
         c = await self.inner.complete(messages, **kw)
         self.calls += 1
         self.tin += c.tokens_in
         self.tout += c.tokens_out
+        if self.dump is not None:
+            with self.dump.open("a", encoding="utf-8") as fh:
+                rec = {
+                    "call": self.calls,
+                    "schema": getattr(kw.get("schema"), "__name__", None),
+                    "prompt": [m.content for m in messages],
+                    "text": c.text,
+                    "parsed": c.parsed is not None,
+                }
+                fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
         return c
 
 
@@ -147,6 +158,10 @@ async def main() -> int:
         help="FakeProvider(pass.json 스크립트)로 — D-34 기본은 실 LLM",
     )
     ap.add_argument("--remote", default=None, help="bare remote 경로 (기본 임시 디렉토리)")
+    ap.add_argument(
+        "--only", type=int, nargs="*", default=None, help="실행할 Task 번호(1..3) 부분집합"
+    )
+    ap.add_argument("--dump", default=None, help="LLM 요청/응답을 JSON-lines로 남길 디렉토리")
     args = ap.parse_args()
     structlog.configure(
         processors=[
@@ -165,8 +180,9 @@ async def main() -> int:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     factory = sess.create_session_factory(engine)
+    # DB 14: 테스트(DB 15, FLUSHDB)와 겹치지 않게
     redis: Redis = Redis.from_url(
-        settings.redis_url.rsplit("/", 1)[0] + "/15", decode_responses=True
+        settings.redis_url.rsplit("/", 1)[0] + "/14", decode_responses=True
     )
     await redis.flushdb()
     bus = EventBus(redis)
@@ -203,7 +219,11 @@ async def main() -> int:
             )
         else:
             provider = get_provider(settings)
-        counting = Counting(provider)
+        dump = None
+        if args.dump:
+            Path(args.dump).mkdir(parents=True, exist_ok=True)
+            dump = Path(args.dump) / f"{spec.task_json['task']['issue_number']}.jsonl"
+        counting = Counting(provider, dump)
         agent = CodingAgent(
             publish=RedisPublisher(redis),
             provider=counting,
@@ -249,6 +269,8 @@ async def main() -> int:
 
     pid, gid, eid = str(ULID()), str(ULID()), str(ULID())
     tasks_spec = FAKE_TASKS if args.fake else TASKS
+    if args.only:
+        tasks_spec = [t for i, t in enumerate(tasks_spec, start=1) if i in args.only]
     tids = [str(ULID()) for _ in tasks_spec]
 
     def ev(type_: EventType, entity: str, id_: str, payload: dict[str, Any]) -> Event:

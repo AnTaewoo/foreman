@@ -134,7 +134,7 @@ async def test_fail_then_pass(worktree: Path, remote: Path, spy: Spy) -> None:
     assert isinstance(provider, FakeProvider)
     out = await agent.run(make_input(worktree))
     assert out.outcome == "done"
-    edit_calls = [c for c in provider.calls if c.schema is not None]
+    edit_calls = [c for c in provider.calls if "=== FILE:" in c.messages[-1].content]  # 편집 호출
     assert len(edit_calls) == 2
     second_prompt = "\n".join(m.content for m in edit_calls[1].messages)
     assert "test_list_users_empty" in second_prompt and (
@@ -237,3 +237,64 @@ async def test_related_files_include_spec_and_siblings(worktree: Path, spy: Spy)
     assert "README.md" in files
     assert not any(p.startswith((".venv", "node_modules", ".ai-platform")) for p in files)
     assert not any(k.endswith("users.py") for k in files)  # 아직 없는 파일은 제외
+
+
+# PC-4 (기록): edit 노드가 원본 input으로 컨텍스트를 조립해 CONTEXT.md가 빠졌다(plan 노드만 포함)
+async def test_edit_prompt_includes_context_md(worktree: Path, remote: Path, spy: Spy) -> None:
+    from agents.llm.base import Completion, Message
+
+    calls: list[list[Message]] = []
+    inner = FakeProvider(script=script("pass"))
+
+    class Capture:
+        async def complete(self, messages: list[Message], **kw: Any) -> Completion:
+            calls.append(messages)
+            return await inner.complete(messages, **kw)
+
+    agent = CodingAgent(
+        publish=spy.publish,
+        provider=Capture(),  # type: ignore[arg-type]
+        github=DryRunGitHubClient(),
+        repo=REPO,
+        worktree=worktree,
+        test_command="pytest -q",
+    )
+    inp = make_input(worktree)
+    inp = inp.model_copy(
+        update={"project_context": inp.project_context.model_copy(update={"context_md": None})}
+    )
+    out = await agent.run(inp)  # Scheduler spec처럼 context_md 없음 → 워커가 CONTEXT.md를 읽는다
+    assert out.outcome == "done" and len(calls) >= 2
+    assert all("Flask app factory" in c[-1].content for c in calls[:2])  # plan + edit 둘 다
+
+
+# PC-4 (기록): 7B 모델은 JSON 문자열 안의 코드(docstring """, @decorator, 빈 줄)를 망가뜨린다 →
+# 편집 응답은 파일 블록 텍스트, JSON EditPlan은 폴백(Fake 스크립트·구조화 출력 provider)
+def test_parse_edit_plan_blocks_and_json_fallback() -> None:
+    from agents.coding import parse_edit_plan
+
+    text = (
+        "Here are the files.\n\n=== MESSAGE: feat: add update ===\n"
+        '=== FILE: src/app/models.py ===\n"""Doc."""\n\n@dataclass\nclass A:\n    x: int\n'
+        "=== END FILE ===\n\n=== FILE: tests/test_a.py ===\ndef test_a() -> None:\n    assert 1\n"
+        "=== END FILE ===\n"
+    )
+    plan = parse_edit_plan(text)
+    assert plan is not None and plan.message == "feat: add update"
+    assert [f.path for f in plan.files] == ["src/app/models.py", "tests/test_a.py"]
+    assert plan.files[0].content == '"""Doc."""\n\n@dataclass\nclass A:\n    x: int\n'
+    # 코드펜스로 감싸도 벗겨낸다
+    fenced = "=== FILE: a.py ===\n```python\nx = 1\n```\n=== END FILE ===\n"
+    assert parse_edit_plan(fenced).files[0].content == "x = 1\n"  # type: ignore[union-attr]
+    # 마커 접두가 달라도(### FILE: … ===) 인식
+    md = "### MESSAGE: m ===\n### FILE: a.py ===\nx = 1\n### END FILE ===\n"
+    assert parse_edit_plan(md).files[0].path == "a.py"  # type: ignore[union-attr]
+    # 뒤 마커 없음 + END FILE 누락 (Ollama 4차에서 관측): 경로에 코드가 섞이면 안 된다
+    loose = "### FILE: src/app/u.py\n```python\nx = 1\n```\n\n### FILE: tests/t.py\ny = 2\n"
+    plan = parse_edit_plan(loose)
+    assert plan is not None and [f.path for f in plan.files] == ["src/app/u.py", "tests/t.py"]
+    assert plan.files[0].content == "x = 1\n" and plan.files[1].content.strip() == "y = 2"
+    # JSON 폴백 (FakeProvider 스크립트가 dict를 json.dumps 한 텍스트)
+    js = '{"files": [{"path": "a.py", "content": "x = 1\\n"}], "message": "m"}'
+    assert parse_edit_plan(js).message == "m"  # type: ignore[union-attr]
+    assert parse_edit_plan("no files here") is None

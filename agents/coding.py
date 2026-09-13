@@ -19,7 +19,7 @@ from typing import Any, TypedDict, cast
 
 import structlog
 from langgraph.graph import END, START, StateGraph
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from agents.base import (
     AgentInput,
@@ -30,7 +30,7 @@ from agents.base import (
     Publish,
 )
 from agents.context import assemble_context
-from agents.llm.base import Message, ModelProvider
+from agents.llm.base import Message, ModelProvider, extract_json
 from agents.tools.base import ToolContext, ToolDenied
 from agents.tools.fs import FsTool
 from agents.tools.git import GitTool, _git
@@ -55,6 +55,42 @@ functions and attributes that exist in the files shown. When you change an exist
 its complete content with every existing line preserved unless the task says to change it."""
 
 
+EDIT_FORMAT = """Respond with plain text in exactly this format (no JSON, no extra prose):
+=== MESSAGE: <one-line commit message> ===
+=== FILE: <repo-relative path> ===
+<complete file content, exactly as it should be saved>
+=== END FILE ===
+Repeat the FILE/END FILE pair for every file you create or change."""
+# 작은 모델은 "=== FILE:"을 "### FILE:"로 쓰거나 뒤 마커·END FILE을 빼먹는다 → 경로는 한 줄,
+# 뒤 마커는 선택, 블록은 다음 FILE/END FILE 마커 또는 끝까지
+_MESSAGE_RE = re.compile(r"^[=#* ]*MESSAGE: ([^\n]+?)[ =#*]*$", re.MULTILINE)
+_FILE_RE = re.compile(
+    r"^[=#* ]*FILE: ([^\n]+?)[ =#*]*\n(.*?)(?=^[=#* ]*(?:END FILE|FILE:)|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+_CODE_FENCE_RE = re.compile(r"\A```[\w-]*\n(.*?)```\s*\Z", re.DOTALL)
+
+
+def parse_edit_plan(text: str) -> EditPlan | None:
+    """파일 블록 텍스트 → EditPlan. 블록이 없으면 JSON(EditPlan) 폴백, 아니면 None (PC-4 기록)."""
+    files = []
+    for path, body in _FILE_RE.findall(text):
+        m = (
+            _CODE_FENCE_RE.match(body.strip("\n") + "\n")
+            if body.lstrip().startswith("```")
+            else None
+        )
+        content = m.group(1) if m else body
+        files.append(FileEdit(path=path.strip().strip("`"), content=content))
+    if files:
+        msg = _MESSAGE_RE.search(text)
+        return EditPlan(files=files, message=msg.group(1).strip() if msg else "wip")
+    try:
+        return EditPlan.model_validate_json(extract_json(text))
+    except (ValidationError, ValueError):
+        return None
+
+
 def is_dependency_file(path: str) -> bool:
     return DEPENDENCY_FILES.search(path) is not None
 
@@ -70,7 +106,7 @@ class FileEdit(BaseModel):
 
 
 class EditPlan(BaseModel):
-    """LLM 구조화 출력: 전체 파일 내용으로 덮어쓴다 (작은 모델도 안정적)."""
+    """편집 결과: 전체 파일 내용으로 덮어쓴다. 응답 형식은 파일 블록 텍스트(``parse_edit_plan``)."""
 
     files: list[FileEdit] = Field(min_length=1)
     message: str = "wip"
@@ -203,9 +239,12 @@ class CodingAgent(BaseAgent):
 
         async def edit(state: CodingState) -> dict[str, Any]:
             attempt = int(state.get("attempt", 0)) + 1
+            pc = input.project_context.model_copy(
+                update={"context_md": state.get("context_md") or None}
+            )
             parts = [
                 assemble_context(
-                    input,
+                    input.model_copy(update={"project_context": pc}),
                     token_budget=self._token_budget,
                     system=system,
                     related_files=await related_files(fs, ctx, spec=input.task.spec),
@@ -218,9 +257,14 @@ class CodingAgent(BaseAgent):
                     f"```\n{state['test_output'][-4000:]}\n```\n"
                     "Fix the code and/or tests so the command passes."
                 )
-            parts.append("Return the complete content of every file you create or change.")
-            c = await llm([Message(role="user", content="\n\n".join(parts))], schema=EditPlan)
-            plan = c.parsed if isinstance(c.parsed, EditPlan) else None
+            parts.append(
+                "Write every file you create or change in full. Copy every unchanged line verbatim"
+                " from the file shown above, including decorators such as @dataclass, docstrings"
+                " and blank lines; add only what the task needs. Existing tests must keep passing."
+                f"\n\n{EDIT_FORMAT}"
+            )
+            c = await llm([Message(role="user", content="\n\n".join(parts))])
+            plan = parse_edit_plan(c.text)
             if plan is None:
                 return {
                     "attempt": attempt,
