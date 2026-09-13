@@ -247,3 +247,54 @@ def test_dedupe_before_ignore_paths(app: TestClient, spy: Spy) -> None:
     # 무시(204)된 delivery도 중복이면 200
     assert post(app, "push", "push", delivery="p1").status_code == 204
     assert post(app, "push", "push", delivery="p1").status_code == 200
+
+
+# ---------------------------------------------------------------- P6.4 discussion_comment (리뷰 A5)
+# 페이로드 형식: docs.github.com/en/webhooks/webhook-events-and-payloads#discussion_comment (2026-09-13 확인)
+# action created|edited|deleted, 최상위 comment{body,user.login,user.type,node_id,id,html_url},
+# discussion{number,title,node_id,category,user,state}. 픽스처는 이 키만 담는다.
+def test_discussion_comment_slash_command(app: TestClient, spy: Spy) -> None:
+    res = post(app, "discussion_comment", "discussion_comment_approve")
+    assert res.status_code == 202
+    cmd = spy.commands[-1]
+    assert cmd.command == "approve" and cmd.author == "alice"
+    assert cmd.source == "discussion" and cmd.number == 1
+    res = post(app, "discussion_comment", "discussion_comment_reject")
+    assert res.status_code == 202
+    assert spy.commands[-1].command == "reject" and spy.commands[-1].argument == "scope too big"
+    # issue_comment는 source="issue", number=issue.number (호환 필드 issue_number 유지)
+    post(app, "issue_comment", "issue_comment_approve", delivery="d-ic-p64")
+    cmd = spy.commands[-1]
+    assert cmd.source == "issue" and cmd.number == 5 and cmd.issue_number == 5
+
+
+def test_discussion_comment_edited_and_bot_ignored(app: TestClient, spy: Spy) -> None:
+    import json
+
+    body = json.loads(_fixture("discussion_comment_approve"))
+    body["action"] = "edited"
+    res = app.post(
+        "/webhooks/github",
+        content=json.dumps(body).encode(),
+        headers={
+            "X-GitHub-Event": "discussion_comment",
+            "X-GitHub-Delivery": "d-dc-edited",
+            "X-Hub-Signature-256": _sig(json.dumps(body).encode()),
+            "Content-Type": "application/json",
+        },
+    )
+    assert res.status_code == 204 and not any(c.source == "discussion" for c in spy.commands)
+    body = json.loads(_fixture("discussion_comment_approve"))
+    body["sender"]["login"] = "foreman[bot]"
+    body["comment"]["user"]["login"] = "foreman[bot]"
+    res = app.post(
+        "/webhooks/github",
+        content=json.dumps(body).encode(),
+        headers={
+            "X-GitHub-Event": "discussion_comment",
+            "X-GitHub-Delivery": "d-dc-bot",
+            "X-Hub-Signature-256": _sig(json.dumps(body).encode()),
+            "Content-Type": "application/json",
+        },
+    )
+    assert res.status_code == 204

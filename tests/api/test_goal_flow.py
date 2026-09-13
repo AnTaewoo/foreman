@@ -320,3 +320,58 @@ async def test_restore_skips_goals_without_checkpoint(
     await runner3.startup("sqlite+aiosqlite://")
     assert not runner3.is_waiting(gid)
     assert runner3.restore_skipped == [gid]
+
+
+# ---------------------------------------------------------------- P6.4 Discussion 번호로 승인 매칭 (리뷰 A5)
+def discussion_body(text: str, number: int, author: str = "alice") -> bytes:
+    payload = json.loads((FIXTURES / "discussion_comment_approve.json").read_text())
+    payload["comment"]["body"] = text
+    payload["comment"]["user"]["login"] = author
+    payload["sender"]["login"] = author
+    payload["discussion"]["number"] = number
+    return json.dumps(payload).encode()
+
+
+def signed_discussion(body: bytes, delivery: str) -> dict[str, str]:
+    return signed(body, delivery) | {"X-GitHub-Event": "discussion_comment"}
+
+
+async def test_discussion_approve_matches_plan_discussion_number(
+    client: httpx.AsyncClient,
+    pump: Pump,
+    runner: GoalRunner,
+    factory: async_sessionmaker[AsyncSession],
+) -> None:
+    pid, gid = await start_goal(client, pump, runner)
+    number = runner.waiting(pid)[gid].plan_discussion_number
+    assert number is not None
+    # 다른 Discussion 번호 → 대기 Goal 매칭 없음 → no-op 202, 여전히 대기
+    body = discussion_body("/approve", number + 100)
+    r = await client.post(
+        "/webhooks/github", content=body, headers=signed_discussion(body, "d-dc-other")
+    )
+    assert r.status_code == 202 and runner.is_waiting(gid)
+    # Plan Discussion 번호 → resume
+    body = discussion_body("/approve", number)
+    r = await client.post(
+        "/webhooks/github", content=body, headers=signed_discussion(body, "d-dc-match")
+    )
+    assert r.status_code == 202, r.text
+    await runner.wait_idle()
+    await pump()
+    assert not runner.is_waiting(gid)
+    assert (await client.get(f"/projects/{pid}/goals/{gid}")).json()["status"] == "active"
+    assert len(await events_of(factory, "task.created")) == 2
+
+
+async def test_discussion_reject_viewer_forbidden(
+    client: httpx.AsyncClient, pump: Pump, runner: GoalRunner
+) -> None:
+    members = [{"user_id": "alice", "role": "viewer"}, {"user_id": "carol", "role": "owner"}]
+    pid, gid = await start_goal(client, pump, runner, members=members)
+    number = runner.waiting(pid)[gid].plan_discussion_number or 0
+    body = discussion_body("/reject nope", number, author="alice")
+    r = await client.post(
+        "/webhooks/github", content=body, headers=signed_discussion(body, "d-dc-viewer")
+    )
+    assert r.status_code == 403 and runner.is_waiting(gid)

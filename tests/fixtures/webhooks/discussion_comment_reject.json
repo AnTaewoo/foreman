@@ -1,0 +1,6 @@
+{"action": "created",
+ "discussion": {"number": 1, "title": "Plan #1: Users API", "node_id": "D_kwDO1", "state": "open",
+                "category": {"name": "Plans", "slug": "plans"}, "user": {"login": "foreman[bot]", "type": "Bot"}},
+ "comment": {"id": 911, "node_id": "DC_kwDO2", "body": "/reject scope too big", "html_url": "https://github.com/org/demo/discussions/1#discussioncomment-911",
+             "user": {"login": "alice", "type": "User"}},
+ "repository": {"full_name": "org/demo"}, "sender": {"login": "alice", "type": "User"}}
