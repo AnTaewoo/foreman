@@ -117,3 +117,4 @@
 | 2026-09-13T15:58 | P4.4 | Gate | make check pass (371), docker 컨테이너 통합 1 passed, pre-commit pass, 시도 3/3 | |
 | 2026-09-13T15:58 | P4.4 | 완료 | 보드 done | 1c9a026 |
 | 2026-09-13T15:58 | P4.5 | 착수 | scheduler queue/graph/launcher/scheduler + ingest | |
+| 2026-09-13T15:59 | P4.5 | Red | test_scheduler 6 (a~i), ModuleNotFoundError scheduler.graph | |

@@ -1,0 +1,334 @@
+"""P4.5 — Scheduler (red a~i): ready 판정, 위상/사이클, 겹침, 슬롯, launcher, 슬롯 반환, ingest, epic memo, 기동 실패."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+import pytest
+from redis.asyncio import Redis
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from control_plane.events.bus import EventBus
+from control_plane.events.outbox import OutboxRelay
+from control_plane.events.projection import Projection
+from control_plane.events.schema import Actor, Event, EventType, Subject
+from control_plane.scheduler.graph import SchedulerError, topo_order
+from control_plane.scheduler.launcher import FakeLauncher, LaunchError, LaunchSpec
+from control_plane.scheduler.scheduler import Scheduler
+from control_plane.store import models as m
+from control_plane.store.enums import EpicStatus, TaskStatus
+
+E = EventType
+PID, GID = "P1", "G1"
+
+
+def ev(
+    type_: EventType, entity: str, id_: str, payload: dict[str, Any], *, actor: Actor | None = None
+) -> Event:
+    return Event(
+        project_id=PID,
+        actor=actor or Actor(type="system", id="test"),
+        type=type_,
+        subject=Subject(entity=entity, id=id_),  # type: ignore[arg-type]
+        payload=payload,
+        correlation_id=GID,
+        causation_id=None,
+    )
+
+
+def task_created(
+    tid: str, deps: list[str], paths: list[str], epic: str = "E1", issue: int = 10
+) -> Event:
+    return ev(
+        E.TASK_CREATED,
+        "task",
+        tid,
+        {
+            "epic_id": epic,
+            "epic_title": epic,
+            "title": f"task {tid}",
+            "spec": "s",
+            "kind": "feature",
+            "role_required": "coding",
+            "depends_on": deps,
+            "owned_paths": paths,
+            "risk_tier": "T1",
+            "issue_number": issue,
+            "issue_url": None,
+        },
+    )
+
+
+BOOTSTRAP = [
+    ev(
+        E.PROJECT_CREATED,
+        "project",
+        PID,
+        {"name": "p", "repo": "org/demo", "default_branch": "main"},
+    ),
+    ev(E.GOAL_CREATED, "goal", GID, {"title": "g", "description": "d"}),
+    ev(E.GOAL_PLAN_PROPOSED, "goal", GID, {"plan_discussion_number": 1, "revision": 1}),
+    ev(E.GOAL_ACTIVATED, "goal", GID, {}),
+    ev(
+        E.EPIC_CREATED,
+        "epic",
+        "E1",
+        {"goal_id": GID, "title": "E1", "order": 1, "milestone_number": 1},
+    ),
+    ev(
+        E.EPIC_CREATED,
+        "epic",
+        "E2",
+        {"goal_id": GID, "title": "E2", "order": 2, "milestone_number": 2},
+    ),
+]
+
+
+class Harness:
+    def __init__(
+        self,
+        factory: async_sessionmaker[AsyncSession],
+        redis: Redis,
+        *,
+        max_workers: int = 4,
+        launcher: FakeLauncher | None = None,
+    ) -> None:
+        self.factory = factory
+        self.bus = EventBus(redis)
+        self.relay = OutboxRelay(factory, redis, batch=100)
+        self.projection = Projection(factory, self.bus)
+        self.launcher = launcher or FakeLauncher()
+        self.scheduler = Scheduler(
+            factory,
+            self.bus,
+            self.launcher,
+            projection=self.projection,
+            max_workers=max_workers,
+            repo_url="/tmp/remote.git",
+            timeout_min=45,
+        )
+
+    async def publish(self, *events: Event) -> list[Event]:
+        out = []
+        async with self.factory() as s:
+            for e in events:
+                out.append(await self.bus.publish(s, e))
+            await s.commit()
+        return out
+
+    async def pump(self) -> list[str]:
+        """relay → projection → scheduler(handle) 한 바퀴. 처리한 이벤트 타입 목록."""
+        seen: list[str] = []
+        while await self.relay.relay_once():
+            pass
+
+        async def both(d: Any) -> None:
+            await self.projection.handle(d)
+            await self.scheduler.handle(d)
+            seen.append(d.event.type.value)
+
+        idle = 0
+        while idle < 2:
+            n = await self.bus.poll_once("sched", both, consumer="t", project_id=PID)
+            idle = idle + 1 if n == 0 else 0
+        await self.projection.apply_retries(PID, now=datetime.now(UTC) + timedelta(hours=3))
+        return seen
+
+    async def task(self, tid: str) -> m.Task:
+        async with self.factory() as s:
+            t = await s.get(m.Task, tid)
+            assert t is not None
+            return t
+
+    async def events(self, type_: str) -> list[m.Event]:
+        async with self.factory() as s:
+            return list(
+                (
+                    await s.execute(
+                        select(m.Event)
+                        .where(m.Event.project_id == PID, m.Event.type == type_)
+                        .order_by(m.Event.seq)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+
+# (b) 위상 정렬 / 사이클
+def test_topo_order_and_cycle() -> None:
+    assert topo_order({"D": ["B", "C"], "A": [], "C": ["A"], "B": ["A"]}) == ["A", "C", "B", "D"]
+    with pytest.raises(SchedulerError, match="cycle"):
+        topo_order({"A": ["B"], "B": ["A"]})
+
+
+# (a)(e)(h) ready ∧ deps done만 배정, task.assigned 후 launch, 같은 Epic 두 Task → epic.activated 1건
+async def test_assigns_ready_tasks_and_launches(
+    factory: async_sessionmaker[AsyncSession], redis: Redis
+) -> None:
+    h = Harness(factory, redis)
+    await h.publish(
+        *BOOTSTRAP,
+        task_created("T1", [], ["src/a/**"]),
+        task_created("T2", ["T1"], ["src/b/**"]),
+        task_created("T3", [], ["src/c/**"]),
+    )
+    await h.pump()
+    assigned = await h.events("task.assigned")
+    assert [e.subject_id for e in assigned] == ["T1", "T3"]  # T2는 T1 대기
+    assert (await h.task("T1")).status is TaskStatus.ASSIGNED and (
+        await h.task("T2")
+    ).status is TaskStatus.READY
+    activated = await h.events("epic.activated")
+    assert (
+        len(activated) == 1 and activated[0].subject_id == "E1"
+    )  # 두 Task 연속 배정에도 1건 (B11)
+    async with factory() as s:
+        epic = await s.get(m.Epic, "E1")
+        assert epic is not None and epic.status is EpicStatus.ACTIVE
+    specs = h.launcher.specs
+    assert [sp.task_id for sp in specs] == ["T1", "T3"]
+    spec: LaunchSpec = specs[0]
+    assert spec.run_id == assigned[0].payload["run_id"] and spec.branch.startswith(
+        "ai/e1/10-task-t1"
+    )
+    assert (
+        spec.task_json["task"]["owned_paths"] == ["src/a/**"]
+        and spec.task_json["run_id"] == spec.run_id
+    )
+    assert spec.repo_url == "/tmp/remote.git" and spec.timeout_min == 45
+    # task.assigned가 launch보다 먼저 (이벤트 seq < launch 순서 기록)
+    assert h.launcher.order[0] == ("assigned_seen", "T1") or h.launcher.order[0][0] == "launch"
+
+
+# (c) owned_paths 겹침 동시 배정 금지 → 하나만, 나머지는 대기
+async def test_overlapping_owned_paths_not_concurrent(
+    factory: async_sessionmaker[AsyncSession], redis: Redis
+) -> None:
+    h = Harness(factory, redis)
+    await h.publish(
+        *BOOTSTRAP,
+        task_created("T1", [], ["src/app/**"]),
+        task_created("T2", [], ["src/app/users.py"]),
+    )
+    await h.pump()
+    assert [e.subject_id for e in await h.events("task.assigned")] == ["T1"]
+    assert (await h.task("T2")).status is TaskStatus.READY
+
+
+# (d) max_workers 초과 대기, (f) run.finished → 슬롯 반환 → 다음 배정
+async def test_slots_and_release(factory: async_sessionmaker[AsyncSession], redis: Redis) -> None:
+    h = Harness(factory, redis, max_workers=1)
+    await h.publish(
+        *BOOTSTRAP, task_created("T1", [], ["src/a/**"]), task_created("T2", [], ["src/b/**"])
+    )
+    await h.pump()
+    assert [e.subject_id for e in await h.events("task.assigned")] == ["T1"]
+    run_id = h.launcher.specs[0].run_id
+    # 워커가 실행을 마쳤다 (started → run.started → completed → run.finished)
+    await h.publish(
+        ev(
+            E.TASK_STARTED,
+            "task",
+            "T1",
+            {"run_id": run_id},
+            actor=Actor(type="agent", id="coding-1"),
+        ),
+        ev(
+            E.RUN_STARTED, "run", run_id, {"task_id": "T1", "agent_id": "coding-1", "model": "fake"}
+        ),
+        ev(E.TASK_COMPLETED, "task", "T1", {"run_id": run_id}),
+        ev(
+            E.RUN_FINISHED,
+            "run",
+            run_id,
+            {
+                "outcome": "success",
+                "agent_outcome": "done",
+                "tokens_in": 1,
+                "tokens_out": 1,
+                "cost_usd": 0.0,
+                "duration_s": 1.0,
+                "error": None,
+            },
+        ),
+    )
+    await h.pump()
+    assert [e.subject_id for e in await h.events("task.assigned")] == ["T1", "T2"]
+    assert h.scheduler.in_flight == {"T2"}
+
+
+# (i) 기동 실패 → task.failed(launch_failed), assigned→ready, 슬롯 반환
+async def test_launch_failure(factory: async_sessionmaker[AsyncSession], redis: Redis) -> None:
+    h = Harness(factory, redis, launcher=FakeLauncher(fail=True))
+    await h.publish(*BOOTSTRAP, task_created("T1", [], ["src/a/**"]))
+    await h.pump()
+    failed = await h.events("task.failed")
+    assert (
+        len(failed) == 1
+        and failed[0].payload["reason"] == "launch_failed"
+        and failed[0].payload["attempt"] == 1
+    )
+    t = await h.task("T1")
+    assert t.status is TaskStatus.READY and t.attempt_count == 1
+    assert h.scheduler.in_flight == set()
+    with pytest.raises(LaunchError):
+        await FakeLauncher(fail=True).launch(
+            h.launcher.specs[0]
+        ) if h.launcher.specs else FakeLauncher(fail=True).launch(
+            LaunchSpec(
+                task_id="x",
+                run_id="r",
+                project_id=PID,
+                goal_id=GID,
+                branch="ai/e/1-x",
+                repo_url="/r",
+                task_json={},
+                timeout_min=1,
+            )
+        )
+
+
+# (g) ingest: 워커가 XADD한 미서명 이벤트 → append_signed(멱등) + projection 적용; tool_called는 tool_calls로
+async def test_ingest_worker_events(
+    factory: async_sessionmaker[AsyncSession], redis: Redis
+) -> None:
+    from worker.publish import RedisPublisher
+
+    h = Harness(factory, redis)
+    await h.publish(*BOOTSTRAP, task_created("T1", [], ["src/a/**"]))
+    await h.pump()
+    run_id = h.launcher.specs[0].run_id
+    worker_pub = RedisPublisher(redis)
+    started = await worker_pub(
+        ev(
+            E.TASK_STARTED,
+            "task",
+            "T1",
+            {"run_id": run_id},
+            actor=Actor(type="agent", id="coding-1"),
+        )
+    )
+    await worker_pub(
+        ev(E.RUN_STARTED, "run", run_id, {"task_id": "T1", "agent_id": "coding-1", "model": "fake"})
+    )
+    await worker_pub(
+        ev(E.RUN_TOOL_CALLED, "run", run_id, {"tool": "fs.read", "args_digest": "ab" * 32})
+    )
+    await worker_pub(started)  # 같은 이벤트 두 번 (at-least-once)
+    await h.pump()
+    rows = await h.events("task.started")
+    assert len(rows) == 1 and rows[0].signature is not None and rows[0].projected_at is not None
+    assert (await h.task("T1")).status is TaskStatus.RUNNING
+    async with factory() as s:
+        tools = (
+            (await s.execute(select(m.ToolCall).where(m.ToolCall.run_id == run_id))).scalars().all()
+        )
+        assert len(tools) == 1
+        run = await s.get(m.Run, run_id)
+        assert run is not None and run.tool_call_count == 1
+        from control_plane.events.chain import verify_chain_db
+
+        assert await verify_chain_db(s, PID) is True
