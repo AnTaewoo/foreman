@@ -190,7 +190,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 | P3.3 | `orchestrator/prompts/*.md` + `drafts.py` (TaskDraft, 검증·재시도) | P3.1 | done | 0ba957a |
 | P3.4 | `orchestrator/graph.py` + `state.py` — 5노드 그래프, interrupt, 체크포인터 | P3.2, P3.3 | done | cc4e86b |
 | P3.5 | `orchestrator/emit.py` — 위상 정렬, 사이클, owned_paths 직렬화, Issue(dry) 생성 | P3.4 | done | 2057464 |
-| **PC-3** | Fake로 그래프 완주 + 실 LLM dry-run 눈검사 | P3.5 | pending | |
+| **PC-3** | Fake로 그래프 완주 + 실 LLM dry-run 눈검사 | P3.5 | pending (자동 pass, 사람 서명 대기) | docs/pc/PC-3.md |
 
 ### P4 — Coding Agent + Worker (`docs/prompts.md` P4)
 
@@ -221,7 +221,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 | 일시 | Task | 사유 | 옵션 / 필요한 조치 |
 |---|---|---|---|
 | 2026-09-13 | (기록) P3.1+ | scope_expand + D-33 | scope_expand: `control_plane/config.py`·`.env.example`(P0.3 소유) — `llm_provider`/`llm_base_url`/`llm_model`/`llm_api_key` 추가. `tests/agents/test_llm.py`에 (h) 추가 |
-| 2026-09-13 | PC-3 | **막힘(해소 중)**: 실 LLM 항목 실행 불가 — Anthropic 계정 크레딧 잔액 부족(400 "credit balance is too low", 키 인증은 통과) | A) 크레딧 충전 후 `scripts/pc3_plan_dryrun.py` 재실행 → 사람 검사 3항목 → pass  B) `pass (조건부)`: 실 LLM 검사를 PC-5로 이월하고 P4 시작(P4는 Fake로 검증 가능) — 사용자 답 필요 |
+| 2026-09-13 | PC-3 | 막힘 해소: Anthropic 크레딧 부족 → D-33으로 로컬 Ollama(`qwen2.5-coder:7b`) 경로 추가해 실 LLM 항목 완주. 사람 검사 3항목 검토안은 `docs/pc/PC-3.md` (3/3, 2번 조건부) | 사용자 서명 필요. Anthropic 비교는 PC-5. 약점은 §8 X.2 |
 | 2026-09-13 | (기록) PC-2 추가 | P0~P2 e2e 통합 테스트 | `tests/integration/test_p0_p2_flow.py`(Postgres+Redis, 앱 라우터+Dry GitHub+서명 웹훅+relay+projection+replay) 추가 — `docs/pc/PC-2.md` 추가 점검 절 |
 | 2026-09-13 | (기록) P2 | 구현 조정 | (1) `WebhookHandler(resolve_goal=, bot_login=)` 선택 인자 — correlation goal 해석, 앱 봇만 무시(github-actions는 처리) (2) `check_suite` 이벤트는 task_id 없음(PR 본문 부재) (3) P2.3 문서 확인은 공개 SDL 파일로 (reference 페이지는 fetch 시 색인만) — `docs/pc/PC-2.md` |
 | 2026-09-13 | (기록) PC-1 | 발견·조치 | run.tool_called이 relay보다 먼저 도착(D-31 직접 XADD) → Run 미존재 시 건너뛰고 run.started/finished가 재계산, 체인 밖 이벤트는 retry 대상 아님. `tool_call_count`는 replay로 복원 안 됨(설계). 상세 `docs/pc/PC-1.md` |
