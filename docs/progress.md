@@ -107,3 +107,4 @@
 | 2026-09-13T15:44 | P4.2 | Gate | make check pass (356), pre-commit pass, 시도 2/3 | |
 | 2026-09-13T15:44 | P4.2 | 완료 | 보드 done | 6be7531 |
 | 2026-09-13T15:44 | P4.3 | 착수 | agents/coding.py LangGraph 루프 + 스크립트 픽스처 | |
+| 2026-09-13T15:44 | P4.3 | Red | test_coding 7 + coding_scripts 5, ModuleNotFoundError agents.coding | |

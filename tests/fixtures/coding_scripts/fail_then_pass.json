@@ -1,0 +1,6 @@
+[
+  "Plan: add users module and tests.",
+  {"files": [{"path": "src/app/users.py", "content": "from app.models import UserStore\n\nstore = UserStore()\n\n\ndef list_users() -> list[dict[str, object]]:\n    return [u.__dict__ for u in store.all()]\n"}, {"path": "tests/test_users.py", "content": "from app.users import list_users\n\n\ndef test_list_users_empty() -> None:\n    assert list_users() == [\"wrong\"]\n"}], "message": "wip: users module"},
+  {"files": [{"path": "tests/test_users.py", "content": "from app.users import list_users, store\n\n\ndef test_list_users_empty() -> None:\n    assert list_users() == []\n\n\ndef test_list_users_after_add() -> None:\n    store.add(\"ann\")\n    assert list_users()[0][\"name\"] == \"ann\"\n"}], "message": "fix: correct users test"},
+  "Fixed the test expectation; pytest passes."
+]

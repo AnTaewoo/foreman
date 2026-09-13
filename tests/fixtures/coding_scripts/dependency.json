@@ -1,0 +1,4 @@
+[
+  "Plan: add flask-cors to pyproject and wire CORS.",
+  {"files": [{"path": "pyproject.toml", "content": "[project]\nname = \"sample-app\"\nversion = \"0.1.0\"\nrequires-python = \">=3.12\"\ndependencies = [\"flask>=3.0\", \"pydantic>=2\", \"flask-cors\"]\n\n[dependency-groups]\ndev = [\"pytest\"]\n\n[tool.pytest.ini_options]\npythonpath = [\"src\"]\ntestpaths = [\"tests\"]\n"}, {"path": "src/app/users.py", "content": "from app.models import UserStore\n\nstore = UserStore()\n\n\ndef list_users() -> list[dict[str, object]]:\n    return [u.__dict__ for u in store.all()]\n"}], "message": "feat: cors"}
+]
