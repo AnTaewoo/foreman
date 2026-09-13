@@ -56,3 +56,4 @@
 | 2026-09-13T13:55 | P2.3 | 완료 | 보드 done | b8bc6e7 |
 | 2026-09-13T13:55 | P2.4 | 착수 | webhooks.py HMAC + 6종 변환 + slash 훅 | |
 | 2026-09-13T13:56 | P2.4 | Red | test_webhooks 17 + 픽스처 15, ModuleNotFoundError webhooks | |
+| 2026-09-13T13:58 | P2.4 | Green | webhooks.py HMAC/6종 변환/slash 훅/dedupe/bot 무시, 229 passed | |
