@@ -190,3 +190,116 @@ def test_get_provider() -> None:
 def test_agents_llm_does_not_import_control_plane_config() -> None:
     for p in (ROOT / "agents" / "llm").rglob("*.py"):
         assert "control_plane.config" not in p.read_text(encoding="utf-8"), p
+
+
+# ---------------------------------------------------------------- D-33: OpenAI 호환(Ollama) provider
+from agents.llm.ollama import OllamaCompatProvider  # noqa: E402
+
+
+def _chat_response(content: str, *, finish: str = "stop") -> dict[str, Any]:
+    return {
+        "id": "chatcmpl-1", "object": "chat.completion", "model": "qwen2.5-coder:7b",
+        "choices": [{"index": 0, "message": {"role": "assistant", "content": content}, "finish_reason": finish}],
+        "usage": {"prompt_tokens": 21, "completion_tokens": 9, "total_tokens": 30},
+    }  # fmt: skip
+
+
+class ChatRecorder:
+    def __init__(self, responses: list[dict[str, Any]]) -> None:
+        self.requests: list[dict[str, Any]] = []
+        self.urls: list[str] = []
+        self._responses = list(responses)
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.urls.append(str(request.url))
+        self.requests.append(json.loads(request.content))
+        return httpx.Response(200, json=self._responses.pop(0))
+
+
+async def test_ollama_plain_text_uses_base_url() -> None:
+    rec = ChatRecorder([_chat_response("pong")])
+    p = OllamaCompatProvider(
+        base_url="http://ollama.local:11434/v1", model="qwen2.5-coder:7b", transport_handler=rec
+    )
+    c = await p.complete(msgs("ping"), system="be terse", max_tokens=20)
+    assert c.text == "pong" and c.parsed is None and (c.tokens_in, c.tokens_out) == (21, 9)
+    assert c.model == "qwen2.5-coder:7b"
+    assert rec.urls[0] == "http://ollama.local:11434/v1/chat/completions"
+    body = rec.requests[0]
+    assert body["model"] == "qwen2.5-coder:7b" and body["max_tokens"] == 20
+    assert body["messages"] == [
+        {"role": "system", "content": "be terse"},
+        {"role": "user", "content": "ping"},
+    ]
+    assert "response_format" not in body
+
+
+async def test_ollama_schema_sends_json_schema_and_parses_fenced_json() -> None:
+    rec = ChatRecorder([_chat_response('```json\n{"title": "t", "steps": ["a"]}\n```')])
+    p = OllamaCompatProvider(base_url="http://x/v1", model="m", transport_handler=rec)
+    c = await p.complete(msgs("plan"), schema=Plan)
+    assert isinstance(c.parsed, Plan) and c.parsed.steps == ["a"]
+    fmt = rec.requests[0]["response_format"]
+    assert fmt["type"] == "json_schema" and fmt["json_schema"]["name"] == "Plan"
+    assert "title" in json.dumps(fmt["json_schema"]["schema"])
+
+
+async def test_ollama_invalid_json_enters_retry_path() -> None:
+    """잘못된 JSON → parsed None → decompose_with_retry가 재요청(2회차)으로 들어간다."""
+    from control_plane.orchestrator.drafts import DecomposeResult, decompose_with_retry
+
+    good = {"epics": [{"title": "E", "order": 1, "summary": ""}],
+            "tasks": [{"title": "A", "spec": "s", "kind": "feature", "role_required": "coding",
+                       "depends_on": [], "owned_paths": ["src/a.py"], "estimated_tier": "T1", "epic": "E"}]}  # fmt: skip
+    rec = ChatRecorder(
+        [_chat_response("Sure! Here is the plan: {oops"), _chat_response(json.dumps(good))]
+    )
+    p = OllamaCompatProvider(base_url="http://x/v1", model="m", transport_handler=rec)
+    first = await p.complete(msgs("x"), schema=DecomposeResult)
+    assert first.parsed is None and "oops" in first.text
+    rec2 = ChatRecorder(
+        [_chat_response("Sure! Here is the plan: {oops"), _chat_response(json.dumps(good))]
+    )
+    p2 = OllamaCompatProvider(base_url="http://x/v1", model="m", transport_handler=rec2)
+    out = await decompose_with_retry(p2, repo_summary="R", plan="P", goal="G")
+    assert out.tasks[0].title == "A" and len(rec2.requests) == 2
+    assert any("rejected" in m["content"].lower() for m in rec2.requests[1]["messages"])
+
+
+async def test_ollama_http_error_raises_provider_error() -> None:
+    from agents.llm.base import ProviderError
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"error": {"message": "model 'm' not found"}})
+
+    p = OllamaCompatProvider(base_url="http://x/v1", model="m", transport_handler=handler)
+    with pytest.raises(ProviderError, match="not found"):
+        await p.complete(msgs("x"))
+
+
+class _Cfg2:
+    def __init__(self, provider: str, key: str = "") -> None:
+        self.anthropic_api_key = SecretStr(key)
+        self.anthropic_model = "claude-opus-5"
+        self.llm_provider = provider
+        self.llm_base_url = "http://localhost:11434/v1"
+        self.llm_model = "qwen2.5-coder:7b"
+        self.llm_api_key = SecretStr("ollama")
+
+
+def test_get_provider_selects_by_llm_provider() -> None:
+    assert isinstance(get_provider(_Cfg2("openai_compat")), OllamaCompatProvider)
+    assert isinstance(get_provider(_Cfg2("fake")), FakeProvider)
+    assert isinstance(get_provider(_Cfg2("anthropic", "sk-x")), AnthropicProvider)
+    with pytest.raises(ProviderConfigError, match="anthropic"):
+        get_provider(_Cfg2("anthropic"))
+    with pytest.raises(ProviderConfigError, match="llm_provider"):
+        get_provider(_Cfg2("bogus"))
+
+
+def test_settings_has_llm_provider_fields() -> None:
+    from control_plane.config import Settings
+
+    s = Settings(_env_file=None)
+    assert s.llm_provider == "anthropic" and s.llm_base_url.endswith("/v1")
+    assert s.llm_model and s.llm_api_key.get_secret_value()
