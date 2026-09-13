@@ -93,3 +93,4 @@
 | 2026-09-13T14:29 | P3.5 | 완료 | 보드 done | 2057464 |
 | 2026-09-13T14:30 | PC-3 | 결과 | fake PASS; 실 LLM 400 크레딧 부족 → pending, 사용자 결정 대기 | |
 | 2026-09-13T15:10 | P3.1+ | Green | ollama.py OllamaCompatProvider + llm_provider 선택 (D-33), 298 passed | |
+| 2026-09-13T15:12 | P3.1+ | Gate | make check pass (298), pre-commit pass — D-33 반영 | 3ceff07 |
