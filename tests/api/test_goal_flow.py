@@ -233,3 +233,90 @@ async def test_unknown_repo_and_bad_signature(client: httpx.AsyncClient) -> None
     ).status_code == 204
     headers = signed(body, "d-bad") | {"X-Hub-Signature-256": "sha256=deadbeef"}
     assert (await client.post("/webhooks/github", content=body, headers=headers)).status_code == 401
+
+
+# ---------------------------------------------------------------- P6.2 승인 대기 복원 (리뷰 A6)
+def make_runner(
+    factory: async_sessionmaker[AsyncSession],
+    redis: Redis,
+    checkpointer: MemorySaver,
+    script: list[Any],
+) -> GoalRunner:
+    return GoalRunner(
+        factory=factory,
+        bus=EventBus(redis),
+        provider=FakeProvider(script=script),
+        github=DryRunGitHubClient(),
+        discussions=DryRunDiscussionsClient(),
+        checkpointer=checkpointer,
+        repo_path_for=lambda repo: SAMPLE,
+        min_tasks=1,
+    )
+
+
+# (a)(b)(d) 같은 checkpointer로 만든 새 GoalRunner가 startup()에서 대기 목록을 복원하고, /approve로 재개된다
+async def test_restart_restores_waiting_goals(
+    factory: async_sessionmaker[AsyncSession],
+    redis: Redis,
+    pump: Pump,
+) -> None:
+    saver = MemorySaver()
+    runner1 = make_runner(factory, redis, saver, [PLAN_JSON, DECOMPOSE_JSON])
+    app1 = create_app(
+        Settings(_env_file=None, github_webhook_secret=SECRET),
+        factory=factory,
+        redis=redis,
+        runner=runner1,
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app1), base_url="http://t"
+    ) as c1:
+        pid, gid = await start_goal(c1, pump, runner1)
+        g = (await c1.get(f"/projects/{pid}/goals/{gid}")).json()
+    assert runner1.is_waiting(gid) and g["status"] == "awaiting_plan_approval"
+    # "재시작": 새 프로세스의 runner는 _run을 돌린 적이 없다. 체크포인트(saver)와 projection만 남아 있다
+    runner2 = make_runner(factory, redis, saver, [DECOMPOSE_JSON])
+    assert not runner2.is_waiting(gid)
+    await runner2.startup("sqlite+aiosqlite://")
+    assert runner2.is_waiting(gid)
+    w = runner2.waiting(pid)[gid]
+    assert w.plan_discussion_number == g["plan_discussion_number"] and w.plan_revision == 1
+    app2 = create_app(
+        Settings(_env_file=None, github_webhook_secret=SECRET),
+        factory=factory,
+        redis=redis,
+        runner=runner2,
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app2), base_url="http://t"
+    ) as c2:
+        body = comment_body("/approve")
+        r = await c2.post("/webhooks/github", content=body, headers=signed(body, "d-restart"))
+        assert r.status_code == 202, r.text
+        await runner2.wait_idle()
+        await pump()
+        assert not runner2.is_waiting(gid) and runner2.errors == {}
+        g = (await c2.get(f"/projects/{pid}/goals/{gid}")).json()
+    assert g["status"] == "active" and g["tasks"] == {"ready": 2}
+    assert len(await events_of(factory, "task.created")) == 2
+
+
+# (c) 체크포인트 스레드가 없는 Goal(다른 saver)은 복원하지 않는다
+async def test_restore_skips_goals_without_checkpoint(
+    factory: async_sessionmaker[AsyncSession], redis: Redis, pump: Pump
+) -> None:
+    runner1 = make_runner(factory, redis, MemorySaver(), [PLAN_JSON, DECOMPOSE_JSON])
+    app1 = create_app(
+        Settings(_env_file=None, github_webhook_secret=SECRET),
+        factory=factory,
+        redis=redis,
+        runner=runner1,
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app1), base_url="http://t"
+    ) as c1:
+        _, gid = await start_goal(c1, pump, runner1)
+    runner3 = make_runner(factory, redis, MemorySaver(), [DECOMPOSE_JSON])  # 다른(빈) saver
+    await runner3.startup("sqlite+aiosqlite://")
+    assert not runner3.is_waiting(gid)
+    assert runner3.restore_skipped == [gid]
