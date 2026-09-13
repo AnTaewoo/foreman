@@ -147,7 +147,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─PC-5 = MVP 1 (dev)─► [후
 |---|---|---|---|---|
 | P0.1 | 골격 + 툴체인 + `Settings(dry_run=True)` + import 가드 | — | done | 16f90dd |
 | P0.2 | 설계 문서 확인 (`docs/design.md` 존재·§ 번호 참조 가능) | P0.1 | done | 5fcebdd |
-| P0.3 | 개발 인프라: compose, `.env.example`, Makefile 확장, pre-commit, structlog, `/health` | P0.1 | running | |
+| P0.3 | 개발 인프라: compose, `.env.example`, Makefile 확장, pre-commit, structlog, `/health` | P0.1 | done | 61ae633 |
 | **PC-0** | 스택이 뜬다 | P0.3 | pending | |
 
 ### P1 — 이벤트 스키마 + State Store (`docs/prompts.md` P1)
