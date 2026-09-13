@@ -1,8 +1,8 @@
 # PC-5 — MVP 1 (dev) 완료 판정
 
 - 일시: 2026-09-13 18:30 KST
-- 판정: **pending** — 자동 항목 중 "실 LLM e2e"가 Anthropic이 아닌 Ollama 7B로만 실행됐고(크레딧 부족, D-33)
-  그 결과가 기준 미달. 사람 항목 (1)~(3)은 사용자 판정 필요. Anthropic 크레딧이 생기면
+- 판정: **pending** — 자동 항목 중 "실 LLM e2e"가 Anthropic이 아닌 Ollama(7B, 14B)로만 실행됐고(크레딧 부족, D-33)
+  두 결과 모두 기준 미달(14B는 코딩은 나아졌으나 분해가 Task 2개). 사람 항목 (1)~(3)은 사용자 판정 필요. Anthropic 크레딧이 생기면
   `.env`의 `HITL_LLM_PROVIDER=anthropic`으로 바꾸고 같은 명령을 다시 돌린다(코드 변경 없음).
 
 ## 자동 항목
@@ -13,6 +13,9 @@
 | `make test-integration` (Docker) | pass (5) |
 | `scripts/e2e_dry_run.py --fake` | PASS — Plan → 자동 승인 → TaskDraft 2 → would create issue ×2 → Coding done ×2 → 브랜치 2, 8 LLM 호출 |
 | 실 LLM: `scripts/e2e_dry_run.py tests/fixtures/sample_repo "Add a /users CRUD endpoint with tests"` (Ollama `qwen2.5-coder:7b`) | **FAIL** — Task 8 (≥3 ✓), 브랜치 1 (≥3 ✗), would open_pr 0 (≥3 ✗). Task 1 "Extend User model"이 3회 실패 → blocked, 나머지 7개는 전부 Task 1에 의존해 배정되지 않음. 토큰: orchestrator 2호출 2316/1281, coding 4호출 5169/818. 전체 출력·diff: `PC-5-ollama-output.txt` |
+
+| 실 LLM 2차: 같은 명령, `--model qwen2.5-coder:14b` (RTX 3060 12GB, 9GB VRAM, 사용자 요청) | **FAIL** — Task 2 (≥3 ✗), 브랜치 2, would open_pr 1. Task 1 "Define User CRUD Routes" done(1회차), Task 2 "Implement GET /users"는 코드는 맞는데 모델이 쓴 테스트가 `create_app()`의 전역 store와 새 `UserStore()`를 섞어 3회 실패. 토큰 orchestrator 2383/687, coding 7호출 7981/3302. 호출당 ~40s |
+| 참고: `pc4_run_tasks.py --tasks hard --model qwen2.5-coder:14b` | 2/3 — 7B가 못 하던 `UserStore.update/delete`(기존 파일 수정)는 1회차 통과, users 모듈은 테스트의 공유 store id 가정으로 3회 실패 |
 
 실 LLM 실패 분석 (7B 편차, PC-3/PC-4와 같은 결함):
 - 분해: `User`/`UserStore`가 이미 `src/app/models.py`에 있는데 "Extend User model", "Implement UserStore" Task를 만들었고(PC-3 약점 (a) 재현), 8개 Task를 전부 Task 1에 직렬로 묶었다(owned_paths 겹침 직렬화 + 빈 depends_on 보정).

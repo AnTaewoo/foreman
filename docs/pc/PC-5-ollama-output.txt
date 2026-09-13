@@ -278,3 +278,312 @@ diff --git a/tests/test_main.py b/tests/test_main.py
 +    s.store(user)
 +    assert s.get(1) == user
 +    assert len(s.all()) == 1
+
+################ PC-5 e2e on Ollama qwen2.5-coder:14b — 2026-09-13
+e2e dry-run  provider=openai_compat:qwen2.5-coder:14b  repo=/home/lhjin0j/foreman/tests/fixtures/sample_repo  remote=/home/lhjin0j/.claude/jobs/a2da875f/tmp/pc5-e2e-14b/remote.git
+
+=== 1. RepoSummary ===
+## Repository
+- root: sample_repo
+- language: python
+- framework: flask
+- test_runner: pytest
+
+### Tree (depth ≤ 2)
+```
+.ai-platform
+.ai-platform/CONTEXT.md
+docs
+docs/ARCHITECTURE.md
+src
+src/app
+src/app/deep
+src/app/__init__.py
+src/app/main.py
+src/app/models.py
+tests
+tests/test_main.py
+README.md
+pyproject.toml
+```
+
+### README (head)
+# sample-app
+
+Tiny Flask app used as the foreman fixture repo. It exposes a `/users` in-memory store.
+
+## Layout
+- `src/app/main.py` — Flask app factory and routes
+- `src/app/models.py` — dataclasses
+- `tests/` — pytest
+
+## Conventions
+- ruff, 100 cols
+
+
+### Config
+#### pyproject.toml
+```
+[project]
+name = "sample-app"
+version = "0.1.0"
+description = "A tiny FastAPI-flavored description that should NOT influence framework detection (we use flask)."
+requires-python = ">=3.12"
+dependencies = ["flask>=3.0", "pydantic>=2"]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+```
+
+### Docs
+#### docs/ARCHITECTURE.md
+# Architecture
+
+Single-process Flask app. State lives in `app.models.UserStore` (in-memory). No database.
+
+#### .ai-platform/CONTEXT.md
+# CONTEXT.md
+
+## Architecture
+- Flask app factory in `app.main:create_app`; in-memory `UserStore`.
+
+## Conventions
+- pytest via `pytest -q`; keep functions small; type hints required.
+
+## Pitfalls
+- Do not add a database; this fixture must stay dependency-light.
+
+=== 2. Plan ===
+## Plan for Goal #QKWVMN: Add a /users CRUD endpoint with tests
+### Understanding
+This is a Flask-based Python application with an endpoint '/users' which currently only supports a simple in-memory representation. The goal is to add CRUD functionality to this endpoint along with comprehensive tests. The codebase follows certain conventions such as using pytest for testing and ruff 100 cols line limit. We must ensure that the change does not introduce any new dependencies and remains constrained to the existing framework without adding a database.
+### Acceptance Criteria
+- [ ] AC-1 GET /users returns a list of all users
+- [ ] AC-2 POST /users adds a new user with provided data (name, email)
+- [ ] AC-3 GET /users/{user_id} retrieves details of a specific user by ID
+- [ ] AC-4 PUT /users/{user_id} updates an existing user's information based on provided data
+- [ ] AC-5 DELETE /users/{user_id} removes a specific user by ID
+### Epics
+1. Implement User CRUD Endpoints — Tasks: 5, est. risk: T0
+   Add Flask routes to handle CREATE, READ, UPDATE, and DELETE operations for users.
+2. Create Tests for User CRUD Endpoints — Tasks: 6, est. risk: T0
+   Develop pytest tests to cover all CRUD functionalities of the user endpoints.
+### Task Graph
+E-1 → T-1.1, E-1 → T-1.2, E-1 → T-1.3, E-1 → T-1.4, E-1 → T-1.5, E-2 → T-2.1, E-2 → T-2.2, E-2 → T-2.3, E-2 → T-2.4, E-2 → T-2.5, E-2 → T-2.6
+### Decisions Expected
+- none
+### Budget Estimate
+~$10, ~8 runs
+
+(auto-approve) by e2e
+
+=== 3. TaskDrafts ===
+{
+  "epics": [
+    {
+      "title": "Implement User CRUD Endpoints",
+      "order": 1,
+      "summary": "Add CRUD functionality for /users endpoint.",
+      "task_count": null,
+      "risk_tier": "T1"
+    },
+    {
+      "title": "Create Tests for User CRUD Endpoints",
+      "order": 2,
+      "summary": "Develop pytest tests covering all CRUD functionalities of the user endpoints.",
+      "task_count": null,
+      "risk_tier": "T1"
+    }
+  ],
+  "tasks": [
+    {
+      "title": "Define User CRUD Routes",
+      "spec": "Create CRUD routes for /users in `app/main.py`. Verify with integration tests.",
+      "kind": "feature",
+      "role_required": "coding",
+      "depends_on": [],
+      "owned_paths": [
+        "src/app/main.py",
+        "tests/test_main.py"
+      ],
+      "estimated_tier": "T0",
+      "epic": ""
+    },
+    {
+      "title": "Implement GET /users",
+      "spec": "Add route to retrieve all users. Test in `test_main.py`.",
+      "kind": "feature",
+      "role_required": "coding",
+      "depends_on": [],
+      "owned_paths": [
+        "src/app/main.py",
+        "tests/test_main.py"
+      ],
+      "estimated_tier": "T1",
+      "epic": ""
+    }
+  ]
+}
+
+would create issue #1: Define User CRUD Routes
+would create issue #2: Implement GET /users
+(auto-merge) PR #3 → Define User CRUD Routes
+
+=== 4. Coding Agent 결과 ===
+  done       attempts=1 calls=3 tokens=2445/1341 43.2s  Define User CRUD Routes
+  failed     attempts=3 calls=4 tokens=5536/1961 65.9s  Implement GET /users  error=tests failed after 3 attempts
+
+=== 5. bare remote 브랜치 ===
+  ai/implement-user-crud-endpoints/1-define-user-crud-routes: Define User CRUD Routes
+  ai/implement-user-crud-endpoints/2-implement-get-users: Add route to retrieve all users and update tests
+  pr.opened=1 verify_chain=True
+
+=== 6. 토큰 합계 ===
+  orchestrator: 2 calls, 2383/687
+  coding:       7 calls, 7981/3302
+  total:        9 calls, in 10364 / out 3989
+
+e2e: FAIL
+
+################ branch diffs (14b)
+---- ai/implement-user-crud-endpoints/1-define-user-crud-routes
+diff --git a/src/app/main.py b/src/app/main.py
+--- a/src/app/main.py
++++ b/src/app/main.py
+@@ -13,7 +13,7 @@ def greet(name: str) -> str:
+ 
+ def create_app() -> object:
+     try:
+-        from flask import Flask, jsonify
++        from flask import Flask, jsonify, request
+     except ImportError:  # 픽스처 테스트 환경에는 flask가 없을 수 있다
+         return {"routes": ["/users"], "store": store}
+     app = Flask(__name__)
+@@ -22,4 +22,39 @@ def create_app() -> object:
+     def list_users() -> object:
+         return jsonify([u.__dict__ for u in store.all()])
+ 
++    @app.post("/users")
++    def create_user() -> object:
++        data = request.json
++        if not data.get("name"):
++            return jsonify({"error": "Name is required"}), 400
++        user = store.add(data["name"])
++        return jsonify(user.__dict__), 201
++
++    @app.get("/users/<int:user_id>")
++    def get_user(user_id: int) -> object:
++        user = store.get(user_id)
++        if not user:
++            return jsonify({"error": "User not found"}), 404
++        return jsonify(user.__dict__)
++
++    @app.put("/users/<int:user_id>")
++    def update_user(user_id: int) -> object:
++        data = request.json
++        if not data.get("name"):
++            return jsonify({"error": "Name is required"}), 400
++        user = store.get(user_id)
++        if not user:
++            return jsonify({"error": "User not found"}), 404
++        user.name = data["name"]
++        return jsonify(user.__dict__)
++
++    @app.delete("/users/<int:user_id>")
++    def delete_user(user_id: int) -> object:
++        user = store.get(user_id)
++        if not user:
++            return jsonify({"error": "User not found"}), 404
++        del store._users[user.id]
++        return jsonify(user.__dict__)
++
+     return app
++
+---- ai/implement-user-crud-endpoints/2-implement-get-users
+diff --git a/src/app/main.py b/src/app/main.py
+--- a/src/app/main.py
++++ b/src/app/main.py
+@@ -14,12 +14,13 @@ def greet(name: str) -> str:
+ def create_app() -> object:
+     try:
+         from flask import Flask, jsonify
+-    except ImportError:  # 픽스처 테스트 환경에는 flask가 없을 수 있다
++    except ImportError:  # 픽스처 테스트 환경에는 flask가 없을 수 있으므로 skip
+         return {"routes": ["/users"], "store": store}
+     app = Flask(__name__)
+ 
+     @app.get("/users")
+     def list_users() -> object:
+-        return jsonify([u.__dict__ for u in store.all()])
++        users = store.all()
++        return jsonify([{"id": user.id, "name": user.name} for user in users])
+ 
+     return app
+diff --git a/tests/test_main.py b/tests/test_main.py
+--- a/tests/test_main.py
++++ b/tests/test_main.py
+@@ -1,4 +1,4 @@
+-from app.main import greet
++from app.main import greet, create_app
+ from app.models import UserStore
+ 
+ 
+@@ -10,3 +10,31 @@ def test_store() -> None:
+     s = UserStore()
+     u = s.add("ann")
+     assert s.get(u.id) == u and len(s.all()) == 1
++
++
++def test_list_users_no_users() -> None:
++    app = create_app()
++    if isinstance(app, dict):
++        assert app["routes"] == ["/users"]
++        assert app["store"].all() == []
++    else:
++        client = app.test_client()
++        response = client.get("/users")
++        assert response.status_code == 200
++        assert response.json == []
++
++
++def test_list_users_with_multiple_users() -> None:
++    store = UserStore()
++    u1 = store.add("alice")
++    u2 = store.add("bob")
++
++    app = create_app()
++    if isinstance(app, dict):
++        assert app["routes"] == ["/users"]
++        assert [user.__dict__ for user in app["store"].all()] == [{"id": u1.id, "name": "alice"}, {"id": u2.id, "name": "bob"}]
++    else:
++        client = app.test_client()
++        response = client.get("/users")
++        assert response.status_code == 200
++        assert response.json == [{"id": u1.id, "name": "alice"}, {"id": u2.id, "name": "bob"}]
+
+################ PC-4 --tasks hard on 14b
+=== PC-4 (provider=openai_compat:qwen2.5-coder:14b) remote=/tmp/pc4-wadvw_7u/remote.git ===
+  ↳ worker done: done (3 calls, 41s) — Add update and delete to UserStore
+  ↳ worker done: failed (4 calls, 41s) — Add users module with list_users and add_user
+  ↳ worker done: done (3 calls, 28s) — Add greet_all helper to main
+=== branches on remote ===
+  [ok] branches pushed: 3 >= 3
+=== would open_pr ===
+  [FAIL] would open_pr: 2 >= 3
+=== tasks ===
+  Add update and delete to UserStore: in_review attempts=0 pr=1
+  Add users module with list_users and add_user: blocked attempts=3 pr=None
+  Add greet_all helper to main: in_review attempts=0 pr=2
+  [FAIL] pr.opened events: 2 >= 3
+  [ok] verify_chain_db True
+  [ok] projection_error rows: []
+=== runs ===
+  done           attempts=1 calls=3 tokens=2567/1220 40.7s  Add update and delete to UserStore
+  failed         attempts=3 calls=4 tokens=5782/1155 40.8s  Add users module with list_users and add_user  error=tests failed after 3 attempts
+  done           attempts=1 calls=3 tokens=2339/849 27.5s  Add greet_all helper to main
+PC-4: FAIL

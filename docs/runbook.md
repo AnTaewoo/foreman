@@ -83,6 +83,25 @@ uv run python scripts/e2e_dry_run.py tests/fixtures/sample_repo "Add a users API
 uv run python scripts/e2e_dry_run.py --no-coding tests/fixtures/sample_repo "Add a users API with tests"
 ```
 
+### 로컬 모델 비교 (Ollama)
+
+`.env`의 `HITL_LLM_PROVIDER=openai_compat`이면 `HITL_LLM_MODEL`이 쓰인다. 스크립트의 `--model`로 그때그때
+바꿀 수 있다. RTX 3060 12GB 기준 `qwen2.5-coder:14b`(Q4_K_M, ~9GB VRAM)까지 GPU에 다 올라가고,
+`32b`(~20GB)는 CPU로 넘쳐 매우 느리다.
+
+```bash
+ollama pull qwen2.5-coder:14b
+# Coding Agent만 (Task 3개, 실행당 1~2분). --tasks hard = 기존 파일 수정 포함, simple = D-35 간단 Task
+uv run python scripts/pc4_run_tasks.py --tasks hard --model qwen2.5-coder:14b --dump /tmp/pc4-dump
+uv run python scripts/pc4_run_tasks.py --tasks hard --model qwen2.5-coder:7b
+# 전체 흐름 (Plan → Task → 코딩, 실행당 3~10분)
+uv run python scripts/e2e_dry_run.py --model qwen2.5-coder:14b tests/fixtures/sample_repo "Add a /users CRUD endpoint with tests"
+# 결과 보기: 브랜치 diff와 모델 응답
+git -C <출력의 remote=경로> log --all --oneline
+git -C <출력의 remote=경로> diff main <ai/브랜치>
+cat /tmp/pc4-dump/101.jsonl | python -m json.tool   # Task 1의 프롬프트/응답
+```
+
 API로 같은 흐름을 돌리려면: `POST /projects {name, repo, members}` → `POST /projects/{id}/goals` → Goal이
 `awaiting_plan_approval`이 되면 서명된 `issue_comment` 웹훅(`/approve`)을 `POST /webhooks/github`로
 (`tests/api/test_goal_flow.py`의 `comment_body`/`signed` 참고) → `GET /projects/{id}/goals/{gid}` 진행률,
