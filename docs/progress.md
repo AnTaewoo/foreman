@@ -57,3 +57,6 @@
 | 2026-09-13T13:55 | P2.4 | 착수 | webhooks.py HMAC + 6종 변환 + slash 훅 | |
 | 2026-09-13T13:56 | P2.4 | Red | test_webhooks 17 + 픽스처 15, ModuleNotFoundError webhooks | |
 | 2026-09-13T13:58 | P2.4 | Green | webhooks.py HMAC/6종 변환/slash 훅/dedupe/bot 무시, 229 passed | |
+| 2026-09-13T13:59 | P2.4 | Gate | make check pass (229), pre-commit pass, 시도 3/3 (E501 표 폭) | |
+| 2026-09-13T13:59 | P2.4 | 완료 | 보드 done | 726252f |
+| 2026-09-13T13:59 | P2.5 | 착수 | dry_run.py + 팩토리 | |
