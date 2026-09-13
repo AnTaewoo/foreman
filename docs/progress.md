@@ -68,3 +68,4 @@
 | 2026-09-13T14:12 | PC-2 | 추가 | P0~P2 e2e 통합 테스트 pass (pg+redis), make check 238, pc1 PASS | |
 | 2026-09-13T14:13 | P3.1 | 착수 | agents/llm ModelProvider/Fake/Anthropic/get_provider | |
 | 2026-09-13T14:13 | P3.1 | Red | test_llm 12 + conftest, ModuleNotFoundError agents.llm.fake | |
+| 2026-09-13T14:14 | P3.1 | Green | agents/llm base/fake/anthropic/get_provider, 250 passed | |
