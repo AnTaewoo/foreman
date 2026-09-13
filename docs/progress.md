@@ -8,3 +8,4 @@
 | 2026-09-13T11:03 | P0.1 | 완료 | make check pass, 보드 done | 16f90dd |
 | 2026-09-13T11:18 | P0.2 | 착수 | 설계 § 참조 확인 | |
 | 2026-09-13T11:18 | P0.2 | 완료 | § 8개 전부 존재 | 5fcebdd |
+| 2026-09-13T11:18 | P0.3 | 착수 | compose/.env.example/pre-commit/structlog/health | |
