@@ -38,3 +38,4 @@
 | 2026-09-13T13:31 | P1.5 | Green | projection.py 44 핸들러 + D-30 handle/apply_retries + schema NotRequired 수정, 178 passed | |
 | 2026-09-13T13:32 | P1.5 | Gate | make check pass (178), pre-commit pass, 시도 3/3 (E501 19건→1→0) | |
 | 2026-09-13T13:32 | P1.5 | 완료 | 보드 done | c32ff1f |
+| 2026-09-13T13:41 | PC-1 | 결과 | roundtrip PASS, make check 179, integration 3, tag event-schema-v1 → pass | fefffb3 |
