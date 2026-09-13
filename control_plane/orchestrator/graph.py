@@ -75,6 +75,7 @@ class OrchestratorDeps:
     publish: Publish
     emit: Emit = dry_emit
     model: str | None = None
+    min_tasks: int = 1  # X.2: 운영은 3 (runner/e2e), 단위 테스트는 1
 
 
 def _event(
@@ -207,6 +208,7 @@ def build_graph(
                 plan=state["plan"],
                 goal=goal_text,
                 model=deps.model,
+                min_tasks=deps.min_tasks,
             )
         except DecomposeError as exc:
             blocked = await deps.publish(

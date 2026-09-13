@@ -45,10 +45,14 @@ def test_tree_depth_limit(summary: RepoSummary) -> None:
     assert not any("deeper" in p or "hidden.py" in p for p in summary.tree)
 
 
-# (c) 본문은 README·설정·.ai-platform·docs만 — src/** 내용 없음
+# (c) 본문은 README·설정·.ai-platform·docs만 — src/** 내용 없음 (X.2: 심볼 "이름"만 색인에 나온다)
 def test_bodies_exclude_source(summary: RepoSummary) -> None:
     rendered = render_summary(summary)
-    assert "def greet" not in rendered and "UserStore" not in rendered.split("## Docs")[0]
+    before_symbols = rendered.split("### Symbols")[0]
+    assert (
+        "def greet" not in before_symbols and "UserStore" not in before_symbols.split("## Docs")[0]
+    )
+    assert 'return f"hello' not in rendered and "self._users" not in rendered  # 본문 없음
     assert all(not k.startswith("src/") for k in summary.config_files)
     assert all(not k.startswith("src/") for k in summary.docs)
 

@@ -1,0 +1,19 @@
+<!--
+근거 (edit 재시도; PC-4/PC-5 2026-09-13):
+- 실패의 대부분이 모델이 쓴 테스트의 잘못된 기대값(공유 store id, 존재하지 않는 메서드)인데, 모델은
+  같은 테스트를 다시 내거나 멀쩡한 코드를 고쳤다 → 먼저 "테스트가 틀렸나, 코드가 틀렸나"를 진단하게 한다.
+- 저장소의 기존 테스트가 깨졌으면 그것이 진실이다(기존 동작을 바꾸지 말 것).
+-->
+## Previous attempt {attempt} failed. Test output:
+```
+{test_output}
+```
+First diagnose, then fix:
+1. If a failing test is a test you wrote, check its expectation against the task spec: shared
+   state (module-level stores, app factories) keeps values across tests, so build fresh state in
+   the test or assert only what the spec states — fix the test's expectation, do not bend working
+   code to it.
+2. If a test that already existed in the repository fails, your code change broke existing
+   behavior — restore it; existing tests are the source of truth.
+3. If the code is wrong (NameError, wrong return value), fix the code.
+Change only what the diagnosis requires and return every changed file in full.

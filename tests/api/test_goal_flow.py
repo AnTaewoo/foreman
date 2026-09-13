@@ -41,6 +41,7 @@ def runner(factory: async_sessionmaker[AsyncSession], redis: Redis) -> GoalRunne
         discussions=DryRunDiscussionsClient(),
         checkpointer=MemorySaver(),
         repo_path_for=lambda repo: SAMPLE,  # D-11: 로컬 경로만
+        min_tasks=1,  # X.2: DECOMPOSE_JSON은 Task 2개
     )
 
 

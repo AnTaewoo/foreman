@@ -21,6 +21,8 @@ CONFIG_FILES = (
     ".ai-platform/autonomy.yaml",
 )  # fmt: skip
 MAX_TREE_DEPTH = 2
+SYMBOL_MAX_FILES = 60  # 심볼 색인에 넣을 .py 파일 수 상한 (X.2)
+SYMBOL_MAX_PER_FILE = 40
 README_HEAD_CHARS = 2000
 CONFIG_MAX_CHARS = 4000
 DOC_MAX_CHARS = 4000
@@ -40,6 +42,8 @@ class RepoSummary:
     readme_head: str
     config_files: dict[str, str] = field(default_factory=dict)  # 상대 경로 → 본문(잘림)
     docs: dict[str, str] = field(default_factory=dict)  # docs/**.md, .ai-platform/*.md → 본문(잘림)
+    # X.2: 공개 심볼 색인 (본문 없이 이름만) — 계획자가 이미 있는 심볼을 다시 만들지 않게
+    symbols: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def _is_url(value: str) -> bool:
@@ -140,6 +144,36 @@ def _detect(root: Path) -> tuple[str | None, str | None, str | None]:
     return None, None, None
 
 
+def _symbol_index(root: Path) -> dict[str, tuple[str, ...]]:
+    """.py 파일의 최상위 class/def 이름(클래스는 메서드 이름까지). 문법 오류·비파이썬은 건너뛴다."""
+    import ast
+
+    out: dict[str, tuple[str, ...]] = {}
+    files = sorted(
+        p for p in root.rglob("*.py") if not any(part in EXCLUDED_DIRS for part in p.parts)
+    )
+    for path in files[:SYMBOL_MAX_FILES]:
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+        except (SyntaxError, ValueError, OSError):
+            continue
+        names: list[str] = []
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                methods = [
+                    n.name
+                    for n in node.body
+                    if isinstance(n, ast.FunctionDef | ast.AsyncFunctionDef)
+                    and not n.name.startswith("_")
+                ]
+                names.append(f"class {node.name}" + (f": {', '.join(methods)}" if methods else ""))
+            elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                names.append(f"def {node.name}")
+        if names:
+            out[path.relative_to(root).as_posix()] = tuple(names[:SYMBOL_MAX_PER_FILE])
+    return out
+
+
 def build_summary(path: str | Path) -> RepoSummary:
     """로컬 경로의 요약. URL은 MVP 1 이후 (GitHub tree API)."""
     if isinstance(path, str) and _is_url(path):
@@ -169,6 +203,7 @@ def build_summary(path: str | Path) -> RepoSummary:
         readme_head=_read(readme, README_HEAD_CHARS) if readme else "",
         config_files=config_files,
         docs=docs,
+        symbols=_symbol_index(root),
     )
 
 
@@ -196,4 +231,9 @@ def render_summary(summary: RepoSummary) -> str:
     lines += ["", "### Docs"]
     for name, body in summary.docs.items():
         lines += [f"#### {name}", body]
+    lines += ["", "### Symbols (existing public names, no bodies — reuse, do not recreate)"]
+    for name, syms in summary.symbols.items():
+        lines.append(f"- {name}: " + "; ".join(syms))
+    if not summary.symbols:
+        lines.append("(none)")
     return "\n".join(lines)

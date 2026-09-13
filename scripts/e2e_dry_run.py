@@ -260,6 +260,7 @@ async def run(argv: list[str]) -> Summary:
         publish=publish,
         emit=do_emit,
         model=None if args.fake or settings.llm_provider == "anthropic" else settings.llm_model,
+        min_tasks=1 if args.fake else 3,  # X.2 (fake 스크립트는 Task 2개)
     )
     graph = build_graph(deps, checkpointer=MemorySaver())
     cfg = {"configurable": {"thread_id": gid}}

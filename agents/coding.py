@@ -31,6 +31,7 @@ from agents.base import (
 )
 from agents.context import assemble_context
 from agents.llm.base import Message, ModelProvider, extract_json
+from agents.prompts import load_prompt
 from agents.tools.base import ToolContext, ToolDenied
 from agents.tools.fs import FsTool
 from agents.tools.git import GitTool, _git
@@ -45,22 +46,12 @@ DEPENDENCY_FILES = re.compile(
     r"(^|/)(pyproject\.toml|requirements[^/]*\.txt|uv\.lock|poetry\.lock|Pipfile(\.lock)?|"
     r"package\.json|[^/]*-lock\.(json|yaml|yml)|yarn\.lock|pnpm-lock\.yaml|go\.(mod|sum)|Cargo\.(toml|lock))$"
 )
-SYSTEM_PROMPT = """You are a Coding Agent working inside a git worktree of a real repository.
-Rules: modify only files under owned_paths; never add a dependency or change pyproject/package
-manifests; keep the existing conventions; make the smallest change that satisfies the task and
-its tests. Verification command: {test_command}.
-File paths are relative to the repository root. Copy the import style of the existing files shown
-(e.g. if existing tests import `app.x`, do the same — never invent a package prefix). Only call
-functions and attributes that exist in the files shown. When you change an existing file, return
-its complete content with every existing line preserved unless the task says to change it."""
+SYSTEM_PROMPT = load_prompt(
+    "system", test_command="{test_command}"
+)  # X.2: agents/prompts/system.md
 
 
-EDIT_FORMAT = """Respond with plain text in exactly this format (no JSON, no extra prose):
-=== MESSAGE: <one-line commit message> ===
-=== FILE: <repo-relative path> ===
-<complete file content, exactly as it should be saved>
-=== END FILE ===
-Repeat the FILE/END FILE pair for every file you create or change."""
+EDIT_FORMAT = load_prompt("edit")  # X.2: agents/prompts/edit.md (형식 + 전체 파일 규칙)
 # 작은 모델은 "=== FILE:"을 "### FILE:"로 쓰거나 뒤 마커·END FILE을 빼먹는다 → 경로는 한 줄,
 # 뒤 마커는 선택, 블록은 다음 FILE/END FILE 마커 또는 끝까지
 _MESSAGE_RE = re.compile(r"^[=#* ]*MESSAGE: ([^\n]+?)[ =#*]*$", re.MULTILINE)
@@ -253,16 +244,13 @@ class CodingAgent(BaseAgent):
             ]
             if state.get("test_output"):
                 parts.append(
-                    f"## Previous attempt {attempt - 1} failed. Test output:\n"
-                    f"```\n{state['test_output'][-4000:]}\n```\n"
-                    "Fix the code and/or tests so the command passes."
+                    load_prompt(
+                        "retry",
+                        attempt=str(attempt - 1),
+                        test_output=str(state["test_output"])[-4000:],
+                    )
                 )
-            parts.append(
-                "Write every file you create or change in full. Copy every unchanged line verbatim"
-                " from the file shown above, including decorators such as @dataclass, docstrings"
-                " and blank lines; add only what the task needs. Existing tests must keep passing."
-                f"\n\n{EDIT_FORMAT}"
-            )
+            parts.append(EDIT_FORMAT)
             c = await llm([Message(role="user", content="\n\n".join(parts))])
             plan = parse_edit_plan(c.text)
             if plan is None:

@@ -174,8 +174,12 @@ async def decompose_with_retry(
     goal: str,
     model: str | None = None,
     attempts: int = 2,
+    min_tasks: int = 1,
 ) -> DecomposeResult:
-    """LLM 분해 → 검증. 실패하면 이전 응답 + 오류를 붙여 재요청 (최대 ``attempts``회)."""
+    """LLM 분해 → 검증. 실패하면 이전 응답 + 오류를 붙여 재요청 (최대 ``attempts``회).
+
+    ``min_tasks`` (X.2): 그보다 적게 쪼개면 오류를 붙여 재요청 — 작은 모델의 뭉뚱그리기 방지.
+    """
     messages: list[Message] = [
         Message(
             role="user",
@@ -194,6 +198,12 @@ async def decompose_with_retry(
             except (ValidationError, ValueError) as exc:
                 last_error = _short_error(exc)
                 parsed = None
+        if isinstance(parsed, DecomposeResult) and len(parsed.tasks) < min_tasks:
+            last_error = (
+                f"expected at least {min_tasks} tasks, got {len(parsed.tasks)} — split the work "
+                "per the plan's Task Graph (one Task per T-n), each 30 minutes to 2 hours"
+            )
+            parsed = None
         if isinstance(parsed, DecomposeResult):
             return parsed
         messages = [

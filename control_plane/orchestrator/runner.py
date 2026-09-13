@@ -69,6 +69,7 @@ class GoalRunner:
         model: str | None = None,
         repo_path_for: RepoPathFor | None = None,
         emit: Emit | None = None,
+        min_tasks: int = 3,  # X.2: 운영 기본 3, Fake 스크립트 테스트는 1
     ) -> None:
         self._factory = factory
         self._bus = bus
@@ -92,6 +93,7 @@ class GoalRunner:
             publish=publish,
             emit=emit or do_emit,
             model=model,
+            min_tasks=min_tasks,
         )
         self._graph: Any = None  # Any: CompiledStateGraph, 체크포인터 확정 후 lazy
         self._running: dict[str, asyncio.Task[None]] = {}
