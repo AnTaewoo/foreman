@@ -51,3 +51,4 @@
 | 2026-09-13T13:52 | P2.2 | 완료 | 보드 done | 9e15cd3 |
 | 2026-09-13T13:52 | P2.3 | 착수 | discussions.py GraphQL (D-09 문서 재확인) | |
 | 2026-09-13T13:54 | P2.3 | Red | test_discussions 7, ModuleNotFoundError discussions | |
+| 2026-09-13T13:55 | P2.3 | Green | discussions.py GraphQL(create/list/comment, 스키마 SDL로 확인), 212 passed | |
