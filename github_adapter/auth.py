@@ -40,7 +40,7 @@ def _parse_expires(value: str) -> datetime:
 
 
 class InstallationTokenProvider:
-    """installation access token 캐시. ``client``는 base_url이 api.github.com인 AsyncClient."""
+    """installation access token 캐시. ``client``는 base_url이 GitHub API인 AsyncClient."""
 
     def __init__(
         self,

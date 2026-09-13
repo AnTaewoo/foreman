@@ -1,6 +1,6 @@
 """GitHub REST client — httpx 직접 (PyGithub 미사용). 모든 쓰기는 멱등 (설계 §7.2, §7.3, D-22).
 
-``client``는 base_url이 api.github.com이고 ``InstallationAuth``가 붙은 ``httpx.AsyncClient``.
+``client``는 base_url이 GitHub API이고 ``InstallationAuth``가 붙은 ``httpx.AsyncClient``.
 멱등 판정은 GitHub search API(인덱스 지연) 대신 목록 조회로 한다 (D-22).
 """
 

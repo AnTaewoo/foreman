@@ -36,7 +36,7 @@ def _require_real(settings: object, installation_id: int | None) -> tuple[str, s
 def make_installation_http(
     settings: object, installation_id: int | None = None
 ) -> httpx.AsyncClient:
-    """InstallationAuth가 붙은 api.github.com AsyncClient (실 모드 전용)."""
+    """InstallationAuth가 붙은 GitHub API AsyncClient (실 모드 전용)."""
     app_id, pem, inst = _require_real(settings, installation_id)
     token_http = httpx.AsyncClient(base_url=GITHUB_API_BASE_URL)
     provider = InstallationTokenProvider(app_id, pem, inst, token_http)
