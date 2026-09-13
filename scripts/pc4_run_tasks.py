@@ -60,19 +60,19 @@ GIT_ENV = {
     "PATH": "/usr/bin:/bin:/usr/local/bin",
 }
 
-# PC-3 fake 결과 형태의 Task 3개 (sample_repo 기준, 서로 owned_paths 겹침 없음)
+# PC-3 fake 결과 형태의 Task 3개 (sample_repo 기준, owned_paths 겹침 없음).
+# 사용자 결정 2026-09-13 (D-35): 7B 로컬 모델 기준의 "간단한 수준" — 새 파일 위주, 기대값 명시.
+# 기존 파일을 크게 고치는 Task(UserStore.update/delete)는 7B 편차 → PC-5(Anthropic)에서.
 TASKS: list[dict[str, Any]] = [
     {
-        "title": "Add update and delete to UserStore",
+        "title": "Add maths helpers module",
         "spec": (
-            "In `src/app/models.py`, add "
-            "`UserStore.update(user_id: int, name: str) -> User | None` and "
-            "`UserStore.delete(user_id: int) -> bool`. Add `tests/test_models.py` covering both "
-            "(update existing, update missing returns None, delete existing True, "
-            "delete missing False). "
-            "Do not touch other files."
+            "Create `src/app/maths.py` with `add(a: int, b: int) -> int` and "
+            "`mul(a: int, b: int) -> int`. Add `tests/test_maths.py` with exactly these checks: "
+            "`add(2, 3) == 5`, `add(-1, 1) == 0`, `mul(2, 3) == 6`, `mul(0, 9) == 0`. "
+            "Import as `from app.maths import add, mul`. Do not touch other files."
         ),
-        "owned_paths": ["src/app/models.py", "tests/test_models.py"],
+        "owned_paths": ["src/app/maths.py", "tests/test_maths.py"],
         "depends_on": [],
     },
     {
@@ -80,9 +80,13 @@ TASKS: list[dict[str, Any]] = [
         "spec": (
             "Create `src/app/users.py` with a module-level `store = UserStore()` and functions "
             "`list_users() -> list[dict]` (each dict has id and name) and "
-            "`add_user(name: str) -> dict`. "
-            "Add `tests/test_users.py` with at least two tests. Import UserStore from app.models. "
-            "Do not modify main.py or models.py."
+            "`add_user(name: str) -> dict`. Import UserStore with "
+            "`from app.models import UserStore`. "
+            "Add `tests/test_users.py` (import `from app.users import list_users, add_user`) "
+            "with ONE test function `test_add_then_list` that asserts, in this order: "
+            '`add_user("ann") == {"id": 1, "name": "ann"}` then '
+            '`list_users() == [{"id": 1, "name": "ann"}]`. The store is shared, so do not write '
+            "a second test that adds users. Do not modify main.py or models.py."
         ),
         "owned_paths": ["src/app/users.py", "tests/test_users.py"],
         "depends_on": [],
@@ -91,9 +95,9 @@ TASKS: list[dict[str, Any]] = [
         "title": "Add greet_all helper to main",
         "spec": (
             "In `src/app/main.py`, add `greet_all(names: list[str]) -> list[str]` that returns "
-            "`greet(name)` for each name, keeping existing functions unchanged. Add "
-            "`tests/test_greet_all.py` with two tests (empty list, two names). "
-            "Do not modify other files."
+            "`greet(name)` for each name, keeping every existing line unchanged. Add "
+            "`tests/test_greet_all.py` (import `from app.main import greet_all`) with: "
+            '`greet_all([]) == []` and `greet_all(["a", "b"]) == ["hello, a", "hello, b"]`.'
         ),
         "owned_paths": ["src/app/main.py", "tests/test_greet_all.py"],
         "depends_on": [],

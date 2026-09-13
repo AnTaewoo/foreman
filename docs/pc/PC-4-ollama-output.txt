@@ -270,3 +270,59 @@ def test_delete_missing_user() -> None:
     assert not result
 ```
 === END FILE ===
+
+################ FINAL (D-35 simple tasks) — two consecutive runs
+---- run 1
+=== PC-4 (provider=openai_compat:qwen2.5-coder:7b) remote=/tmp/pc4-evnxzvpm/remote.git ===
+  ↳ worker done: done (3 calls, 10s) — Add maths helpers module
+  ↳ worker done: done (3 calls, 12s) — Add users module with list_users and add_user
+  ↳ worker done: done (3 calls, 14s) — Add greet_all helper to main
+=== branches on remote ===
+  ai/users-api/101-add-maths-helpers-module: Add maths helpers module  trailer=True
+  ai/users-api/102-add-users-module-with-list-users-and-add: Add users module with list_users and add_user functions  trailer=True
+  ai/users-api/103-add-greet-all-helper-to-main: Add greet_all helper to main and test_greet_all.py  trailer=True
+  [ok] branches pushed: 3 >= 3
+=== would open_pr ===
+  #1 [T-101] Add maths helpers module draft=True head=ai/users-api/101-add-maths-helpers-module
+  #2 [T-102] Add users module with list_users and add_user draft=True head=ai/users-api/102-add-users-module-with-list-users-and-add
+  #3 [T-103] Add greet_all helper to main draft=True head=ai/users-api/103-add-greet-all-helper-to-main
+  [ok] would open_pr: 3 >= 3
+=== tasks ===
+  Add maths helpers module: in_review attempts=0 pr=1
+  Add users module with list_users and add_user: in_review attempts=0 pr=2
+  Add greet_all helper to main: in_review attempts=0 pr=3
+  [ok] pr.opened events: 3 >= 3
+  [ok] verify_chain_db True
+  [ok] projection_error rows: []
+=== runs ===
+  done           attempts=1 calls=3 tokens=2260/537 9.6s  Add maths helpers module
+  done           attempts=1 calls=3 tokens=2378/698 12.2s  Add users module with list_users and add_user
+  done           attempts=1 calls=3 tokens=2336/781 13.6s  Add greet_all helper to main
+PC-4: PASS
+---- run 2
+=== PC-4 (provider=openai_compat:qwen2.5-coder:7b) remote=/tmp/pc4-aeybxsmh/remote.git ===
+  ↳ worker done: done (3 calls, 11s) — Add maths helpers module
+  ↳ worker done: done (3 calls, 10s) — Add users module with list_users and add_user
+  ↳ worker done: done (3 calls, 16s) — Add greet_all helper to main
+=== branches on remote ===
+  ai/users-api/101-add-maths-helpers-module: Add maths helpers module  trailer=True
+  ai/users-api/102-add-users-module-with-list-users-and-add: Add users module with list_users and add_user  trailer=True
+  ai/users-api/103-add-greet-all-helper-to-main: Add greet_all helper function and tests  trailer=True
+  [ok] branches pushed: 3 >= 3
+=== would open_pr ===
+  #1 [T-101] Add maths helpers module draft=True head=ai/users-api/101-add-maths-helpers-module
+  #2 [T-102] Add users module with list_users and add_user draft=True head=ai/users-api/102-add-users-module-with-list-users-and-add
+  #3 [T-103] Add greet_all helper to main draft=True head=ai/users-api/103-add-greet-all-helper-to-main
+  [ok] would open_pr: 3 >= 3
+=== tasks ===
+  Add maths helpers module: in_review attempts=0 pr=1
+  Add users module with list_users and add_user: in_review attempts=0 pr=2
+  Add greet_all helper to main: in_review attempts=0 pr=3
+  [ok] pr.opened events: 3 >= 3
+  [ok] verify_chain_db True
+  [ok] projection_error rows: []
+=== runs ===
+  done           attempts=1 calls=3 tokens=2323/629 11.1s  Add maths helpers module
+  done           attempts=1 calls=3 tokens=2383/556 10.1s  Add users module with list_users and add_user
+  done           attempts=1 calls=3 tokens=2452/926 16.0s  Add greet_all helper to main
+PC-4: PASS

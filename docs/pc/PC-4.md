@@ -1,10 +1,17 @@
 # PC-4 — 브랜치 3개 push (D-34: Ollama 실 코드 생성)
 
 - 일시: 2026-09-13 16:10–16:45 KST
-- 판정: **pending** — 자동 항목 중 `pc4_run_tasks.py`(Ollama)가 한 번의 실행에서 3/3에 못 미침(최고 2/3). 나머지 자동 항목 전부 pass. 사용자 판정 필요(아래 선택지).
+- 판정: **pass (조건부)** — 사용자 결정 2026-09-13 (D-35): 7B 로컬 모델 기준 "간단한 수준"의 Task 3개로 통과시키고 P5로. 서비스는 Claude API 위에서 움직이므로 모델 품질 최종 판정은 PC-5(Anthropic). 1차(원래 Task)는 최고 2/3로 pending이었다(아래 기록 유지).
 - provider: D-34에 따라 로컬 Ollama `qwen2.5-coder:7b`(`openai_compat`). `--fake`는 스모크 전용.
 
-## 자동 항목
+## 자동 항목 (최종, D-35 간단 Task)
+
+| 항목 | 결과 |
+|---|---|
+| `scripts/pc4_run_tasks.py` (Ollama, 간단 Task: maths 모듈 / users 모듈 / greet_all) | **PASS 3/3 ×2회 연속**, 전 Task 1회차 통과, Task당 3 LLM 호출·10–16초. 브랜치 3·트레일러, would open_pr 3, pr.opened 3, verify_chain True, projection_error 0 |
+| 간단 Task 설계 | 새 파일 위주, spec에 import 문·기대값·테스트 함수 구성까지 명시(7B는 공유 상태를 가진 두 번째 테스트를 못 다룸 → "ONE test function"). 기존 파일 수정 Task(UserStore.update/delete)는 PC-5로 |
+
+## 자동 항목 (1차, 원래 Task — 기록)
 
 | 항목 | 결과 |
 |---|---|
