@@ -122,3 +122,4 @@ def test_worker_container_pushes_branch(tmp_path: Path) -> None:
     assert "ai/users-api/12-add-users-module" in heads
     lines = (events_dir / "events.jsonl").read_text().splitlines()
     assert json.loads(lines[-1])["type"] == "run.finished"
+    assert "pr.opened" not in [json.loads(ln)["type"] for ln in lines]  # D-37

@@ -87,7 +87,7 @@ def test_is_dependency_file() -> None:
         assert not is_dependency_file(p), p
 
 
-# (a) pass 경로
+# (a) pass 경로 (D-37: 워커는 push + task.completed{branch, summary}까지, PR은 control plane PrOpener)
 async def test_pass_path(worktree: Path, remote: Path, spy: Spy) -> None:
     github = DryRunGitHubClient()
     agent = make_agent("pass", spy, worktree, github)
@@ -95,34 +95,30 @@ async def test_pass_path(worktree: Path, remote: Path, spy: Spy) -> None:
     assert out.outcome == "done", out
     kinds = {a.kind: a for a in out.artifacts}
     assert kinds["branch"].ref == "ai/users-api/12-add-users-module"
-    assert kinds["pr"].ref == "1" and kinds["comment"].ref
+    assert "pr" not in kinds and "comment" not in kinds
     types = spy.types()
     assert types[:2] == ["task.started", "run.started"]
     assert (
         types[2] == "run.tool_called" and spy.events[2].payload["tool"] == "fs.read"
     )  # CONTEXT.md 첫 툴
-    assert "pr.opened" in types and "task.completed" in types and types[-1] == "run.finished"
-    assert types.index("pr.opened") < types.index("task.completed") < types.index("run.finished")
+    assert "pr.opened" not in types and "task.completed" in types and types[-1] == "run.finished"
+    assert types.index("run.artifact_produced") < types.index("task.completed")
     assert "run.tool_denied" not in types and "task.failed" not in types
-    pr_opened = next(e for e in spy.events if e.type.value == "pr.opened")
-    assert pr_opened.subject.entity == "pr" and pr_opened.payload["task_id"] == "01TASK"
-    assert (
-        pr_opened.payload["head"] == "ai/users-api/12-add-users-module"
-        and pr_opened.payload["base"] == "main"
-    )
+    produced = next(e for e in spy.events if e.type.value == "run.artifact_produced")
+    assert produced.subject.entity == "run" and produced.payload == {
+        "kind": "branch",
+        "ref": "ai/users-api/12-add-users-module",
+    }
     completed = next(e for e in spy.events if e.type.value == "task.completed")
-    assert completed.payload == {"run_id": "01RUN", "pr_number": 1}
-    # 원격에 브랜치·커밋(트레일러), Dry PR(draft, 메타 블록), 요약 코멘트(key)
+    assert completed.payload["run_id"] == "01RUN"
+    assert completed.payload["branch"] == "ai/users-api/12-add-users-module"
+    assert completed.payload["summary"] == out.summary and out.summary
+    # 원격에 브랜치·커밋(트레일러). GitHub 쓰기는 0 (PR·코멘트는 control plane)
     assert "ai/users-api/12-add-users-module" in git(remote, "branch", "--list")
     body = git(remote, "log", "-1", "--format=%B", "ai/users-api/12-add-users-module")
     assert "Task #12 / Run 01RUN" in body
-    snap = github.snapshot()["repos"][REPO]
-    pr = snap["pulls"][1]
-    assert pr["draft"] is True and pr["body"].startswith(
-        "<!-- ai-platform:meta task=01TASK run=01RUN"
-    )
-    assert pr["head"] == "ai/users-api/12-add-users-module" and pr["base"] == "main"
-    assert snap["issues"][12]["comments"][0]["key"] == "summary:01RUN"
+    assert github.snapshot()["repos"] == {}
+    assert not any(e.payload.get("tool") == "github.open_pr" for e in spy.events)
     assert agent.last_state is not None and agent.last_state["attempt"] == 1
     assert out.tokens_in > 0 or out.tokens_out >= 0
 

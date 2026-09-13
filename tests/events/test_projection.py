@@ -538,3 +538,42 @@ async def test_handle_skips_unsigned_events_without_seq(
         Delivery(event=unsigned, message_id="9-0", attempt=1, group="g", consumer="c", seq=None)
     )
     assert (await _task(factory)).status is TaskStatus.ASSIGNED  # 적용 안 됨
+
+
+# P6.7 (D-37): task.completed.branch → tasks.branch_name (pr.opened 전에 브랜치를 안다)
+async def test_task_completed_sets_branch_name(
+    factory: async_sessionmaker[AsyncSession], redis: Redis
+) -> None:
+    from tests.runtime.conftest import bootstrap, ev, task_created
+
+    bus = EventBus(redis)
+    projection = Projection(factory, bus)
+    events = [*bootstrap("P1", "G1", "/r"), task_created("P1", "G1", "T1", ["a/**"], 1)]
+    events += [
+        ev(
+            "P1",
+            EventType.TASK_ASSIGNED,
+            "task",
+            "T1",
+            {"agent_id": "a", "run_id": "R1"},
+            correlation_id="G1",
+        ),
+        ev("P1", EventType.TASK_STARTED, "task", "T1", {"run_id": "R1"}, correlation_id="G1"),
+        ev(
+            "P1",
+            EventType.TASK_COMPLETED,
+            "task",
+            "T1",
+            {"run_id": "R1", "branch": "ai/e/1-t", "summary": "s"},
+            correlation_id="G1",
+        ),
+    ]
+    async with factory() as s:
+        for e in events:
+            await projection.apply(await bus.publish(s, e))
+        await s.commit()
+    async with factory() as s:
+        task = await s.get(m.Task, "T1")
+    assert (
+        task is not None and task.branch_name == "ai/e/1-t" and task.status is TaskStatus.IN_REVIEW
+    )

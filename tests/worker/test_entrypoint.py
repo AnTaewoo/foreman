@@ -101,7 +101,9 @@ def test_done_exit_0(tmp_path: Path, worktree: Path, remote: Path) -> None:
     assert code == 0
     types = [e["type"] for e in read_events(events_file)]
     assert types[:2] == ["task.started", "run.started"] and types[-1] == "run.finished"
-    assert "pr.opened" in types and "task.completed" in types
+    assert "pr.opened" not in types and "task.completed" in types  # D-37: PR은 control plane
+    completed = next(e for e in read_events(events_file) if e["type"] == "task.completed")
+    assert completed["payload"]["branch"] == "ai/users-api/12-add-users-module"
     assert "ai/users-api/12-add-users-module" in git(remote, "branch", "--list")
     fin = read_events(events_file)[-1]
     assert fin["payload"]["outcome"] == "success" and fin["signature"] is None  # 서명은 ingest가
