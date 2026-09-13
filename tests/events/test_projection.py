@@ -491,3 +491,36 @@ async def test_force_replay_rebuilds(
     for e in replayed:
         assert await projection.apply(e, force=True) is True
     assert (await _task(factory)).status is TaskStatus.DONE
+
+
+# PC-1에서 발견: tool_called는 relay보다 먼저 스트림에 도착한다(D-31 직접 XADD).
+# Run이 아직 없어도 오류·retry 없이 통과하고, run.started/run.finished가 tool_calls를 재계산한다.
+async def test_tool_called_before_run_started_is_tolerated(
+    factory: async_sessionmaker[AsyncSession], bus: EventBus, projection: Projection, redis: Redis
+) -> None:
+    events = await publish_all(bus, factory, SEQUENCE[:9])  # ... task.started
+    for e in events:
+        await projection.apply(e)
+    tool1, tool2, started = await publish_all(
+        bus,
+        factory,
+        [
+            ev(E.RUN_TOOL_CALLED, ("run", "R1"), {"tool": "fs.read", "args_digest": "ab" * 32}),
+            ev(E.RUN_TOOL_CALLED, ("run", "R1"), {"tool": "shell", "args_digest": "cd" * 32}),
+            SEQUENCE[9],  # run.started
+        ],
+    )
+    for tool in (tool1, tool2):
+        await projection.handle(
+            Delivery(event=tool, message_id="1-0", attempt=1, group="g", consumer="c", seq=None)
+        )
+    assert await redis.xlen("events:P1:retry") == 0  # 체인 밖 이벤트는 retry 대상이 아니다
+    assert await projection.apply(started) is True
+    async with factory() as s:
+        run = await s.get(m.Run, "R1")
+        assert run is not None and run.tool_call_count == 2
+    (fin,) = await publish_all(bus, factory, [run_finished()])
+    await projection.apply(fin)
+    async with factory() as s:
+        run = await s.get(m.Run, "R1")
+        assert run is not None and run.tool_call_count == 2

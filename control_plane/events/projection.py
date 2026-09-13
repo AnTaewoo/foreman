@@ -261,6 +261,13 @@ async def _task_failed(session: AsyncSession, event: Event) -> None:
 # --------------------------------------------------------------------------- run
 
 
+async def _recount_tool_calls(session: AsyncSession, run: m.Run) -> None:
+    count = await session.scalar(
+        select(func.count()).select_from(m.ToolCall).where(m.ToolCall.run_id == run.id)
+    )
+    run.tool_call_count = int(count or 0)
+
+
 @on(E.RUN_STARTED)
 async def _run_started(session: AsyncSession, event: Event) -> None:
     p = event.payload
@@ -272,16 +279,18 @@ async def _run_started(session: AsyncSession, event: Event) -> None:
     row.agent_id = str(p.get("agent_id", ""))
     row.model = _payload_str(event, "model")
     row.started_at = event.ts
+    await session.flush()
+    await _recount_tool_calls(session, row)  # 먼저 도착한 tool_called 반영
 
 
 @on(E.RUN_TOOL_CALLED)
 async def _run_tool_called(session: AsyncSession, event: Event) -> None:
-    """tool_calls 행 수를 다시 센다(멱등). run.started 전에 오면 OrderingError."""
-    run = await _require(session, m.Run, event.subject.id, event)
-    count = await session.scalar(
-        select(func.count()).select_from(m.ToolCall).where(m.ToolCall.run_id == run.id)
-    )
-    run.tool_call_count = int(count or 0)
+    """tool_calls 행 수를 다시 센다(멱등). 체인 밖 이벤트라 relay보다 먼저 올 수 있다 —
+    Run이 아직 없으면 건너뛴다. run.started / run.finished가 다시 센다 (PC-1에서 발견)."""
+    run = await session.get(m.Run, event.subject.id)
+    if run is None:
+        return
+    await _recount_tool_calls(session, run)
 
 
 @on(E.RUN_TOOL_DENIED)
@@ -301,6 +310,7 @@ async def _run_finished(session: AsyncSession, event: Event) -> None:
     run.cost_usd = float(p.get("cost_usd", 0.0))
     run.error = _payload_str(event, "error")
     run.ended_at = event.ts
+    await _recount_tool_calls(session, run)
 
 
 on(E.RUN_ARTIFACT_PRODUCED)(noop)
