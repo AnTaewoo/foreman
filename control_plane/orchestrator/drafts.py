@@ -1,8 +1,8 @@
 """Orchestrator 산출물 모델과 프롬프트 (설계 §5.2 Plan 형식, §4.1 Task).
 
 - ``PlanDraft`` → ``to_markdown()``이 §5.2의 6섹션 Discussion 본문을 만든다.
-- ``DecomposeResult``(epics + ``TaskDraft`` 목록)는 제목 유일·depends_on 참조·자기 참조·epic 참조를 검증한다.
-- ``decompose_with_retry``: 1회차 파싱/검증 실패 시 이전 응답과 오류를 붙여 한 번 더 요청, 또 실패면 ``DecomposeError``.
+- ``DecomposeResult``(epics + ``TaskDraft`` 목록)는 제목 유일·depends_on·자기 참조·epic 참조 검증.
+- ``decompose_with_retry``: 실패 시 이전 응답+오류를 붙여 재요청, 또 실패면 ``DecomposeError``.
 - ``render_prompt(name, **vars)``: ``prompts/<name>.md``의 상단 ``<!-- -->`` 근거 주석을 떼고 치환.
 """
 
@@ -171,7 +171,7 @@ async def decompose_with_retry(
         )
     ]
     last_error = ""
-    for attempt in range(1, attempts + 1):
+    for _ in range(attempts):
         completion = await provider.complete(
             messages, system=system_prompt(), schema=DecomposeResult, model=model
         )

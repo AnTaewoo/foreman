@@ -26,7 +26,8 @@ PROMPTS = Path("control_plane/orchestrator/prompts")
 def task(title: str, deps: list[str] | None = None, epic: str = "E") -> dict[str, object]:
     return {
         "title": title, "spec": f"do {title}", "kind": "feature", "role_required": "coding",
-        "depends_on": deps or [], "owned_paths": [f"src/{title.lower()}/**"], "estimated_tier": "T1",
+        "depends_on": deps or [], "owned_paths": [f"src/{title.lower()}/**"],
+        "estimated_tier": "T1",
         "epic": epic,
     }  # fmt: skip
 
