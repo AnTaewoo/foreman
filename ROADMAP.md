@@ -232,7 +232,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P6.5 | `llm/pricing.py` — cost_usd (D-39) | P6.1 | done | abadc51 |
 | P6.6 | `repo_cache.py` — repo 확보 (D-38) | P6.1 | done | d70a254 |
 | P6.7 | `pr_opener.py` — PR 생성 control plane으로 (D-37) | P6.3, P6.6 | done | d5b1b10 |
-| P6.8 | ROADMAP·runbook 정리 (리뷰 C1~C5) | P6.4, P6.5, P6.7 | todo | |
+| P6.8 | ROADMAP·runbook 정리 (리뷰 C1~C5) | P6.4, P6.5, P6.7 | done | 5f98754 |
 | **PC-6** | 상주 프로세스 + API로 Goal→브랜치→done 완주 | P6.8 | pending | |
 
 ---

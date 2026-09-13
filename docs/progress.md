@@ -184,3 +184,6 @@
 | 2026-09-13T21:45 | P6.7 | Green | pr_opener.py, coding.py 그래프 분할, 스키마 additive, Runtime 체인, 438 passed | d5b1b10 |
 | 2026-09-13T21:50 | P6.7 | Gate | make check pass (438) && test-integration 6 passed, pc4 --fake PASS, 시도 3/3 | |
 | 2026-09-13T21:50 | P6.7 | 완료 | 보드 done | d5b1b10 |
+| 2026-09-13T21:55 | P6.8 | Green | ROADMAP C1~C5, runbook 기동 순서 | 5f98754 |
+| 2026-09-13T21:58 | P6.8 | Gate | check_runbook.sh 5/5 && make check pass (438) | |
+| 2026-09-13T21:58 | P6.8 | 완료 | 보드 done | 5f98754 |
