@@ -3,3 +3,4 @@
 | 시각 | ID | 체크포인트 | 핵심 1줄 | 커밋 |
 |---|---|---|---|---|
 | 2026-09-13T10:59 | P0.1 | 착수 | 골격+툴체인+Settings+import 가드 | |
+| 2026-09-13T11:00 | P0.1 | Red | test_scaffold.py 8케이스, ModuleNotFoundError control_plane | |
