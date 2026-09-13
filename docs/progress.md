@@ -45,3 +45,4 @@
 | 2026-09-13T13:49 | P2.1 | Gate | make check pass (186), 시도 2/3 | |
 | 2026-09-13T13:49 | P2.1 | 완료 | 보드 done | 187bc62 |
 | 2026-09-13T13:49 | P2.2 | 착수 | client/protocol/markers | |
+| 2026-09-13T13:50 | P2.2 | Red | test_client 18, ImportError markers/client/protocol | |
