@@ -5,3 +5,4 @@
 | 2026-09-13T10:59 | P0.1 | 착수 | 골격+툴체인+Settings+import 가드 | |
 | 2026-09-13T11:00 | P0.1 | Red | test_scaffold.py 8케이스, ModuleNotFoundError control_plane | |
 | 2026-09-13T11:01 | P0.1 | Green | 패키지 11개+Settings+pyproject+Makefile, 17 passed | |
+| 2026-09-13T11:03 | P0.1 | 완료 | make check pass, 보드 done | 16f90dd |
