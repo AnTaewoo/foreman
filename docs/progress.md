@@ -82,3 +82,4 @@
 | 2026-09-13T14:22 | P3.3 | Gate | make check pass (270), pre-commit pass, 시도 3/3 (E501·B007) | |
 | 2026-09-13T14:22 | P3.3 | 완료 | 보드 done | 0ba957a |
 | 2026-09-13T14:22 | P3.4 | 착수 | graph.py + state.py (LangGraph, interrupt, checkpointer) | |
+| 2026-09-13T14:23 | P3.4 | Red | test_graph 8, ModuleNotFoundError graph/state | |
