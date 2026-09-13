@@ -134,3 +134,8 @@
 | 2026-09-13T17:08 | P5.1 | Green | projects/goals/tasks/events + idempotency, 390 passed | 83b8ae0 |
 | 2026-09-13T17:09 | P5.1 | Gate | make check pass (390), mypy clean, 시도 2/3 | |
 | 2026-09-13T17:09 | P5.1 | 완료 | 보드 done | 83b8ae0 |
+| 2026-09-13T17:15 | P5.2 | 착수 | runner + approvals + 웹훅 연결 | |
+| 2026-09-13T17:20 | P5.2 | Red | test_goal_flow 6건, ModuleNotFoundError orchestrator.runner | 07d1109 |
+| 2026-09-13T17:30 | P5.2 | Green | GoalRunner/ApprovalService/app wiring, members 키, 396 passed | 6742383 |
+| 2026-09-13T17:31 | P5.2 | Gate | make check pass (396), mypy clean, 시도 3/3 | |
+| 2026-09-13T17:31 | P5.2 | 완료 | 보드 done | 6742383 |
