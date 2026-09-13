@@ -16,3 +16,5 @@
 | 2026-09-13T11:55 | P1.1 | 착수 | schema.py: EventType 44, 봉투, canonical/sign/verify, PAYLOAD_TYPES | |
 | 2026-09-13T11:56 | P1.1 | Red | test_schema.py 26케이스+파라미터, ImportError control_plane.events.schema | |
 | 2026-09-13T11:57 | P1.1 | Green | schema.py: EventType 44, Event/Actor/Subject, canonical/sign/verify, PAYLOAD_TYPES 14, 110 passed | |
+| 2026-09-13T11:58 | P1.1 | Gate | make check pass (110 tests), 시도 2/3 (E501 11건 정리) | |
+| 2026-09-13T11:58 | P1.1 | 완료 | 보드 done | b490bfa |
