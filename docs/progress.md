@@ -160,3 +160,7 @@
 | 2026-09-13T19:40 | P6.1 | Green | Runtime 체인 컨슈머, per-project repo, launchers, 412 passed | 8309e7e |
 | 2026-09-13T19:45 | P6.1 | Gate | make check pass (412) && test-integration 6 passed (docker launcher 실제 기동), 시도 3/3 | |
 | 2026-09-13T19:45 | P6.1 | 완료 | 보드 done | 8309e7e |
+| 2026-09-13T19:50 | P6.2 | Red | test_goal_flow 2건 (복원, 체크포인트 없으면 skip) | 8953c69 |
+| 2026-09-13T19:58 | P6.2 | Green | GoalRunner.restore_waiting (startup), 414 passed | 725422e |
+| 2026-09-13T20:00 | P6.2 | Gate | make check pass (414), mypy clean, 시도 3/3 | |
+| 2026-09-13T20:00 | P6.2 | 완료 | 보드 done | 725422e |
