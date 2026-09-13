@@ -2,13 +2,13 @@
 
 - App JWT: ``iss``=app id, ``iat``=now, ``exp``=now+600s (GitHub 최대 10분).
 - installation token은 만료 5분 전에 갱신한다. 그 전에는 네트워크 호출이 없다.
-- ``InstallationAuth``는 401을 한 번 받으면 토큰을 강제 재발급해 한 번 더 시도한다. 두 번째 401은 그대로.
+- ``InstallationAuth``는 401을 받으면 토큰을 강제 재발급해 한 번 더 시도한다. 두 번째 401은 그대로.
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable, Generator
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -112,5 +112,5 @@ class InstallationAuth(httpx.Auth):
 
     def sync_auth_flow(
         self, request: httpx.Request
-    ) -> AsyncGenerator[httpx.Request, httpx.Response]:
+    ) -> Generator[httpx.Request, httpx.Response, None]:
         raise RuntimeError("InstallationAuth is async-only; use httpx.AsyncClient")

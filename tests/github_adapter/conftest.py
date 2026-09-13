@@ -1,4 +1,4 @@
-"""P2 공용: respx가 api.github.com을 전부 가로챈다. 미매칭 요청 = 테스트 실패 (D-10). RSA 키 픽스처."""
+"""P2 공용: respx가 api.github.com을 전부 가로챈다. 미매칭 요청 = 실패 (D-10). RSA 키 픽스처."""
 
 from __future__ import annotations
 

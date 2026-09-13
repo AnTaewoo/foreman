@@ -19,7 +19,12 @@ INSTALLATION = 777
 # (a) App JWT
 def test_app_jwt_claims(private_key_pem: str, public_key_pem: str, clock: Clock) -> None:
     token = app_jwt(APP_ID, private_key_pem, now=clock())
-    claims = jwt.decode(token, public_key_pem, algorithms=["RS256"])
+    claims = jwt.decode(
+        token,
+        public_key_pem,
+        algorithms=["RS256"],
+        options={"verify_exp": False, "verify_iat": False},  # 고정 시계라 시간 검증은 제외
+    )
     assert claims["iss"] == APP_ID
     assert claims["exp"] - claims["iat"] == 600
     assert claims["iat"] == int(clock().timestamp())
