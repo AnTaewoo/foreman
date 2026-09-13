@@ -1,6 +1,6 @@
 """RepoSummary — Orchestrator의 analyze_repo 입력 (설계 §5.2, §5.3). 로컬 경로만 (D-11).
 
-읽는 것: README 머리, 설정 파일(pyproject/package.json/...), `docs/**.md`, `.ai-platform/*`, 트리(depth ≤ 2).
+읽는 것: README 머리, 설정 파일, `docs/**.md`, `.ai-platform/*`, 트리(depth ≤ 2).
 읽지 않는 것: 소스 본문. 프레임워크는 **선언된 의존성**으로만 판정한다(설명 문구 무시).
 """
 
@@ -16,8 +16,9 @@ EXCLUDED_DIRS = frozenset(
      ".ruff_cache", ".pytest_cache", "dist", "build", ".idea", ".vscode"}
 )  # fmt: skip
 CONFIG_FILES = (
-    "pyproject.toml", "setup.cfg", "setup.py", "requirements.txt", "package.json", "tsconfig.json",
-    "go.mod", "Cargo.toml", "Makefile", "docker-compose.yml", "Dockerfile", ".ai-platform/autonomy.yaml",
+    "pyproject.toml", "setup.cfg", "setup.py", "requirements.txt", "package.json",
+    "tsconfig.json", "go.mod", "Cargo.toml", "Makefile", "docker-compose.yml", "Dockerfile",
+    ".ai-platform/autonomy.yaml",
 )  # fmt: skip
 MAX_TREE_DEPTH = 2
 README_HEAD_CHARS = 2000
@@ -123,8 +124,11 @@ def _detect(root: Path) -> tuple[str | None, str | None, str | None]:
             data = json.loads(package_json.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             data = {}
-        deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
-        framework = next((f for f in JS_FRAMEWORKS if f in deps), None)
+        js_deps: dict[str, str] = {
+            **data.get("dependencies", {}),
+            **data.get("devDependencies", {}),
+        }
+        framework = next((f for f in JS_FRAMEWORKS if f in js_deps), None)
         test_script = str((data.get("scripts") or {}).get("test", ""))
         runner = next((r for r in ("jest", "vitest", "mocha") if r in test_script), None)
         language = "typescript" if (root / "tsconfig.json").is_file() else "javascript"

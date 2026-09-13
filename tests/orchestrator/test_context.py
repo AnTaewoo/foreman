@@ -31,7 +31,7 @@ def test_summary_fields(summary: RepoSummary) -> None:
 
 def test_framework_from_dependencies_only(tmp_path: Path) -> None:
     (tmp_path / "pyproject.toml").write_text(
-        '[project]\nname="x"\ndescription="uses django and fastapi words"\ndependencies=["fastapi"]\n'
+        '[project]\nname="x"\ndescription="uses django words"\ndependencies=["fastapi"]\n'
     )
     assert build_summary(tmp_path).framework == "fastapi"
     (tmp_path / "pyproject.toml").write_text('[project]\nname="x"\ndependencies=["requests"]\n')
