@@ -1,0 +1,23 @@
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+
+# secrets / local
+.env
+.env.*
+!.env.example
+*.pem
+id_rsa*
+
+# local data
+*.db
+*.sqlite
+tmp/
+.tmp/
