@@ -36,6 +36,9 @@ dev = [
     "types-pyyaml",
     "aiosqlite",
 ]
+fixtures = [
+    "flask>=3.0",
+]
 
 [build-system]
 requires = ["hatchling"]
