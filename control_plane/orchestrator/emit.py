@@ -1,8 +1,8 @@
-"""emit_issues — TaskDraft 목록을 Epic/Task 이벤트와 (Dry) GitHub Issue로 (설계 §5.2 emit, §10.1; D-19/D-20/D-27).
+"""emit_issues — TaskDraft 목록 → Epic/Task 이벤트 + Dry Issue (설계 §5.2, §10.1; D-27).
 
 순서: owned_paths 겹침 직렬화 → 위상 정렬(사이클이면 ``goal.blocked``) → 라벨 → Epic마다 milestone +
 ``epic.created`` → Task마다 Issue + ``task.created`` (depends_on은 task id). 전부 causation 체인.
-멱등: ``state["issues"]``에 이미 있는 Task/Epic은 같은 id를 재사용하고 이벤트를 다시 발행하지 않는다.
+멱등: ``state["issues"]``에 이미 있는 Task/Epic은 같은 id를 재사용하고 이벤트를 재발행하지 않는다.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from typing import Any
 import structlog
 from ulid import ULID
 
-from control_plane.events.schema import Actor, Event, EventType, Subject
+from control_plane.events.schema import Actor, EntityType, Event, EventType, Subject
 from control_plane.orchestrator.drafts import EpicDraft, TaskDraft
 from control_plane.orchestrator.state import OrchestratorState
 from github_adapter.protocol import EpicMilestone, GitHubClient, TaskIssue
@@ -70,7 +70,8 @@ def _fixed_prefix(path: str) -> tuple[str, ...]:
 def paths_overlap(a: str, b: str) -> bool:
     """보수적 판정: 한쪽의 고정 접두 경로가 다른 쪽에 포함되면 겹친다고 본다.
 
-    ``src/app/**`` vs ``src/app/users.py`` → True, ``src/app/users.py`` vs ``src/app/user_store.py`` → False.
+    ``src/app/**`` vs ``src/app/users.py`` → True
+    ``src/app/users.py`` vs ``src/app/user_store.py`` → False.
     같은 디렉토리의 글롭(``src/app/*.py``)과 그 하위 파일도 겹침으로 본다(직렬화가 안전한 쪽).
     """
     pa, pb = _fixed_prefix(a), _fixed_prefix(b)
@@ -108,7 +109,7 @@ def _event(
     state: OrchestratorState,
     prev: str | None,
     type_: EventType,
-    entity: str,
+    entity: EntityType,
     id_: str,
     payload: dict[str, Any],
 ) -> Event:
@@ -116,7 +117,7 @@ def _event(
         project_id=state["project_id"],
         actor=ORCHESTRATOR,
         type=type_,
-        subject=Subject(entity=entity, id=id_),  # type: ignore[arg-type]  # entity ∈ Literal
+        subject=Subject(entity=entity, id=id_),
         payload=payload,
         correlation_id=state["goal_id"],
         causation_id=prev,
@@ -137,8 +138,15 @@ async def emit(
         ordered = toposort(serialize_overlaps(tasks))
     except CycleError as exc:
         blocked = await publish(
-            _event(state, prev, EventType.GOAL_BLOCKED, "goal", state["goal_id"], {"reason": f"cycle: {exc.remaining}"})
-        )  # fmt: skip
+            _event(
+                state,
+                prev,
+                EventType.GOAL_BLOCKED,
+                "goal",
+                state["goal_id"],
+                {"reason": f"cycle: {exc.remaining}"},
+            )
+        )
         log.warning("emit.cycle", tasks=exc.remaining)
         return {
             "issues": [],
@@ -172,9 +180,20 @@ async def emit(
             repo, EpicMilestone(epic_id=epic_id, title=epic.title, description=epic.summary)
         )
         ev = await publish(
-            _event(state, prev, EventType.EPIC_CREATED, "epic", epic_id,
-                   {"goal_id": state["goal_id"], "title": epic.title, "order": order, "milestone_number": ms.number})
-        )  # fmt: skip
+            _event(
+                state,
+                prev,
+                EventType.EPIC_CREATED,
+                "epic",
+                epic_id,
+                {
+                    "goal_id": state["goal_id"],
+                    "title": epic.title,
+                    "order": order,
+                    "milestone_number": ms.number,
+                },
+            )
+        )
         prev = ev.id
         epic_info[epic.title] = (epic_id, ms.number)
 
@@ -200,12 +219,17 @@ async def emit(
                 tier=t.estimated_tier,
                 epic_number=milestone,
                 milestone_number=milestone,
-            ),  # fmt: skip
+            ),
         )
         entry = {
-            "task_id": task_id, "title": t.title, "issue_number": issue.number, "issue_url": issue.url,
-            "epic_id": epic_id, "epic_title": epic_title, "milestone_number": milestone,
-        }  # fmt: skip
+            "task_id": task_id,
+            "title": t.title,
+            "issue_number": issue.number,
+            "issue_url": issue.url,
+            "epic_id": epic_id,
+            "epic_title": epic_title,
+            "milestone_number": milestone,
+        }
         if t.title in known_tasks:
             issues.append(known_tasks[t.title])
             continue
@@ -229,7 +253,7 @@ async def emit(
                     "issue_number": issue.number,
                     "issue_url": issue.url,
                 },
-            )  # fmt: skip
+            )
         )
         prev = ev.id
         issues.append(entry)

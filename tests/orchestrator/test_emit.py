@@ -1,4 +1,4 @@
-"""P3.5 — orchestrator/emit.py (red a~e): 위상 정렬, 사이클, owned_paths 직렬화, Issue(dry), 멱등."""
+"""P3.5 — orchestrator/emit.py (red a~e): 위상 정렬, 사이클, 겹침 직렬화, Issue(dry), 멱등."""
 
 from __future__ import annotations
 
@@ -24,10 +24,15 @@ def td(
     title: str, deps: list[str] | None = None, paths: list[str] | None = None, epic: str = "E1"
 ) -> TaskDraft:
     return TaskDraft(
-        title=title, spec=f"do {title}", kind="feature", role_required="coding",
-        depends_on=deps or [], owned_paths=paths or [f"src/{title.lower()}.py"], estimated_tier="T1",
+        title=title,
+        spec=f"do {title}",
+        kind="feature",
+        role_required="coding",
+        depends_on=deps or [],
+        owned_paths=paths or [f"src/{title.lower()}.py"],
+        estimated_tier="T1",
         epic=epic,
-    )  # fmt: skip
+    )
 
 
 class Sink:
@@ -46,9 +51,14 @@ def state_with(
     tasks: list[TaskDraft], epics: list[str] | None = None, **extra: Any
 ) -> OrchestratorState:
     st = initial_state(
-        project_id="P1", goal_id="G1", goal_title="goal", goal_description="d",
-        repo_path="/tmp/x", repo_full_name="org/demo", last_event_id="EV0",
-    )  # fmt: skip
+        project_id="P1",
+        goal_id="G1",
+        goal_title="goal",
+        goal_description="d",
+        repo_path="/tmp/x",
+        repo_full_name="org/demo",
+        last_event_id="EV0",
+    )
     st["tasks"] = [t.model_dump() for t in tasks]
     st["epics"] = [
         {"title": e, "order": i + 1, "summary": ""} for i, e in enumerate(epics or ["E1"])
@@ -115,8 +125,19 @@ async def test_emit_happy_path() -> None:
     assert [e.payload["title"] for e in created] == ["A", "B", "C", "D"]
     ids = {e.payload["title"]: e.subject.id for e in created}
     d = created[3].payload
-    assert set(d) >= {"epic_id", "epic_title", "title", "spec", "kind", "role_required", "depends_on",
-                      "owned_paths", "risk_tier", "issue_number", "issue_url"}  # fmt: skip
+    assert set(d) >= {
+        "epic_id",
+        "epic_title",
+        "title",
+        "spec",
+        "kind",
+        "role_required",
+        "depends_on",
+        "owned_paths",
+        "risk_tier",
+        "issue_number",
+        "issue_url",
+    }
     assert (
         d["depends_on"] == [ids["B"], ids["C"]]
         and d["epic_title"] == "E2"
