@@ -6,7 +6,6 @@ import ast
 from pathlib import Path
 
 import pytest
-import structlog
 from structlog.testing import capture_logs
 
 from agents.base import (
@@ -145,7 +144,6 @@ def test_assemble_context_order_and_budget() -> None:
 # (c) CONTEXT.md 없으면 경고 + 계속
 def test_missing_context_md_warns() -> None:
     inp = make_input(context_md=None)
-    structlog.configure(processors=[])
     with capture_logs() as logs:
         ctx = assemble_context(inp, token_budget=10_000, system="S")
     assert any(

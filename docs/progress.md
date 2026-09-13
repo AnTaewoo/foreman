@@ -103,3 +103,4 @@
 | 2026-09-13T15:40 | P4.1 | 완료 | 보드 done | b39eee5 |
 | 2026-09-13T15:40 | P4.2 | 착수 | agents/base.py + context.py | |
 | 2026-09-13T15:40 | P4.2 | Red | test_base 8, ModuleNotFoundError agents.base | |
+| 2026-09-13T15:42 | P4.2 | Green | agents/base.py(계약+BaseAgent.run) + context.py(조립·예산), 356 passed | |
