@@ -216,7 +216,7 @@ Event  (append-only)
  ├─ id (ulid), project_id, ts, actor { type: agent|human|system|github, id }
  ├─ type (e.g. task.created, run.started, decision.approved, pr.merged ...)
  ├─ subject { entity, id }, payload (json), correlation_id, causation_id
- └─ signature (감사용 해시 체인)
+ └─ signature (감사용 해시 체인 — 저장 시점에 채움, 아래 규약)
 ```
 
 ### 4.2 이벤트 타입 (핵심만)
@@ -224,14 +224,21 @@ Event  (append-only)
 | 도메인 | 이벤트 |
 |---|---|
 | goal | goal.created, goal.plan_proposed, goal.activated, goal.blocked, goal.completed, goal.cancelled |
-| task | task.created, task.assigned, task.started, task.blocked, task.completed, task.failed, task.retried, task.escalated |
-| run | run.started, run.tool_called, run.artifact_produced, run.finished |
+| epic | epic.created, epic.activated, epic.completed |
+| task | task.created, task.assigned, task.started, task.blocked, task.completed, task.failed, task.retried, task.escalated, task.cancelled |
+| run | run.started, run.tool_called¹, run.tool_denied, run.artifact_produced, run.finished |
 | decision | decision.opened, decision.agent_voted, decision.human_responded, decision.resolved, decision.expired |
 | pr | pr.opened, pr.checks_passed, pr.checks_failed, pr.review_submitted, pr.merged, pr.closed |
 | policy | policy.updated, policy.tier_overridden, budget.warning, budget.exceeded |
 | control | project.created, project.updated, project.paused, project.resumed, agent.killed, control.emergency_stop |
 
-`correlation_id` = Goal id, `causation_id` = 직전 원인 이벤트 id. 이 두 개로 "왜 이 PR이 생겼는가"를 Goal까지 역추적한다.
+¹ `run.tool_called`는 볼륨이 커서 **감사 체인 밖**이다: `tool_calls` 테이블에만 쓰고(서명 없음) 스트림에는 흘린다. 거부된 호출은 `run.tool_denied`로 체인에 남긴다.
+
+봉투(envelope) 규약:
+
+- `correlation_id`(필수) = Goal 스코프 이벤트는 Goal id, Goal 밖(project/policy/budget/agent/control 도메인)은 Project id. `causation_id` = 직전 원인 이벤트 id, 루트 이벤트(사람·API 명령이 원인)는 `null`. 이 두 개로 "왜 이 PR이 생겼는가"를 Goal까지 역추적한다.
+- `signature`는 발행자가 아니라 **저장 시점**에 채운다(워커는 직전 서명을 모른다). 서명 대상은 payload가 아니라 저장된 `canonical_json` 텍스트이며, 체인 순서는 DB append 순번(`seq`)이다. 체인은 저장소 무결성 검증용이지 발행자 인증이 아니다.
+- 엔티티 id는 전부 발행자가 만든 ULID다(DB autoincrement 없음). replay로 재구축해도 같은 id가 나와야 한다.
 
 ---
 
@@ -256,6 +263,17 @@ class AgentOutput:
     notes_for_memory: str
     summary: str                      # Issue 코멘트로 남길 요약
 ```
+
+`AgentOutput.outcome`과 `Run.outcome`(§4.1)은 값 집합이 다르다. `run.finished` 이벤트는 둘 다 싣는다:
+
+| agent_outcome (AgentOutput) | outcome (Run) |
+|---|---|
+| done | success |
+| failed | failed |
+| needs_decision | escalated |
+| blocked | escalated |
+| timeout (워커 시간 초과) | timeout |
+| — (kill / emergency stop) | cancelled |
 
 공통 규칙:
 
@@ -398,7 +416,9 @@ Proposal 형식은 8.4 참조.
                          └►│   done   │
                            └──────────┘
    fail (attempt ≥ max) ──► blocked ──► Orchestrator 에스컬레이션 ──► 인간 or 재분해
-   any ──► cancelled (인간 취소 / Goal 취소 / 예산 초과)
+   assigned ──fail (워커 기동 실패)──► ready (attempt < max) / blocked (attempt ≥ max)
+   blocked ──(사람 승인 / task.retried)──► ready
+   any ──► cancelled (인간 취소 / Goal 취소 / 예산 초과) — 이벤트 task.cancelled
 ```
 
 ### 6.2 Decision 상태 머신
