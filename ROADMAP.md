@@ -241,7 +241,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 
 | ID | 제목 | depends_on | status | commit |
 |---|---|---|---|---|
-| P7.1 | `scripts/github_app_check.py` — App 인증·설치·권한·웹훅 구독 읽기 전용 점검 + `ping` 웹훅 | PC-6 | todo | |
+| P7.1 | `scripts/github_app_check.py` — App 인증·설치·권한·웹훅 구독 읽기 전용 점검 + `ping` 웹훅 | PC-6 | done | d215282 |
 | P7.2 | `PrOpener`가 토큰으로 브랜치 push 후 PR (D-41), `RepoCache` 토큰 clone/fetch | P7.1 | todo | |
 | P7.3 | 웹훅 공개 경로(smee/cloudflared) + `discussion_comment` 실 매핑 확인, runbook | P7.1 | todo | |
 | P7.4 | `scripts/seed_test_repo.py` + `scripts/cleanup_repo.py` (D-42) | P7.2 | todo | |
@@ -659,7 +659,7 @@ discussion_comment, pull_request, pull_request_review, check_suite), 웹훅 공�
 
 ### P7.1 App 점검 스크립트 + ping
 - depends_on: PC-6
-- owned_paths: `scripts/github_app_check.py`, `github_adapter/webhooks.py`, `tests/github_adapter/test_app_check.py`, `tests/github_adapter/test_webhooks.py`, `docs/runbook.md`
+- owned_paths: `scripts/github_app_check.py`, `github_adapter/app_check.py`(로직; 스크립트는 얇은 CLI), `github_adapter/webhooks.py`, `tests/github_adapter/test_app_check.py`, `tests/github_adapter/test_webhooks.py`, `tests/fixtures/webhooks/ping.json`, `docs/runbook.md`
 - red: (a) `github_app_check.run(settings, http)` → JWT 생성 → `GET /app`(앱 이름) → `GET /app/installations`(설치 목록에 `installation_id` 있음) → `POST /app/installations/{id}/access_tokens`(토큰; 값은 출력 안 함, `permissions`·`repositories` 확인) → `GET /repos/{owner}/{name}`(App으로 접근 가능) → `GET /app/hook/config`(웹훅 URL·secret 설정 여부) → 체크리스트 표 출력, 부족한 권한·구독은 `[FAIL]`. respx로 전부 mock, 실 호출 0 (b) 필수 권한 집합 = contents:write, issues:write, pull_requests:write, discussions:write, metadata:read (c) `X-GitHub-Event: ping` → 200 `{"pong": true}`(App 저장 시 GitHub가 보냄; 서명 검증은 그대로) (d) 실패 종료 코드 1
 - green: `scripts/github_app_check.py`(`--repo owner/name`), `webhooks.py`에 `ping`
 - gate: `make check`

@@ -192,3 +192,7 @@
 | 2026-09-13T23:10 | PC-6 | 판정 | pending — 5차 파이프라인 완주(T1 done→git merge→의존 배정), T2 7B import 오류로 blocked. docs/pc/PC-6.md | |
 | 2026-09-14T18:50 | PC-6 | 판정 | pass (조건부) — 사용자 결정, X.1 진행 | ea92dfa |
 | 2026-09-14T18:55 | P7 | 계획 | X.1을 P7.1~P7.4 + PC-7로 §7에 작성 (D-41 제안, D-42) — 사용자 검토·App 자격 증명 대기 | |
+| 2026-09-14T19:05 | P7.1 | Red | test_app_check 5 + ping 1 | cc6d9d2 |
+| 2026-09-14T19:20 | P7.1 | Green | app_check.py(6개 항목, 문서 확인 경로), CLI, ping, runbook 3b, 448 passed | d215282 |
+| 2026-09-14T19:22 | P7.1 | Gate | make check pass (448), check_runbook 5/5, 시도 3/3 | |
+| 2026-09-14T19:22 | P7.1 | 완료 | 보드 done | d215282 |
