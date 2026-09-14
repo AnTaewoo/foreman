@@ -139,3 +139,20 @@ async def test_installation_auth_second_401_is_returned(
 async def test_unmatched_request_fails(http: httpx.AsyncClient) -> None:
     with pytest.raises(respx.models.AllMockedAssertionError):
         await http.get("/rate_limit")
+
+
+# P7.2 (D-41): 동기 경로(RepoCache clone, git push)용 token_nowait — 캐시가 신선하면 값, 아니면 TokenUnavailable
+async def test_token_nowait(
+    github_mock: respx.MockRouter, http: httpx.AsyncClient, private_key_pem: str, clock: Clock
+) -> None:
+    from github_adapter.auth import TokenUnavailable
+
+    _token_route(github_mock, "ghs_sync", _iso(clock, 3600))
+    provider = InstallationTokenProvider(APP_ID, private_key_pem, INSTALLATION, http, now=clock)
+    with pytest.raises(TokenUnavailable):
+        provider.token_nowait()
+    await provider.token()
+    assert provider.token_nowait() == "ghs_sync"
+    clock.now = clock.now + timedelta(seconds=3600)  # 만료 → 다시 없음
+    with pytest.raises(TokenUnavailable):
+        provider.token_nowait()

@@ -184,3 +184,129 @@ async def test_runtime_opens_pr_and_dry_merges(
         and len(await events_of(factory, "pr.merged")) == 1
     )
     assert len(github.snapshot()["repos"][str(tmp_path)]["pulls"]) == 1
+
+
+# ---------------------------------------------------------------- P7.2 (D-41): push는 control plane
+import shutil
+import subprocess
+
+GENV = {
+    "GIT_AUTHOR_NAME": "s",
+    "GIT_AUTHOR_EMAIL": "s@x",
+    "GIT_COMMITTER_NAME": "s",
+    "GIT_COMMITTER_EMAIL": "s@x",
+    "PATH": "/usr/bin:/bin",
+}
+FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
+
+
+def git(cwd: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=cwd, check=True, capture_output=True, text=True, env=GENV
+    ).stdout.strip()
+
+
+class FakePusher:
+    def __init__(self, fail: bool = False) -> None:
+        self.calls: list[tuple[str, str, str]] = []
+        self.fail = fail
+
+    def push(self, repo_path: Path, repo: str, branch: str) -> None:
+        self.calls.append((str(repo_path), repo, branch))
+        if self.fail:
+            raise RuntimeError("push rejected: https://x-access-token:ghs_SECRET@github.com/x.git")
+
+
+# (b) push → open_pr 순서; push 실패 → pr.opened 없음 + push_failed 기록(토큰 마스킹); pusher None → 건너뜀
+async def test_pr_opener_pushes_before_opening(
+    factory: async_sessionmaker[AsyncSession], redis: Redis, tmp_path: Path
+) -> None:
+    from control_plane.pr_opener import PrOpener
+
+    repo = str(tmp_path)
+    await publish_all(
+        factory, redis, [*bootstrap("P1", "G1", repo), task_created("P1", "G1", "T1", ["a/**"], 12)]
+    )
+    await project_all(factory, redis, "P1")
+    pusher = FakePusher()
+    opener = PrOpener(
+        factory,
+        EventBus(redis),
+        DryRunGitHubClient(),
+        pusher=pusher,
+        repo_path_for=lambda r: Path(r),
+    )
+    await opener.handle(delivery(completed("P1", "G1", "T1", "R1", "ai/e/12-t")))
+    assert (
+        pusher.calls == [(repo, repo, "ai/e/12-t")]
+        and len(await events_of(factory, "pr.opened")) == 1
+    )
+    failing = PrOpener(
+        factory,
+        EventBus(redis),
+        DryRunGitHubClient(),
+        pusher=FakePusher(fail=True),
+        repo_path_for=lambda r: Path(r),
+    )
+    await failing.handle(delivery(completed("P1", "G1", "T1", "R2", "ai/e/12-t2")))
+    assert len(await events_of(factory, "pr.opened")) == 1 and failing.push_failed == [("P1", "T1")]
+    assert all("ghs_SECRET" not in str(x) for x in failing.push_failed)
+
+
+# (c) GitPusher: 로컬 clone에서 origin(bare)으로 브랜치 push — URL은 push 때만 쓰고 remote 설정에 남기지 않는다
+def test_git_pusher_pushes_branch(tmp_path: Path) -> None:
+    from control_plane.pr_opener import GitPusher
+
+    remote = tmp_path / "origin.git"
+    subprocess.run([str(FIXTURES / "make_remote.sh"), str(remote)], check=True, capture_output=True)
+    work = tmp_path / "work"
+    shutil.copytree(
+        FIXTURES / "sample_repo",
+        work,
+        ignore=shutil.ignore_patterns("dot_git_stub", ".venv", "node_modules"),
+    )
+    git(work, "init", "-q", "-b", "main")
+    git(work, "add", "-A")
+    git(work, "commit", "-q", "-m", "seed")
+    git(work, "checkout", "-q", "-b", "ai/e/1-t")
+    (work / "X.md").write_text("x")
+    git(work, "add", "-A")
+    git(work, "commit", "-q", "-m", "x")
+    pusher = GitPusher(
+        token_getter=lambda: "ghs_SECRET", url_for=lambda r: str(remote), git_env=GENV
+    )
+    pusher.push(work, "org/demo", "ai/e/1-t")
+    assert "ai/e/1-t" in git(remote, "branch", "--list")
+    assert "ghs_SECRET" not in (work / ".git" / "config").read_text()
+    assert (
+        GitPusher(token_getter=lambda: "ghs_SECRET").url_for("org/demo")
+        == "https://x-access-token:ghs_SECRET@github.com/org/demo.git"
+    )
+
+
+# (e) Runtime 배선: dry면 pusher 없음, 실 모드면 토큰 제공자로 pusher + RepoCache 토큰
+async def test_runtime_wires_pusher_only_in_real_mode(
+    factory: async_sessionmaker[AsyncSession], redis: Redis
+) -> None:
+    from control_plane.runtime import Runtime
+
+    class Provider:
+        def token_nowait(self) -> str:
+            return "ghs_x"
+
+        async def token(self) -> str:
+            return "ghs_x"
+
+    dry = Runtime(
+        settings_for("sqlite+aiosqlite://", dry_run=True), factory, redis, launcher=FakeLauncher()
+    )
+    assert dry.pr_opener.pusher is None
+    real = Runtime(
+        settings_for("sqlite+aiosqlite://", dry_run=False), factory, redis,
+        launcher=FakeLauncher(), github=DryRunGitHubClient(), token_provider=Provider(),
+    )  # fmt: skip
+    assert real.pr_opener.pusher is not None
+    assert (
+        real.repo_cache.url_for("org/demo")
+        == "https://x-access-token:ghs_x@github.com/org/demo.git"
+    )
