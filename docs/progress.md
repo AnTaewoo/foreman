@@ -190,3 +190,5 @@
 | 2026-09-13T22:00 | PC-6 | 자동 | make check 440, test-integration 6, check_runbook 5/5; pc6_via_api 1차 3/4 done → Dry 머지가 git main 안 옮김 발견 | 94c0090 |
 | 2026-09-13T22:40 | PC-6 | 자동 | 4차: owned_paths 디렉토리 매칭 버그 + ingest 순서 역전 예외 발견·수정 | 3409a6a, aa89d2f |
 | 2026-09-13T23:10 | PC-6 | 판정 | pending — 5차 파이프라인 완주(T1 done→git merge→의존 배정), T2 7B import 오류로 blocked. docs/pc/PC-6.md | |
+| 2026-09-14T18:50 | PC-6 | 판정 | pass (조건부) — 사용자 결정, X.1 진행 | ea92dfa |
+| 2026-09-14T18:55 | P7 | 계획 | X.1을 P7.1~P7.4 + PC-7로 §7에 작성 (D-41 제안, D-42) — 사용자 검토·App 자격 증명 대기 | |

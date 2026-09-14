@@ -1,7 +1,7 @@
 # PC-6 — 상주 프로세스 + API로 Goal → 브랜치 → done 완주
 
 - 일시: 2026-09-13 21:00–22:30 KST
-- 판정: **pending — 사용자 판정** (파이프라인 항목 전부 pass, "Task 전부 done"만 7B 모델 한계로 미달)
+- 판정: **pass (조건부)** — 사용자 결정 2026-09-14: 파이프라인 완주 기준으로 통과, "Task 전부 done"은 모델 한계로 조건부
 - 구성: `python -m control_plane`(`HITL_WORKER_LAUNCHER=inprocess`, relay+projection+scheduler+retry+PrOpener+DryMerger) +
   `uvicorn control_plane.api.app:app --factory`(:8765) 두 프로세스, Postgres `pc6` DB, Redis DB 13. 스크립트
   `scripts/pc6_via_api.py`는 HTTP·git만 쓴다. LLM은 로컬 Ollama `qwen2.5-coder:7b`(RAM 사정, D-35 수준 Goal).

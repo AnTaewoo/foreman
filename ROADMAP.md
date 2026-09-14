@@ -90,7 +90,7 @@
 
 **MVP 1 — Repo → Goal → Orchestrator → Issue → Coding Agent → PR** (설계 §15). "Issue/PR"은 DRY_RUN 로그와 로컬 git으로 검증하고, 실 GitHub 연결은 PC-5 통과 후 **후속 세션**(§8)에서 한다.
 
-완료 = **PC-6 pass + PC-5 pass** (D-40: P6 운영 조립이 먼저, PC-5의 Anthropic 판정은 그 뒤).
+완료 = **PC-6 pass + PC-5 pass** (D-40: P6 운영 조립이 먼저, PC-5의 Anthropic 판정은 그 뒤). PC-6는 2026-09-14 pass(조건부). 실 GitHub 검증은 P7/PC-7(X.1).
 
 ## 2. Plan 구조
 
@@ -152,6 +152,8 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | D-38 | **repo 확보는 control plane `RepoCache`** (리뷰 A8). `project.repo`가 존재하는 로컬 경로면 그대로 쓰고, `owner/name`·URL이면 `HITL_REPO_ROOT/<owner>/<name>`에 `git clone`(있으면 `fetch`). Orchestrator 분석 경로와 Scheduler `LaunchSpec.repo_url`이 같은 경로를 쓴다(A3: 프로젝트 행에서 읽음). **docker 런처는 `HITL_REPO_ROOT`를 컨테이너에 `-v <root>:<root>`로 마운트**해 워커가 그 경로를 clone·push 대상으로 쓴다 — non-bare clone에 `ai/*` 브랜치 push는 허용되므로 Dry에서 동작한다(`main`은 툴이 거부). 실 GitHub URL clone 인증(App 토큰)과 워커 push 토큰은 X.1 | P6.6, P6.1 |
 | D-39 | **비용 = 토큰 × 설정 단가** (리뷰 C6). `HITL_LLM_PRICE_IN_PER_MTOK` / `HITL_LLM_PRICE_OUT_PER_MTOK`(USD per 1M tokens, 기본 0 → `cost_usd` 0). 코드에 단가표를 박지 않는다(변동·검증 불가). 워커는 `WORKER_LLM_PRICE_IN/OUT`. PC-5 사람 (3)은 토큰 수 + 설정 단가로 판정 | P6.5 |
 | D-40 | **PC-5 판정은 PC-6 이후, Anthropic으로** (검토 2026-09-13). PC-5는 Anthropic 크레딧 부족으로 pending인데 P6는 플랫폼을 돌리기 위한 전제이므로 §0.1의 "PC pass 전 다음 Plan 금지"를 이 한 번 예외로 한다: P6.1은 P5.5에 의존하고, PC-5의 실 LLM 항목·사람 항목은 PC-6 통과 뒤 `HITL_LLM_PROVIDER=anthropic`으로 한 번에 판정한다. MVP 1(dev) 완료 = PC-6 pass + PC-5 pass | P6.1, PC-5, PC-6 |
+| D-41 | **워커는 실 GitHub에도 토큰을 받지 않는다** (제안 2026-09-14, X.1). 워커는 지금처럼 `RepoCache` 로컬 clone(마운트)에만 push 하고, control plane의 `PrOpener`가 PR을 열기 전에 그 clone에서 `git push origin <branch>`를 App installation 토큰(`x-access-token`)으로 수행한다. 토큰은 control plane 메모리에만 있고 로그·이벤트·워커 env에 안 나간다(§12 유지). 대안(기각 제안): `WORKER_TOKEN`으로 1시간 토큰을 워커에 전달 — 워커가 신뢰 경계를 넘는다 | P7.2 |
+| D-42 | **실 GitHub 검증은 사용자 소유 테스트 repo + App 1개** (X.1). `HITL_DRY_RUN=false`는 `.env`에서만 켜고 기본값은 그대로 true. 실 호출 전 `scripts/github_app_check.py`(읽기 전용)가 권한·설치·웹훅 구독을 확인하고, 끝나면 `scripts/cleanup_repo.py`가 `ai-platform:` 마커가 있는 Issue/PR/Discussion을 닫고 `ai/*` 브랜치를 지운다(마커 없는 것은 절대 건드리지 않음) | P7.1, P7.4 |
 
 ---
 
@@ -233,7 +235,17 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P6.6 | `repo_cache.py` — repo 확보 (D-38) | P6.1 | done | d70a254 |
 | P6.7 | `pr_opener.py` — PR 생성 control plane으로 (D-37) | P6.3, P6.6 | done | d5b1b10 |
 | P6.8 | ROADMAP·runbook 정리 (리뷰 C1~C5) | P6.4, P6.5, P6.7 | done | 5f98754 |
-| **PC-6** | 상주 프로세스 + API로 Goal→브랜치→done 완주 | P6.8 | pending — 파이프라인 항목 전부 pass(5차), 'Task 전부 done'은 7B 한계로 미달 → 사용자 판정. 발견 3건 수정(§6 (기록) PC-6) | aa89d2f |
+| **PC-6** | 상주 프로세스 + API로 Goal→브랜치→done 완주 | P6.8 | pass (조건부, 사용자 2026-09-14: 파이프라인 완주 기준; 'Task 전부 done'은 모델 한계) | ea92dfa |
+
+### P7 — X.1 실 GitHub 연결 (§7 P7)
+
+| ID | 제목 | depends_on | status | commit |
+|---|---|---|---|---|
+| P7.1 | `scripts/github_app_check.py` — App 인증·설치·권한·웹훅 구독 읽기 전용 점검 + `ping` 웹훅 | PC-6 | todo | |
+| P7.2 | `PrOpener`가 토큰으로 브랜치 push 후 PR (D-41), `RepoCache` 토큰 clone/fetch | P7.1 | todo | |
+| P7.3 | 웹훅 공개 경로(smee/cloudflared) + `discussion_comment` 실 매핑 확인, runbook | P7.1 | todo | |
+| P7.4 | `scripts/seed_test_repo.py` + `scripts/cleanup_repo.py` (D-42) | P7.2 | todo | |
+| **PC-7** | 실 repo에서 Goal 1개: Plan Discussion → 사람 `/approve` → Issue·PR 실제 생성 → 사람 머지 → done, cleanup | P7.3, P7.4 | pending | |
 
 ---
 
@@ -634,6 +646,54 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 - 소유: `scripts/pc6_via_api.py`, `docs/pc/PC-6.md` (PC-1처럼 PC 항목이 스크립트를 소유)
 - 사람: `git -C <remote> log --all --oneline`, `docs/pc/PC-6.md`
 - pass: 자동 전부
+
+---
+
+### P7 — X.1 실 GitHub 연결 (2026-09-14 추가, ## 7의 하위)
+
+전제(사용자 제공): GitHub App(App ID, private key PEM, installation id, webhook secret), App이 설치된 테스트 repo
+`owner/name`(권한: Contents RW, Issues RW, Pull requests RW, Discussions RW, Metadata R; 웹훅 구독: issue_comment,
+discussion_comment, pull_request, pull_request_review, check_suite), 웹훅 공개 URL(smee.io 채널 또는 cloudflared).
+`.env`에 `HITL_GITHUB_APP_ID / HITL_GITHUB_APP_PRIVATE_KEY(개행 \n) / HITL_GITHUB_INSTALLATION_ID / HITL_GITHUB_WEBHOOK_SECRET`.
+`HITL_DRY_RUN=false`는 PC-7 실행 직전에만.
+
+### P7.1 App 점검 스크립트 + ping
+- depends_on: PC-6
+- owned_paths: `scripts/github_app_check.py`, `github_adapter/webhooks.py`, `tests/github_adapter/test_app_check.py`, `tests/github_adapter/test_webhooks.py`, `docs/runbook.md`
+- red: (a) `github_app_check.run(settings, http)` → JWT 생성 → `GET /app`(앱 이름) → `GET /app/installations`(설치 목록에 `installation_id` 있음) → `POST /app/installations/{id}/access_tokens`(토큰; 값은 출력 안 함, `permissions`·`repositories` 확인) → `GET /repos/{owner}/{name}`(App으로 접근 가능) → `GET /app/hook/config`(웹훅 URL·secret 설정 여부) → 체크리스트 표 출력, 부족한 권한·구독은 `[FAIL]`. respx로 전부 mock, 실 호출 0 (b) 필수 권한 집합 = contents:write, issues:write, pull_requests:write, discussions:write, metadata:read (c) `X-GitHub-Event: ping` → 200 `{"pong": true}`(App 저장 시 GitHub가 보냄; 서명 검증은 그대로) (d) 실패 종료 코드 1
+- green: `scripts/github_app_check.py`(`--repo owner/name`), `webhooks.py`에 `ping`
+- gate: `make check`
+- notes: D-42. API 경로는 docs.github.com REST(App 인증) 문서를 fetch로 확인하고 출처를 docstring에.
+
+### P7.2 브랜치 push는 control plane (D-41)
+- depends_on: P7.1
+- owned_paths: `control_plane/pr_opener.py`, `control_plane/repo_cache.py`, `control_plane/runtime.py`, `github_adapter/auth.py`, `tests/runtime/test_pr_opener.py`, `tests/test_repo_cache.py`
+- red: (a) `RepoCache(url_for=)` 기본이 `token_provider`가 있으면 `https://x-access-token:<token>@github.com/owner/name.git`; 로그·예외 메시지에 토큰이 안 나타난다(`***`) (b) `PrOpener(pusher=)`: `task.completed{branch}` → `git -C <RepoCache 경로> push origin <branch>`(토큰 URL은 push 시에만, remote 설정에 저장하지 않음 — `git push <url> <branch>` 형태) → 성공 후 `open_pr` (c) push 실패 → `pr.opened` 없음, `pr_opener.push_failed` 기록, Task는 `in_review` 유지 (d) Dry 모드(`dry_run=true`)면 push를 건너뛴다(로컬 bare/clone이 곧 origin) (e) `runtime.py`가 `InstallationTokenProvider`를 만들어 RepoCache·PrOpener에 준다(dry면 None)
+- green: `RepoCache.url_for` 토큰 주입, `PrOpener._push`, 토큰 마스킹 유틸
+- gate: `make check`
+- notes: D-41, §12. 토큰은 `InstallationTokenProvider` 캐시(P2.2)를 재사용.
+
+### P7.3 웹훅 공개 경로
+- depends_on: P7.1
+- owned_paths: `docs/runbook.md`, `scripts/check_runbook.sh`, `Makefile`
+- red: 없음(문서·설정). 
+- green: runbook에 "웹훅 받기" 절: `npx smee-client --url <채널> --target http://localhost:8000/webhooks/github`(또는 `cloudflared tunnel --url`), App 설정의 Webhook URL·secret, `ping` 확인, `discussion_comment` 구독 확인. `make run-webhook-tunnel`(SMEE_URL 필요)
+- gate: `scripts/check_runbook.sh`
+- notes: 이 Task는 사용자가 채널 URL을 주면 실제로 한 번 `ping`을 받아본다(사람 항목).
+
+### P7.4 테스트 repo 시드 + 정리 스크립트 (D-42)
+- depends_on: P7.2
+- owned_paths: `scripts/seed_test_repo.py`, `scripts/cleanup_repo.py`, `tests/test_cleanup_repo.py`, `github_adapter/client.py`(목록·닫기 메서드 추가 시)
+- red: (a) `seed_test_repo.py <owner/name>`: `tests/fixtures/sample_repo`를 토큰 URL로 push(main 강제 아님 — 비어 있지 않으면 중단) (b) `cleanup_repo.py <owner/name> [--apply]`: 기본은 **목록만**; `--apply`면 `ai-platform:meta` 마커 Issue/PR close, `ai-platform:` Discussion 닫기(가능하면), `ai/*` 브랜치 삭제, `ai:` 라벨은 유지. 마커 없는 것은 건드리지 않음 — respx로 검증 (c) 삭제 전 개수 출력, `--apply` 없이 실 변경 0
+- green: 두 스크립트, 필요한 client 메서드(`list_issues(marker)`, `close_issue`, `delete_branch`)는 멱등·마커 기반
+- gate: `make check`
+
+### PC-7 실 GitHub에서 Goal 1개
+- 자동: `make check`, `scripts/github_app_check.py --repo <owner/name>` 전부 `[ok]`
+- 사람+자동(`HITL_DRY_RUN=false`, 상주 프로세스 + API + 터널): `seed_test_repo.py` → `POST /projects {repo: owner/name}` → `POST /goals`(D-35 수준 Goal) → GitHub에 Plan Discussion 생성 확인 → 사람이 Discussion에 `/approve` → Issue N개·Milestone 생성 → 워커 실행 → control plane이 브랜치 push + draft PR 생성 → 사람이 PR 1개 머지 → `pull_request.closed` 웹훅 → `pr.merged` → Task done → 의존 Task 배정. 이벤트 체인 `verify_chain` True
+- 사람: 실제 Issue/PR/Discussion 스크린샷 또는 URL을 `docs/pc/PC-7.md`에, 마지막에 `cleanup_repo.py --apply`
+- pass: 자동 전부 + Goal 1개의 Task ≥ 1이 사람 머지로 done
+- 소유: `docs/pc/PC-7.md`
 
 ---
 
