@@ -243,7 +243,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 |---|---|---|---|---|
 | P7.1 | `scripts/github_app_check.py` — App 인증·설치·권한·웹훅 구독 읽기 전용 점검 + `ping` 웹훅 | PC-6 | done | d215282 |
 | P7.2 | `PrOpener`가 토큰으로 브랜치 push 후 PR (D-41), `RepoCache` 토큰 clone/fetch | P7.1 | done | f39fa6c |
-| P7.3 | 웹훅 공개 경로(smee/cloudflared) + `discussion_comment` 실 매핑 확인, runbook | P7.1 | todo | |
+| P7.3 | 웹훅 공개 경로(smee/cloudflared) + `discussion_comment` 실 매핑 확인, runbook | P7.1 | done | ad11188 |
 | P7.4 | `scripts/seed_test_repo.py` + `scripts/cleanup_repo.py` (D-42) | P7.2 | todo | |
 | **PC-7** | 실 repo에서 Goal 1개: Plan Discussion → 사람 `/approve` → Issue·PR 실제 생성 → 사람 머지 → done, cleanup | P7.3, P7.4 | pending | |
 

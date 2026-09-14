@@ -200,3 +200,6 @@
 | 2026-09-14T19:55 | P7.2 | Green | D-41 구현, 453 passed | f39fa6c |
 | 2026-09-14T19:57 | P7.2 | Gate | make check pass (453), 시도 3/3 | |
 | 2026-09-14T19:57 | P7.2 | 완료 | 보드 done | f39fa6c |
+| 2026-09-14T20:05 | P7.3 | Green | runbook 웹훅 받기(smee/cloudflared), make run-webhook-tunnel | ad11188 |
+| 2026-09-14T20:06 | P7.3 | Gate | check_runbook 5/5 | |
+| 2026-09-14T20:06 | P7.3 | 완료 | 보드 done (사람 항목: 채널 URL 받으면 ping 실제 수신) | ad11188 |
