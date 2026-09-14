@@ -205,3 +205,44 @@ class GitHubRestClient:
             json={"title": epic.title, "description": epic.description},
         )
         return MilestoneRef(number=int(data["number"]), title=str(data["title"]), created=True)
+
+    # ------------------------------------------------------------------ (i) 정리·시드 (P7.4, D-42)
+    # 경로 출처 2026-09-14 docs.github.com: issues(list/update), pulls(update), git/refs(delete)
+    async def list_open_items(self, repo: str) -> list[dict[str, Any]]:
+        """열린 Issue+PR (GitHub는 PR도 issue로 돌려준다 — ``pull_request`` 키로 구분)."""
+        return await self._get_all(f"/repos/{repo}/issues", state="open")
+
+    async def close_issue(self, repo: str, number: int) -> None:
+        await self._request(
+            "PATCH",
+            f"/repos/{repo}/issues/{number}",
+            json={"state": "closed", "state_reason": "not_planned"},
+        )
+
+    async def close_pull(self, repo: str, number: int) -> None:
+        await self._request("PATCH", f"/repos/{repo}/pulls/{number}", json={"state": "closed"})
+
+    async def list_refs(self, repo: str, prefix: str = "heads/ai/") -> list[str]:
+        """``refs/heads/ai/*`` 브랜치 이름 목록."""
+        refs = await self._request("GET", f"/repos/{repo}/git/matching-refs/{prefix}")
+        return [str(r["ref"]).removeprefix("refs/heads/") for r in (refs or [])]
+
+    async def delete_ref(self, repo: str, branch: str) -> bool:
+        """브랜치 삭제. 이미 없으면(422) False."""
+        try:
+            await self._request("DELETE", f"/repos/{repo}/git/refs/heads/{branch}")
+        except GitHubError as exc:
+            if "422" in str(exc) or "does not exist" in str(exc):
+                return False
+            raise
+        return True
+
+    async def commit_count_hint(self, repo: str) -> int | None:
+        """빈 repo면 ``GET /commits``가 409 → 0. 아니면 1 이상. 알 수 없으면 None."""
+        try:
+            items = await self._request("GET", f"/repos/{repo}/commits", params={"per_page": 1})
+        except GitHubError as exc:
+            if "409" in str(exc):
+                return 0
+            return None
+        return len(items or [])

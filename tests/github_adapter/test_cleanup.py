@@ -9,7 +9,6 @@ GET /repos/{o}/{r}/commits (빈 repo는 409).
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 from pathlib import Path
 
