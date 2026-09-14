@@ -1,0 +1,189 @@
+"""P7.1 — App 점검 (D-42, red a~d): 읽기 전용 REST 호출로 인증·설치·권한·웹훅 구독을 확인. 실 호출 0(respx).
+
+경로 출처(2026-09-14 docs.github.com REST 확인): GET /app, GET /app/installations,
+POST /app/installations/{id}/access_tokens, GET /installation/repositories, GET /repos/{owner}/{repo},
+GET /app/hook/config.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+import httpx
+import respx
+
+APP_ID = "123"
+PERMS_OK = {
+    "contents": "write",
+    "issues": "write",
+    "pull_requests": "write",
+    "discussions": "write",
+    "metadata": "read",
+}
+EVENTS_OK = [
+    "issue_comment",
+    "discussion_comment",
+    "pull_request",
+    "pull_request_review",
+    "check_suite",
+]
+
+
+@dataclass
+class FakeSettings:
+    github_app_id: str = APP_ID
+    github_app_private_key: Any = None
+    github_installation_id: int | None = 42
+    github_webhook_secret: Any = None
+
+
+class Secret:
+    def __init__(self, v: str) -> None:
+        self._v = v
+
+    def get_secret_value(self) -> str:
+        return self._v
+
+
+def mock_all(
+    router: respx.MockRouter,
+    *,
+    perms: dict[str, str] = PERMS_OK,
+    events: list[str] = EVENTS_OK,
+    installation_id: int = 42,
+    repo: str = "org/demo",
+    hook_url: str = "https://smee.io/abc",
+) -> None:
+    router.get("/app").mock(
+        return_value=httpx.Response(
+            200, json={"id": 1, "name": "foreman-dev", "permissions": perms, "events": events}
+        )
+    )
+    router.get("/app/installations").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {
+                    "id": installation_id,
+                    "account": {"login": "org"},
+                    "permissions": perms,
+                    "events": events,
+                }
+            ],
+        )
+    )
+    router.post(f"/app/installations/{installation_id}/access_tokens").mock(
+        return_value=httpx.Response(
+            201,
+            json={
+                "token": "ghs_SECRET_TOKEN",
+                "expires_at": "2099-01-01T00:00:00Z",
+                "permissions": perms,
+                "repository_selection": "selected",
+            },
+        )
+    )
+    router.get("/installation/repositories").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "total_count": 1,
+                "repository_selection": "selected",
+                "repositories": [{"full_name": repo}],
+            },
+        )
+    )
+    router.get(f"/repos/{repo}").mock(
+        return_value=httpx.Response(200, json={"full_name": repo, "default_branch": "main"})
+    )
+    router.get("/app/hook/config").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "url": hook_url,
+                "content_type": "json",
+                "secret": "********",
+                "insecure_ssl": "0",
+            },
+        )
+    )
+
+
+def settings(pem: str, secret: str = "s3cret") -> FakeSettings:
+    return FakeSettings(github_app_private_key=Secret(pem), github_webhook_secret=Secret(secret))
+
+
+# (a) 전부 통과: 6개 항목 [ok], 토큰 값은 리포트에 없다
+async def test_all_ok(
+    github_mock: respx.MockRouter, http: httpx.AsyncClient, private_key_pem: str
+) -> None:
+    from github_adapter.app_check import run_check
+
+    mock_all(github_mock)
+    report = await run_check(settings(private_key_pem), http, repo="org/demo")
+    assert report.ok, report.render()
+    names = [i.name for i in report.items]
+    assert names == ["app", "installation", "token", "permissions", "events", "repo", "webhook"]
+    assert all(i.ok for i in report.items)
+    text = report.render()
+    assert "ghs_SECRET_TOKEN" not in text and "[ok]" in text
+    assert github_mock.calls.call_count == 6
+
+
+# (b) 권한·구독·설치·repo·웹훅 각각 빠지면 그 항목만 [FAIL], ok False
+async def test_missing_permission_and_event(
+    github_mock: respx.MockRouter, http: httpx.AsyncClient, private_key_pem: str
+) -> None:
+    from github_adapter.app_check import REQUIRED_EVENTS, REQUIRED_PERMISSIONS, run_check
+
+    assert REQUIRED_PERMISSIONS == PERMS_OK and REQUIRED_EVENTS == set(EVENTS_OK)
+    perms = {**PERMS_OK, "discussions": "read"}
+    events = [e for e in EVENTS_OK if e != "discussion_comment"]
+    mock_all(github_mock, perms=perms, events=events)
+    report = await run_check(settings(private_key_pem), http, repo="org/demo")
+    by = {i.name: i for i in report.items}
+    assert not report.ok
+    assert not by["permissions"].ok and "discussions" in by["permissions"].detail
+    assert not by["events"].ok and "discussion_comment" in by["events"].detail
+    assert by["app"].ok and by["repo"].ok and by["webhook"].ok
+
+
+async def test_installation_repo_and_hook_failures(
+    github_mock: respx.MockRouter, http: httpx.AsyncClient, private_key_pem: str
+) -> None:
+    from github_adapter.app_check import run_check
+
+    mock_all(
+        github_mock, installation_id=7, hook_url=""
+    )  # 설정의 42가 목록에 없다, 웹훅 URL 비어 있음
+    github_mock.post("/app/installations/42/access_tokens").mock(
+        return_value=httpx.Response(404, json={})
+    )
+    report = await run_check(settings(private_key_pem), http, repo="org/other")
+    by = {i.name: i for i in report.items}
+    assert not by["installation"].ok and "42" in by["installation"].detail
+    assert not by["token"].ok
+    assert not by["webhook"].ok or by["webhook"].name == "webhook"
+    assert not report.ok
+
+
+# (c) 설정이 비어 있으면 호출 없이 [FAIL]
+async def test_missing_settings(github_mock: respx.MockRouter, http: httpx.AsyncClient) -> None:
+    from github_adapter.app_check import run_check
+
+    report = await run_check(
+        FakeSettings(github_app_id="", github_app_private_key=Secret("")), http, repo="org/demo"
+    )
+    assert (
+        not report.ok and report.items[0].name == "settings" and github_mock.calls.call_count == 0
+    )
+
+
+# (d) 스크립트 종료 코드
+def test_script_exit_codes() -> None:
+    from github_adapter.app_check import CheckItem, CheckReport
+
+    ok = CheckReport(items=[CheckItem("app", True, "foreman-dev")])
+    bad = CheckReport(items=[CheckItem("app", False, "401")])
+    assert ok.ok and ok.exit_code == 0 and not bad.ok and bad.exit_code == 1

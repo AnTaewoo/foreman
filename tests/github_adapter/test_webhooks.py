@@ -298,3 +298,14 @@ def test_discussion_comment_edited_and_bot_ignored(app: TestClient, spy: Spy) ->
         },
     )
     assert res.status_code == 204
+
+
+# ---------------------------------------------------------------- P7.1 ping (App 저장 시 GitHub가 보낸다)
+# 페이로드: docs.github.com/en/webhooks/webhook-events-and-payloads#ping (zen, hook_id, hook{events, config})
+def test_ping_returns_pong(app: TestClient, spy: Spy) -> None:
+    res = post(app, "ping", "ping")
+    assert res.status_code == 200 and res.json() == {"pong": True}
+    assert spy.events == [] and spy.commands == []
+    assert (
+        post(app, "ping", "ping", delivery="d-ping-bad", sig="sha256=deadbeef").status_code == 401
+    )
