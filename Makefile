@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test test-integration check run-api run-control-plane run-worker migrate docker-up docker-down
+.PHONY: install lint typecheck test test-integration check run-api run-control-plane run-worker run-webhook-tunnel migrate docker-up docker-down
 
 UV ?= uv
 COMPOSE ?= docker compose
@@ -27,6 +27,10 @@ run-api:
 
 run-control-plane:
 	$(UV) run python -m control_plane
+
+run-webhook-tunnel:
+	@test -n "$$SMEE_URL" || (echo "SMEE_URL=https://smee.io/<channel> 필요" && exit 64)
+	npx --yes smee-client --url $$SMEE_URL --target http://localhost:$${API_PORT:-8000}/webhooks/github
 
 run-worker:
 	$(UV) run python -m worker

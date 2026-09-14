@@ -134,6 +134,21 @@ uv run python scripts/github_app_check.py --repo <owner>/<name>
 
 App의 Webhook URL을 저장하면 GitHub가 `ping`을 보낸다 — 서명이 맞으면 `200 {"pong": true}`.
 
+### 웹훅 받기 (로컬 API에 공개 URL 붙이기, P7.3)
+
+GitHub → 로컬 `:8000/webhooks/github`로 배달하려면 터널이 필요하다. 둘 중 하나:
+
+```bash
+# (1) smee.io: https://smee.io/new 에서 채널을 만들고, App 설정의 Webhook URL에 그 채널 URL을 넣는다
+SMEE_URL=https://smee.io/<channel> make run-webhook-tunnel
+# (2) cloudflared: 임시 공개 URL을 발급받아 App 설정의 Webhook URL에 넣는다
+cloudflared tunnel --url http://localhost:8000
+```
+
+순서: `make run-api`(`HITL_GITHUB_WEBHOOK_SECRET` = App의 secret) → 터널 → App 설정 저장 → `ping`이 `200`으로
+찍히면 연결 완료. `scripts/github_app_check.py`의 `[ok] events`가 `discussion_comment`를 포함해야 Plan 승인이
+Discussion 코멘트로 들어온다(`issue_comment`는 개발용 우회).
+
 ## 4. 검사
 
 ```bash check
