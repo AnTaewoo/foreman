@@ -244,8 +244,8 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P7.1 | `scripts/github_app_check.py` — App 인증·설치·권한·웹훅 구독 읽기 전용 점검 + `ping` 웹훅 | PC-6 | done | d215282 |
 | P7.2 | `PrOpener`가 토큰으로 브랜치 push 후 PR (D-41), `RepoCache` 토큰 clone/fetch | P7.1 | done | f39fa6c |
 | P7.3 | 웹훅 공개 경로(smee/cloudflared) + `discussion_comment` 실 매핑 확인, runbook | P7.1 | done | ad11188 |
-| P7.4 | `scripts/seed_test_repo.py` + `scripts/cleanup_repo.py` (D-42) | P7.2 | todo | |
-| **PC-7** | 실 repo에서 Goal 1개: Plan Discussion → 사람 `/approve` → Issue·PR 실제 생성 → 사람 머지 → done, cleanup | P7.3, P7.4 | pending | |
+| P7.4 | `scripts/seed_test_repo.py` + `scripts/cleanup_repo.py` (D-42) | P7.2 | done | 7175123 |
+| **PC-7** | 실 repo에서 Goal 1개: Plan Discussion → 사람 `/approve` → Issue·PR 실제 생성 → 사람 머지 → done, cleanup | P7.3, P7.4 | pending — 사용자 입력 대기: GitHub App(ID·PEM·installation·secret), 테스트 repo, 터널 URL | |
 
 ---
 
@@ -684,7 +684,7 @@ discussion_comment, pull_request, pull_request_review, check_suite), 웹훅 공�
 
 ### P7.4 테스트 repo 시드 + 정리 스크립트 (D-42)
 - depends_on: P7.2
-- owned_paths: `scripts/seed_test_repo.py`, `scripts/cleanup_repo.py`, `tests/test_cleanup_repo.py`, `github_adapter/client.py`(목록·닫기 메서드 추가 시)
+- owned_paths: `scripts/seed_test_repo.py`, `scripts/cleanup_repo.py`, `github_adapter/cleanup.py`(로직), `github_adapter/client.py`(list_open_items/close_issue/close_pull/list_refs/delete_ref/commit_count_hint), `tests/github_adapter/test_cleanup.py`
 - red: (a) `seed_test_repo.py <owner/name>`: `tests/fixtures/sample_repo`를 토큰 URL로 push(main 강제 아님 — 비어 있지 않으면 중단) (b) `cleanup_repo.py <owner/name> [--apply]`: 기본은 **목록만**; `--apply`면 `ai-platform:meta` 마커 Issue/PR close, `ai-platform:` Discussion 닫기(가능하면), `ai/*` 브랜치 삭제, `ai:` 라벨은 유지. 마커 없는 것은 건드리지 않음 — respx로 검증 (c) 삭제 전 개수 출력, `--apply` 없이 실 변경 0
 - green: 두 스크립트, 필요한 client 메서드(`list_issues(marker)`, `close_issue`, `delete_branch`)는 멱등·마커 기반
 - gate: `make check`

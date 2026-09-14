@@ -203,3 +203,8 @@
 | 2026-09-14T20:05 | P7.3 | Green | runbook 웹훅 받기(smee/cloudflared), make run-webhook-tunnel | ad11188 |
 | 2026-09-14T20:06 | P7.3 | Gate | check_runbook 5/5 | |
 | 2026-09-14T20:06 | P7.3 | 완료 | 보드 done (사람 항목: 채널 URL 받으면 ping 실제 수신) | ad11188 |
+| 2026-09-14T20:15 | P7.4 | Red | test_cleanup 4건 | 6327521 |
+| 2026-09-14T20:35 | P7.4 | Green | cleanup.py + client 메서드 + 스크립트 2개, 457 passed | 7175123 |
+| 2026-09-14T20:36 | P7.4 | Gate | make check pass (457), 시도 2/3 | |
+| 2026-09-14T20:36 | P7.4 | 완료 | 보드 done | 7175123 |
+| 2026-09-14T20:37 | PC-7 | 대기 | 사용자 입력(App 자격 증명·테스트 repo·터널) 필요 | |
