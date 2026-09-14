@@ -28,8 +28,10 @@ REQUIRED_PERMISSIONS: dict[str, str] = {
     "metadata": "read",
 }
 REQUIRED_EVENTS: frozenset[str] = frozenset(
-    {"issue_comment", "discussion_comment", "pull_request", "pull_request_review", "check_suite"}
+    {"issue_comment", "discussion_comment", "pull_request", "pull_request_review"}
 )
+# check_suite는 Checks 권한이 있어야 구독 목록에 보인다. MVP 1은 pr.checks_*가 noop → 선택(경고만)
+OPTIONAL_EVENTS: frozenset[str] = frozenset({"check_suite"})
 _LEVEL = {"read": 1, "write": 2, "admin": 3}
 
 
@@ -140,12 +142,14 @@ async def run_check(settings: Any, http: httpx.AsyncClient, *, repo: str) -> Che
     # 5) events (웹훅 구독)
     events = set(app.get("events") or []) | set((found or {}).get("events") or [])
     lacking_events = sorted(REQUIRED_EVENTS - events)
+    optional_missing = sorted(OPTIONAL_EVENTS - events)
+    note = f" (optional not subscribed: {', '.join(optional_missing)})" if optional_missing else ""
     report.add(
         "events",
         not lacking_events,
-        "subscribed: " + ", ".join(sorted(REQUIRED_EVENTS))
+        ("subscribed: " + ", ".join(sorted(REQUIRED_EVENTS)) + note)
         if not lacking_events
-        else "not subscribed: " + ", ".join(lacking_events),
+        else "not subscribed: " + ", ".join(lacking_events) + note,
     )
 
     # 6) repo

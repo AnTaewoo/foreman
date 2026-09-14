@@ -125,7 +125,7 @@ API로 같은 흐름을 돌리려면: `POST /projects {name, repo, members}` →
 `.env`에 App 값(`HITL_GITHUB_APP_ID`, `HITL_GITHUB_APP_PRIVATE_KEY`(개행은 `\n`), `HITL_GITHUB_INSTALLATION_ID`,
 `HITL_GITHUB_WEBHOOK_SECRET`)을 넣은 뒤, **읽기 전용** 점검으로 인증·설치·권한·웹훅 구독을 확인한다.
 필요한 권한: Contents/Issues/Pull requests/Discussions write, Metadata read. 구독 이벤트: issue_comment,
-discussion_comment, pull_request, pull_request_review, check_suite. `HITL_DRY_RUN=false`는 이 점검이 전부 `[ok]`인
+discussion_comment, pull_request, pull_request_review (`check_suite`는 Checks 권한이 있을 때만 보이며 선택). `HITL_DRY_RUN=false`는 이 점검이 전부 `[ok]`인
 뒤에만.
 
 ```bash

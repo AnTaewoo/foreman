@@ -655,7 +655,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 
 전제(사용자 제공): GitHub App(App ID, private key PEM, installation id, webhook secret), App이 설치된 테스트 repo
 `owner/name`(권한: Contents RW, Issues RW, Pull requests RW, Discussions RW, Metadata R; 웹훅 구독: issue_comment,
-discussion_comment, pull_request, pull_request_review, check_suite), 웹훅 공개 URL(smee.io 채널 또는 cloudflared).
+discussion_comment, pull_request, pull_request_review; `check_suite`는 선택), 웹훅 공개 URL(smee.io 채널 또는 cloudflared).
 `.env`에 `HITL_GITHUB_APP_ID / HITL_GITHUB_APP_PRIVATE_KEY(개행 \n) / HITL_GITHUB_INSTALLATION_ID / HITL_GITHUB_WEBHOOK_SECRET`.
 `HITL_DRY_RUN=false`는 PC-7 실행 직전에만.
 

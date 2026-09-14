@@ -21,13 +21,7 @@ PERMS_OK = {
     "discussions": "write",
     "metadata": "read",
 }
-EVENTS_OK = [
-    "issue_comment",
-    "discussion_comment",
-    "pull_request",
-    "pull_request_review",
-    "check_suite",
-]
+EVENTS_OK = ["issue_comment", "discussion_comment", "pull_request", "pull_request_review"]
 
 
 @dataclass
@@ -138,6 +132,9 @@ async def test_missing_permission_and_event(
     from github_adapter.app_check import REQUIRED_EVENTS, REQUIRED_PERMISSIONS, run_check
 
     assert REQUIRED_PERMISSIONS == PERMS_OK and REQUIRED_EVENTS == set(EVENTS_OK)
+    from github_adapter.app_check import OPTIONAL_EVENTS
+
+    assert OPTIONAL_EVENTS == {"check_suite"}  # Checks 권한 없으면 안 보임 — MVP 1 선택
     perms = {**PERMS_OK, "discussions": "read"}
     events = [e for e in EVENTS_OK if e != "discussion_comment"]
     mock_all(github_mock, perms=perms, events=events)
