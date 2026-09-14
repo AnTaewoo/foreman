@@ -196,3 +196,7 @@
 | 2026-09-14T19:20 | P7.1 | Green | app_check.py(6개 항목, 문서 확인 경로), CLI, ping, runbook 3b, 448 passed | d215282 |
 | 2026-09-14T19:22 | P7.1 | Gate | make check pass (448), check_runbook 5/5, 시도 3/3 | |
 | 2026-09-14T19:22 | P7.1 | 완료 | 보드 done | d215282 |
+| 2026-09-14T19:30 | P7.2 | Red | token_nowait, 토큰 URL 마스킹, PrOpener push, GitPusher, runtime 배선 5건 | 7954214 |
+| 2026-09-14T19:55 | P7.2 | Green | D-41 구현, 453 passed | f39fa6c |
+| 2026-09-14T19:57 | P7.2 | Gate | make check pass (453), 시도 3/3 | |
+| 2026-09-14T19:57 | P7.2 | 완료 | 보드 done | f39fa6c |
