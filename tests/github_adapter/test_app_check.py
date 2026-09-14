@@ -1,7 +1,7 @@
-"""P7.1 — App 점검 (D-42, red a~d): 읽기 전용 REST 호출로 인증·설치·권한·웹훅 구독을 확인. 실 호출 0(respx).
+"""P7.1 — App 점검 (D-42, red a~d): 읽기 전용 REST로 인증·설치·권한·웹훅 구독 확인. 실 호출 0.
 
 경로 출처(2026-09-14 docs.github.com REST 확인): GET /app, GET /app/installations,
-POST /app/installations/{id}/access_tokens, GET /installation/repositories, GET /repos/{owner}/{repo},
+POST /app/installations/{id}/access_tokens, GET /installation/repositories, GET /repos/{o}/{n},
 GET /app/hook/config.
 """
 

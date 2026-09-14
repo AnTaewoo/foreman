@@ -143,6 +143,9 @@ class WebhookHandler:
             return JSONResponse({"status": "duplicate"}, status_code=200)
         gh_event = request.headers.get("X-GitHub-Event", "")
         payload: dict[str, Any] = await request.json()
+        if gh_event == "ping":  # App 저장/웹훅 설정 시 GitHub가 보낸다 (P7.1) — 서명 검증 뒤 200
+            log.info("webhook.ping", hook_id=payload.get("hook_id"), delivery=delivery)
+            return JSONResponse({"pong": True}, status_code=200)
         sender = payload.get("sender") or {}
         if self._bot_login and sender.get("login") == self._bot_login:
             log.debug("webhook.own_bot_ignored", gh_event=gh_event, delivery=delivery)

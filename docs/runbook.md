@@ -120,6 +120,20 @@ API로 같은 흐름을 돌리려면: `POST /projects {name, repo, members}` →
 (`tests/api/test_goal_flow.py`의 `comment_body`/`signed` 참고) → `GET /projects/{id}/goals/{gid}` 진행률,
 `GET /projects/{id}/events?since=<seq>` 또는 `WS /projects/{id}/stream`으로 이벤트.
 
+## 3b. 실 GitHub 연결 전 점검 (X.1 / P7)
+
+`.env`에 App 값(`HITL_GITHUB_APP_ID`, `HITL_GITHUB_APP_PRIVATE_KEY`(개행은 `\n`), `HITL_GITHUB_INSTALLATION_ID`,
+`HITL_GITHUB_WEBHOOK_SECRET`)을 넣은 뒤, **읽기 전용** 점검으로 인증·설치·권한·웹훅 구독을 확인한다.
+필요한 권한: Contents/Issues/Pull requests/Discussions write, Metadata read. 구독 이벤트: issue_comment,
+discussion_comment, pull_request, pull_request_review, check_suite. `HITL_DRY_RUN=false`는 이 점검이 전부 `[ok]`인
+뒤에만.
+
+```bash
+uv run python scripts/github_app_check.py --repo <owner>/<name>
+```
+
+App의 Webhook URL을 저장하면 GitHub가 `ping`을 보낸다 — 서명이 맞으면 `200 {"pong": true}`.
+
 ## 4. 검사
 
 ```bash check
