@@ -27,12 +27,12 @@ from control_plane.dry_merge import DryMerger
 from control_plane.events.bus import RETRY_SUFFIX, STREAM_PREFIX, Delivery, EventBus
 from control_plane.events.outbox import OutboxRelay
 from control_plane.events.projection import Projection
-from control_plane.pr_opener import PrOpener
+from control_plane.pr_opener import GitPusher, PrOpener
 from control_plane.repo_cache import RepoCache
 from control_plane.scheduler.launcher import DockerCliLauncher, InProcessLauncher, WorkerLauncher
 from control_plane.scheduler.scheduler import Scheduler
 from control_plane.store import session as sess
-from github_adapter import get_github_client
+from github_adapter import get_github_client, make_token_provider
 from github_adapter.protocol import GitHubClient
 
 log = structlog.get_logger(__name__)
@@ -101,12 +101,18 @@ class Runtime:
         consumer: str = "cp1",
         block_ms: int = 200,
         github: GitHubClient | None = None,
+        token_provider: Any = None,  # Any: InstallationTokenProvider 또는 같은 인터페이스
     ) -> None:
         self.settings = settings
         self.factory = factory
         self.redis = redis
         self.launcher = launcher or build_launcher(settings, redis)
-        self.repo_cache = RepoCache(Path(settings.repo_root))  # D-38
+        # D-41: 실 모드면 installation 토큰으로 clone·push (워커에는 안 준다)
+        self.token_provider = token_provider
+        if self.token_provider is None and not settings.dry_run:
+            self.token_provider = make_token_provider(settings)
+        token_getter = self.token_provider.token_nowait if self.token_provider else None
+        self.repo_cache = RepoCache(Path(settings.repo_root), token_getter=token_getter)  # D-38
         self.bus = EventBus(redis)
         self.relay = OutboxRelay(factory, redis)
         self.projection = Projection(factory, self.bus)
@@ -120,7 +126,13 @@ class Runtime:
         )
         self.handlers: list[Handler] = [self.projection.handle, self.scheduler.handle]
         self.github = github or get_github_client(settings)  # D-37: Dry/실 선택은 control plane
-        self.pr_opener = PrOpener(factory, self.bus, self.github)
+        self.pr_opener = PrOpener(
+            factory,
+            self.bus,
+            self.github,
+            pusher=GitPusher(token_getter) if token_getter is not None else None,
+            repo_path_for=self.repo_cache.ensure,
+        )
         self.handlers.append(self.pr_opener.handle)
         self.dry_merger: DryMerger | None = None
         if settings.dry_run:  # D-36: Dry에서만 사람 머지를 흉내 낸다
@@ -166,6 +178,11 @@ class Runtime:
 
     async def _retry_loop(self) -> None:
         while not self._stop.is_set():
+            if self.token_provider is not None:  # D-41: 동기 경로용 토큰을 미리 신선하게
+                try:
+                    await self.token_provider.token()
+                except Exception:
+                    log.exception("runtime.token_refresh_failed")
             try:
                 async for key in self.redis.scan_iter(match=f"{STREAM_PREFIX}*{RETRY_SUFFIX}"):
                     k = key if isinstance(key, str) else key.decode()

@@ -10,7 +10,12 @@ from github_adapter.discussions import DiscussionsClient
 from github_adapter.dry_run import DryRunDiscussionsClient, DryRunGitHubClient
 from github_adapter.protocol import GitHubClient
 
-__all__ = ["get_discussions_client", "get_github_client", "make_installation_http"]
+__all__ = [
+    "get_discussions_client",
+    "get_github_client",
+    "make_installation_http",
+    "make_token_provider",
+]
 
 
 def _require_real(settings: object, installation_id: int | None) -> tuple[str, str, int]:
@@ -31,6 +36,16 @@ def _require_real(settings: object, installation_id: int | None) -> tuple[str, s
     if inst is None:
         raise ValueError("installation_id is required when dry_run=False")
     return app_id, str(pem), int(inst)
+
+
+def make_token_provider(
+    settings: object, installation_id: int | None = None
+) -> InstallationTokenProvider:
+    """RepoCache clone·PrOpener push(D-41)용 토큰 제공자 (실 모드 전용)."""
+    app_id, pem, inst = _require_real(settings, installation_id)
+    return InstallationTokenProvider(
+        app_id, pem, inst, httpx.AsyncClient(base_url=GITHUB_API_BASE_URL)
+    )
 
 
 def make_installation_http(

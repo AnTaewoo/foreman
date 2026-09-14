@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
+import subprocess
 from pathlib import Path
 
 from redis.asyncio import Redis
@@ -186,9 +188,7 @@ async def test_runtime_opens_pr_and_dry_merges(
     assert len(github.snapshot()["repos"][str(tmp_path)]["pulls"]) == 1
 
 
-# ---------------------------------------------------------------- P7.2 (D-41): push는 control plane
-import shutil
-import subprocess
+# ------------------------------------------ P7.2 (D-41): push는 control plane
 
 GENV = {
     "GIT_AUTHOR_NAME": "s",
@@ -217,7 +217,7 @@ class FakePusher:
             raise RuntimeError("push rejected: https://x-access-token:ghs_SECRET@github.com/x.git")
 
 
-# (b) push → open_pr 순서; push 실패 → pr.opened 없음 + push_failed 기록(토큰 마스킹); pusher None → 건너뜀
+# (b) push → open_pr 순서; push 실패면 pr.opened 없음 + push_failed(마스킹); pusher None → 건너뜀
 async def test_pr_opener_pushes_before_opening(
     factory: async_sessionmaker[AsyncSession], redis: Redis, tmp_path: Path
 ) -> None:
@@ -253,7 +253,7 @@ async def test_pr_opener_pushes_before_opening(
     assert all("ghs_SECRET" not in str(x) for x in failing.push_failed)
 
 
-# (c) GitPusher: 로컬 clone에서 origin(bare)으로 브랜치 push — URL은 push 때만 쓰고 remote 설정에 남기지 않는다
+# (c) GitPusher: 로컬 clone → origin(bare) push — URL은 push 때만 쓰고 remote 설정에 안 남긴다
 def test_git_pusher_pushes_branch(tmp_path: Path) -> None:
     from control_plane.pr_opener import GitPusher
 
@@ -302,9 +302,13 @@ async def test_runtime_wires_pusher_only_in_real_mode(
     )
     assert dry.pr_opener.pusher is None
     real = Runtime(
-        settings_for("sqlite+aiosqlite://", dry_run=False), factory, redis,
-        launcher=FakeLauncher(), github=DryRunGitHubClient(), token_provider=Provider(),
-    )  # fmt: skip
+        settings_for("sqlite+aiosqlite://", dry_run=False),
+        factory,
+        redis,
+        launcher=FakeLauncher(),
+        github=DryRunGitHubClient(),
+        token_provider=Provider(),
+    )
     assert real.pr_opener.pusher is not None
     assert (
         real.repo_cache.url_for("org/demo")

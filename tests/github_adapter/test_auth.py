@@ -141,7 +141,7 @@ async def test_unmatched_request_fails(http: httpx.AsyncClient) -> None:
         await http.get("/rate_limit")
 
 
-# P7.2 (D-41): 동기 경로(RepoCache clone, git push)용 token_nowait — 캐시가 신선하면 값, 아니면 TokenUnavailable
+# P7.2 (D-41): 동기 경로(clone, push)용 token_nowait — 캐시가 신선하면 값, 아니면 TokenUnavailable
 async def test_token_nowait(
     github_mock: respx.MockRouter, http: httpx.AsyncClient, private_key_pem: str, clock: Clock
 ) -> None:

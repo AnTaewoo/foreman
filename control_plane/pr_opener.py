@@ -8,11 +8,19 @@
 
 from __future__ import annotations
 
+import asyncio
+import subprocess
+from collections.abc import Callable, Mapping
+from pathlib import Path
+from typing import Protocol
+
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from control_plane.dry_merge import GIT_ENV
 from control_plane.events.bus import Delivery, EventBus
 from control_plane.events.schema import Actor, Event, EventType, Subject
+from control_plane.repo_cache import mask_token, token_url
 from control_plane.store import models as m
 from control_plane.store.session import get_session
 from github_adapter.protocol import GitHubClient, PrMeta
@@ -20,6 +28,44 @@ from github_adapter.protocol import GitHubClient, PrMeta
 log = structlog.get_logger(__name__)
 
 PR_OPENER_ACTOR = Actor(type="system", id="pr-opener")
+RepoPathFor = Callable[[str], Path]
+
+
+class Pusher(Protocol):
+    def push(self, repo_path: Path, repo: str, branch: str) -> None: ...
+
+
+class GitPusher:
+    """D-41: 워커가 로컬 clone(RepoCache)에 push한 브랜치를 control plane이 GitHub로 push 한다.
+
+    토큰 URL은 push 명령 인자로만 쓰고 remote 설정(.git/config)에 남기지 않는다. 오류는 마스킹.
+    """
+
+    def __init__(
+        self,
+        token_getter: Callable[[], str],
+        *,
+        url_for: Callable[[str], str] | None = None,
+        git_env: Mapping[str, str] | None = None,
+    ) -> None:
+        self._token_getter = token_getter
+        self._url_for = url_for
+        self._env = dict(git_env or GIT_ENV)
+
+    def url_for(self, repo: str) -> str:
+        return self._url_for(repo) if self._url_for else token_url(repo, self._token_getter())
+
+    def push(self, repo_path: Path, repo: str, branch: str) -> None:
+        r = subprocess.run(
+            ["git", "push", self.url_for(repo), f"refs/heads/{branch}:refs/heads/{branch}"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            env=self._env,
+            check=False,
+        )
+        if r.returncode != 0:
+            raise RuntimeError(f"git push failed: {mask_token(r.stderr.strip()[-300:])}")
 
 
 class PrOpener:
@@ -30,12 +76,17 @@ class PrOpener:
         github: GitHubClient,
         *,
         agent_id: str = "coding-1",
+        pusher: Pusher | None = None,
+        repo_path_for: RepoPathFor | None = None,
     ) -> None:
         self._factory = factory
         self._bus = bus
         self._github = github
         self._agent_id = agent_id
+        self.pusher = pusher  # None = Dry(로컬 clone이 곧 origin) — D-41
+        self._repo_path_for = repo_path_for
         self.opened: list[tuple[str, str]] = []
+        self.push_failed: list[tuple[str, str]] = []
         self._seen: set[tuple[str, str]] = set()
 
     async def handle(self, delivery: Delivery) -> None:
@@ -57,6 +108,21 @@ class PrOpener:
             )
             return
         self._seen.add(key)
+        if self.pusher is not None and self._repo_path_for is not None:  # D-41: 실 모드 push
+            try:
+                await asyncio.to_thread(
+                    self.pusher.push,
+                    self._repo_path_for(project.repo_full_name),
+                    project.repo_full_name,
+                    str(branch),
+                )
+            except Exception as exc:
+                log.error(
+                    "pr_opener.push_failed", task_id=task.id, error=mask_token(str(exc))[-300:]
+                )
+                self.push_failed.append(key)
+                self._seen.discard(key)  # 다음 전달(서명본)에서 재시도할 수 있게
+                return
         run_id = str(event.payload.get("run_id") or "")
         summary = str(event.payload.get("summary") or "")
         title = f"[T-{task.issue_number or '?'}] {task.title}"

@@ -106,6 +106,14 @@ async def test_dry_merger_disabled_in_real_mode(
     assert await merged_events(factory) == []
 
 
+class _FakeTokens:
+    def token_nowait(self) -> str:
+        return "ghs_test"
+
+    async def token(self) -> str:
+        return "ghs_test"
+
+
 # (c) Runtime: dry_run이면 체인에 DryMerger가 붙고, in_review Task가 done까지 간다 → 의존 Task 배정
 async def test_runtime_dry_merge_unblocks_dependents(
     factory: async_sessionmaker[AsyncSession], redis: Redis, tmp_path: Path
@@ -126,6 +134,7 @@ async def test_runtime_dry_merge_unblocks_dependents(
         redis,
         launcher=FakeLauncher(),
         github=DryRunGitHubClient(),  # 실 client는 App 자격 증명이 필요 — 배선만 확인
+        token_provider=_FakeTokens(),  # P7.2: 실 모드는 토큰 제공자도 필요
     )
     assert not any(getattr(h, "__self__", None).__class__ is DryMerger for h in real.handlers)
 

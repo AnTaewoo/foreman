@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -20,6 +21,18 @@ GIT_ENV_DEFAULT: dict[str, str] = {
     "PATH": "/usr/bin:/bin:/usr/local/bin",
     "GIT_TERMINAL_PROMPT": "0",
 }
+
+
+_TOKEN_RE = re.compile(r"(x-access-token:)[^@\s]+@")
+
+
+def mask_token(text: str) -> str:
+    """URL 안의 installation 토큰을 ``***``로 (로그·예외용)."""
+    return _TOKEN_RE.sub(r"\1***@", text)
+
+
+def token_url(repo: str, token: str) -> str:
+    return f"https://x-access-token:{token}@github.com/{repo}.git"
 
 
 class RepoUnavailable(Exception):
@@ -40,16 +53,22 @@ class RepoCache:
         *,
         url_for: Callable[[str], str] | None = None,
         git_env: Mapping[str, str] | None = None,
+        token_getter: Callable[[], str] | None = None,
     ) -> None:
         self.root = Path(root)
         self._url_for = url_for
+        self._token_getter = token_getter  # D-41: 실 모드면 installation 토큰으로 clone/fetch
         self._env = dict(git_env or GIT_ENV_DEFAULT)
         self.last_action: str | None = None  # passthrough | clone | fetch
 
     def url_for(self, repo: str) -> str:
         if self._url_for is not None:
             return self._url_for(repo)
-        return repo if _is_url(repo) else f"https://github.com/{repo}.git"
+        if _is_url(repo):
+            return repo
+        if self._token_getter is not None:
+            return token_url(repo, self._token_getter())
+        return f"https://github.com/{repo}.git"
 
     def target_for(self, repo: str) -> Path:
         name = repo
@@ -69,18 +88,26 @@ class RepoCache:
         target = self.target_for(repo)
         if (target / ".git").is_dir():
             try:
-                self._git(target, "fetch", "-q", "--all", "--prune")
+                self._git(
+                    target,
+                    "fetch",
+                    "-q",
+                    self.url_for(repo),
+                    "+refs/heads/*:refs/remotes/origin/*",
+                )
             except subprocess.CalledProcessError as exc:  # 오프라인이면 기존 clone으로 계속
-                log.warning("repo_cache.fetch_failed", repo=repo, error=exc.stderr[-300:])
+                log.warning(
+                    "repo_cache.fetch_failed", repo=repo, error=mask_token(exc.stderr[-300:])
+                )
             self.last_action = "fetch"
             return target.resolve()
         target.parent.mkdir(parents=True, exist_ok=True)
         try:
             self._git(target.parent, "clone", "-q", self.url_for(repo), str(target))
         except (subprocess.CalledProcessError, OSError) as exc:
-            detail = getattr(exc, "stderr", "") or str(exc)
-            log.error("repo_cache.clone_failed", repo=repo, error=str(detail)[-300:])
-            raise RepoUnavailable(repo, f"clone failed: {str(detail).strip()[-200:]}") from exc
+            detail = mask_token(str(getattr(exc, "stderr", "") or exc))
+            log.error("repo_cache.clone_failed", repo=repo, error=detail[-300:])
+            raise RepoUnavailable(repo, f"clone failed: {detail.strip()[-200:]}") from exc
         self.last_action = "clone"
         log.info("repo_cache.cloned", repo=repo, path=str(target))
         return target.resolve()

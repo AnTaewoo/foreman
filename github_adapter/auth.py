@@ -39,6 +39,10 @@ def _parse_expires(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
 
 
+class TokenUnavailable(Exception):
+    """캐시된 installation 토큰이 없거나 만료 임박 — 먼저 ``await provider.token()``."""
+
+
 class InstallationTokenProvider:
     """installation access token 캐시. ``client``는 base_url이 GitHub API인 AsyncClient."""
 
@@ -82,6 +86,12 @@ class InstallationTokenProvider:
             self._token = str(data["token"])
             self._expires_at = _parse_expires(str(data["expires_at"]))
             return self._token
+
+    def token_nowait(self) -> str:
+        """동기 경로(git clone/push, P7.2)용: 신선한 캐시 토큰만. 없으면 TokenUnavailable."""
+        if not self._fresh() or self._token is None:
+            raise TokenUnavailable("no fresh installation token cached")
+        return self._token
 
     def invalidate(self) -> None:
         self._token = None
