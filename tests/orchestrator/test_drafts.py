@@ -162,3 +162,19 @@ def test_prompt_set_rules_x2() -> None:
     dec = (PROMPTS / "decompose.md").read_text(encoding="utf-8")
     for hint in ("Symbols", "already exist", "expected", "fresh", "must NOT depend", "at least 3"):
         assert hint in dec, hint
+
+
+# PC-7 재실행 발견: 모델이 depends_on에 제목 대신 Task Graph 번호("T-1")나 번호 접두를 쓴다 →
+# 제목이 "T-1: …"/"T-1 …"로 시작하는 Task로 해석한다. 못 찾으면 종전처럼 ValidationError
+def test_depends_on_accepts_task_numbers() -> None:
+    out = DecomposeResult.model_validate(
+        result(
+            task("T-1: Create maths.py"),
+            task("T-2: Write test for add", ["T-1"]),
+            task("T-3: Write test for mul", ["T-1:", "T-2: Write test for add"]),
+        )
+    )
+    assert out.tasks[1].depends_on == ["T-1: Create maths.py"]
+    assert out.tasks[2].depends_on == ["T-1: Create maths.py", "T-2: Write test for add"]
+    with pytest.raises(ValueError, match="unknown task"):
+        DecomposeResult.model_validate(result(task("T-1: a"), task("T-2: b", ["T-9"])))
