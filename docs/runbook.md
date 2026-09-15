@@ -133,6 +133,7 @@ uv run python scripts/github_app_check.py --repo <owner>/<name>
 ```
 
 App의 Webhook URL을 저장하면 GitHub가 `ping`을 보낸다 — 서명이 맞으면 `200 {"pong": true}`.
+**Webhook 섹션의 `Active` 체크가 꺼져 있으면 이벤트가 전혀 배달되지 않는다**(API로는 확인 불가, ping 재전송은 됨) — PC-7에서 겪음.
 
 ### 웹훅 받기 (로컬 API에 공개 URL 붙이기, P7.3)
 

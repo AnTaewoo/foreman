@@ -208,3 +208,5 @@
 | 2026-09-14T20:36 | P7.4 | Gate | make check pass (457), 시도 2/3 | |
 | 2026-09-14T20:36 | P7.4 | 완료 | 보드 done | 7175123 |
 | 2026-09-14T20:37 | PC-7 | 대기 | 사용자 입력(App 자격 증명·테스트 repo·터널) 필요 | |
+| 2026-09-15T19:00 | PC-7 | 자동 | Discussion #2 → /approve → Issue #3–#6 → PR #7 → 사람 머지 → done → PR #8. verify_chain True | 2b0b107 |
+| 2026-09-15T19:15 | PC-7 | 판정 | pass — docs/pc/PC-7.md, 사용자 서명·cleanup --apply 대기 | |
