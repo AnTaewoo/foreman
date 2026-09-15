@@ -122,6 +122,23 @@ class TaskDraft(BaseModel):
     epic: str = ""
 
 
+_REF_RE = re.compile(r"^(T-\d+)\s*:?\s*$")
+
+
+def _resolve_ref(dep: str, titles: list[str]) -> str:
+    """depends_on 정규화: 제목이면 그대로, "T-1"·"T-1:" 번호면 그 번호로 시작하는 제목."""
+    dep = dep.strip()
+    if dep in titles:
+        return dep
+    m = _REF_RE.match(dep)
+    if m:
+        num = m.group(1)
+        hits = [t for t in titles if re.match(rf"^{re.escape(num)}\b", t)]
+        if len(hits) == 1:
+            return hits[0]
+    return dep
+
+
 class DecomposeResult(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -137,6 +154,7 @@ class DecomposeResult(BaseModel):
         known = set(titles)
         epic_titles = {e.title for e in self.epics}
         for t in self.tasks:
+            t.depends_on = [_resolve_ref(dep, titles) for dep in t.depends_on]  # PC-7: "T-1" → 제목
             for dep in t.depends_on:
                 if dep == t.title:
                     raise ValueError(f"task {t.title!r} depends on itself")
