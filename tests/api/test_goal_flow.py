@@ -410,3 +410,67 @@ async def test_repo_unavailable_blocks_goal(
     ev = (await events_of(factory, "goal.cancelled"))[-1]
     assert ev.payload["reason"].startswith("repo_unavailable") and ev.payload["by"] == "system"
     assert not runner.is_waiting(gid) and await events_of(factory, "goal.plan_proposed") == []
+
+
+# ------------------------------------------------ PC-7 발견: API의 GoalRunner도 토큰으로 clone 해야 한다 (D-41)
+async def test_runner_warms_token_before_repo_clone(
+    factory: async_sessionmaker[AsyncSession], redis: Redis, pump: Pump
+) -> None:
+    calls: list[str] = []
+
+    class Provider:
+        async def token(self) -> str:
+            calls.append("token")
+            return "ghs_x"
+
+        def token_nowait(self) -> str:
+            return "ghs_x"
+
+    def repo_path_for(repo: str) -> Path:
+        calls.append(f"clone:{repo}")
+        return SAMPLE
+
+    runner = GoalRunner(
+        factory=factory,
+        bus=EventBus(redis),
+        provider=FakeProvider(script=[PLAN_JSON, DECOMPOSE_JSON]),
+        github=DryRunGitHubClient(),
+        discussions=DryRunDiscussionsClient(),
+        checkpointer=MemorySaver(),
+        repo_path_for=repo_path_for,
+        token_provider=Provider(),
+        min_tasks=1,
+    )
+    app1 = create_app(
+        Settings(_env_file=None, github_webhook_secret=SECRET),
+        factory=factory,
+        redis=redis,
+        runner=runner,
+    )
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://t") as c:
+        _, gid = await start_goal(c, pump, runner)
+    assert calls[:2] == ["token", "clone:org/demo"] and runner.is_waiting(gid)
+
+
+def test_build_runner_real_mode_uses_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """dry_run=false면 build_runner가 토큰 제공자를 만들어 RepoCache와 runner에 준다."""
+    from control_plane.api import app as app_mod
+    from control_plane.api.deps import build_state
+
+    class Provider:
+        def token_nowait(self) -> str:
+            return "ghs_x"
+
+        async def token(self) -> str:
+            return "ghs_x"
+
+    monkeypatch.setattr(app_mod, "make_token_provider", lambda settings: Provider())
+    settings = Settings(_env_file=None, dry_run=False, llm_provider="fake", github_app_id="1",
+                        github_app_private_key="pem", github_installation_id=1)  # fmt: skip
+    monkeypatch.setattr(app_mod, "get_github_client", lambda s: DryRunGitHubClient())
+    monkeypatch.setattr(app_mod, "get_discussions_client", lambda s: DryRunDiscussionsClient())
+    runner = app_mod.build_runner(settings, build_state(settings))
+    assert runner.token_provider is not None
+    assert runner.repo_cache is not None and runner.repo_cache.url_for("org/demo").startswith(
+        "https://x-access-token:ghs_x@"
+    )
