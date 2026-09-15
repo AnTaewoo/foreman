@@ -72,11 +72,15 @@ class GoalRunner:
         repo_path_for: RepoPathFor | None = None,
         emit: Emit | None = None,
         min_tasks: int = 3,  # X.2: 운영 기본 3, Fake 스크립트 테스트는 1
+        token_provider: Any = None,  # Any: InstallationTokenProvider — D-41, 실 모드 clone용
+        repo_cache: Any = None,  # Any: RepoCache — 관측·테스트용 참조
     ) -> None:
         self._factory = factory
         self._bus = bus
         self._model = model
         self._repo_path_for = repo_path_for or default_repo_path
+        self.token_provider = token_provider
+        self.repo_cache = repo_cache
         self._checkpointer: BaseCheckpointSaver[Any] = checkpointer or MemorySaver()
         self._pg_cm: Any = None  # Any: AsyncPostgresSaver 컨텍스트 매니저
 
@@ -188,12 +192,15 @@ class GoalRunner:
             if project is None or created is None:
                 raise RuntimeError(f"project {project_id} or goal.created {goal_id} not found")
             payload = created.payload
+            if self.token_provider is not None:  # D-41: 동기 clone 전에 토큰을 신선하게 (PC-7 발견)
+                await self.token_provider.token()
+            repo_path = await asyncio.to_thread(self._repo_path_for, project.repo_full_name)
             state = initial_state(
                 project_id=project_id,
                 goal_id=goal_id,
                 goal_title=str(payload.get("title", "")),
                 goal_description=str(payload.get("description", "")),
-                repo_path=str(self._repo_path_for(project.repo_full_name)),
+                repo_path=str(repo_path),
                 repo_full_name=project.repo_full_name,
                 model=self._model,
                 last_event_id=created.id,

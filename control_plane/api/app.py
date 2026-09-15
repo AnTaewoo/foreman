@@ -19,6 +19,7 @@ from control_plane.api.idempotency import IdempotencyMiddleware
 from control_plane.config import Settings, get_settings
 from control_plane.logging import configure_logging
 from control_plane.orchestrator.runner import GoalRunner
+from github_adapter import get_discussions_client, get_github_client, make_token_provider
 
 
 def create_app(
@@ -76,8 +77,12 @@ def build_runner(settings: Settings, state: AppState) -> GoalRunner:
     """설정으로 실 실행기: provider(D-33), GitHub(DRY_RUN이면 Dry). 체크포인터는 startup."""
     from agents.llm import get_provider
     from control_plane.repo_cache import RepoCache
-    from github_adapter import get_discussions_client, get_github_client
 
+    token_provider = None if settings.dry_run else make_token_provider(settings)  # D-41
+    repo_cache = RepoCache(
+        Path(settings.repo_root),
+        token_getter=token_provider.token_nowait if token_provider is not None else None,
+    )
     return GoalRunner(
         factory=state.factory,
         bus=state.bus,
@@ -85,7 +90,9 @@ def build_runner(settings: Settings, state: AppState) -> GoalRunner:
         github=get_github_client(settings),
         discussions=get_discussions_client(settings),
         model=settings.llm_model if settings.llm_provider != "anthropic" else None,
-        repo_path_for=RepoCache(Path(settings.repo_root)).ensure,  # D-38
+        repo_path_for=repo_cache.ensure,  # D-38
+        token_provider=token_provider,
+        repo_cache=repo_cache,
     )
 
 

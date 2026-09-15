@@ -412,7 +412,7 @@ async def test_repo_unavailable_blocks_goal(
     assert not runner.is_waiting(gid) and await events_of(factory, "goal.plan_proposed") == []
 
 
-# ------------------------------------------------ PC-7 발견: API의 GoalRunner도 토큰으로 clone 해야 한다 (D-41)
+# ------------------------------------ PC-7 발견: API의 GoalRunner도 토큰으로 clone 해야 한다 (D-41)
 async def test_runner_warms_token_before_repo_clone(
     factory: async_sessionmaker[AsyncSession], redis: Redis, pump: Pump
 ) -> None:
