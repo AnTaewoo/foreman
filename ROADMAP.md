@@ -154,6 +154,14 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | D-40 | **PC-5 판정은 PC-6 이후, Anthropic으로** (검토 2026-09-13). PC-5는 Anthropic 크레딧 부족으로 pending인데 P6는 플랫폼을 돌리기 위한 전제이므로 §0.1의 "PC pass 전 다음 Plan 금지"를 이 한 번 예외로 한다: P6.1은 P5.5에 의존하고, PC-5의 실 LLM 항목·사람 항목은 PC-6 통과 뒤 `HITL_LLM_PROVIDER=anthropic`으로 한 번에 판정한다. MVP 1(dev) 완료 = PC-6 pass + PC-5 pass | P6.1, PC-5, PC-6 |
 | D-41 | **워커는 실 GitHub에도 토큰을 받지 않는다** (제안 2026-09-14, X.1). 워커는 지금처럼 `RepoCache` 로컬 clone(마운트)에만 push 하고, control plane의 `PrOpener`가 PR을 열기 전에 그 clone에서 `git push origin <branch>`를 App installation 토큰(`x-access-token`)으로 수행한다. 토큰은 control plane 메모리에만 있고 로그·이벤트·워커 env에 안 나간다(§12 유지). 대안(기각 제안): `WORKER_TOKEN`으로 1시간 토큰을 워커에 전달 — 워커가 신뢰 경계를 넘는다 | P7.2 |
 | D-42 | **실 GitHub 검증은 사용자 소유 테스트 repo + App 1개** (X.1). `HITL_DRY_RUN=false`는 `.env`에서만 켜고 기본값은 그대로 true. 실 호출 전 `scripts/github_app_check.py`(읽기 전용)가 권한·설치·웹훅 구독을 확인하고, 끝나면 `scripts/cleanup_repo.py`가 `ai-platform:` 마커가 있는 Issue/PR/Discussion을 닫고 `ai/*` 브랜치를 지운다(마커 없는 것은 절대 건드리지 않음) | P7.1, P7.4 |
+| D-43 | **워커 컨테이너는 호스트 uid로 실행** (제안 2026-09-15, F-5b). `DockerCliLauncher`가 `--user <uid>:<gid>`(control plane 프로세스의 것)와 `HOME=/tmp/worker-home`으로 띄워 마운트된 repo에 push 할 수 있게 한다. Dockerfile의 uid 10001은 기본값으로만 남는다. 대안(기각): repo를 777로 chmod — 호스트 파일 권한을 깨뜨림 | P8.2 |
+| D-44 | **죽은 워커는 control plane이 정리** (F-5/F-5c). (1) `BaseAgent.run`은 `execute`가 예외로 끝나거나 outcome이 failed인데 `task.failed`를 아직 안 냈으면 `task.failed{reason: "error", attempt}`를 `run.finished` 앞에 발행 (2) `Runtime` reaper 루프: in_flight run마다 `launcher.is_alive(worker_id)`(docker inspect / in-process Task)와 `timeout_min + 5분`을 확인해 죽었으면 `task.failed{reason: "worker_died"|"timeout", attempt}`(actor system:scheduler) — projection이 ready/blocked로 옮기고 Scheduler 슬롯을 반환 (3) 기동 시 DB의 `assigned/running` Task 중 in_flight에 없는 것(이전 프로세스의 잔재)은 같은 경로로 `worker_died` 처리 | P8.3 |
+| D-45 | **같은 repo의 프로젝트는 하나** (F-6). `POST /projects`가 `projects.repo_full_name`(또는 아직 projection 전이면 `events`의 `project.created.payload.repo`)이 같으면 409. 웹훅 라우팅이 유일해진다 | P8.4 |
+| D-46 | **쓰기 직후 읽기는 events 테이블로 보강** (F-7). `POST /goals`·`GET /projects/{id}`가 projection 행이 없으면 `events`의 `project.created`로 존재를 확인한다(DB 갱신은 여전히 projection만, 읽기 폴백일 뿐). Goal 진행률 등 나머지는 그대로 projection | P8.4 |
+| D-47 | **ingest한 워커 이벤트는 relay가 다시 XADD 하지 않는다** (F-11). `Scheduler.ingest`가 `append_signed` 직후 `stream_id=<워커 메시지 id>, published_at=now`로 표시. 스트림엔 미서명 1건만 남고 서명본은 DB에. WS `?since`·replay는 DB 기준이라 영향 없음 | P8.5 |
+| D-48 | **Dry 모드는 원격 clone을 하지 않는다** (F-1) + **run-api 기본 no-reload** (F-4). `RepoCache`는 `dry_run`이거나 토큰이 없으면 로컬 경로가 아닌 repo에 `RepoUnavailable`(네트워크 0). `make run-api`는 `API_RELOAD=1`일 때만 `--reload --reload-dir control_plane`. `repos/`는 `.gitignore` | P8.1, P8.6 |
+| D-49 | **projection 오류 분류** (F-3/F-2). `IntegrityError`(FK 등)는 transient가 아니라 `OrderingError`로 → D-30 재시도 5회 후 포기(무한 XAUTOCLAIM 재전달 금지). 프로젝트 행이 없는 이벤트(`project.created` 제외)도 같은 경로. 재시도 큐는 재기동 간 영속(설계) — 상한 5회는 그대로 | P8.1 |
+| D-50 | **웹훅 시크릿은 fail-closed** (F-8). 비어 있으면 `WebhookHandler`가 503 `webhook secret not configured`를 돌려주고 `app()`이 경고 로그 | P8.4 |
 
 ---
 
@@ -246,6 +254,18 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P7.3 | 웹훅 공개 경로(smee/cloudflared) + `discussion_comment` 실 매핑 확인, runbook | P7.1 | done | ad11188 |
 | P7.4 | `scripts/seed_test_repo.py` + `scripts/cleanup_repo.py` (D-42) | P7.2 | done | 7175123 |
 | **PC-7** | 실 repo에서 Goal 1개: Plan Discussion → 사람 `/approve` → Issue·PR 실제 생성 → 사람 머지 → done, cleanup | P7.3, P7.4 | pass (자동 전부 + PR #7 사람 머지 → done; 사용자 서명·cleanup 대기) | 2b0b107 |
+
+### P8 — 상주 운영 결함 수정 (외부 점검 F-1~F-12, §7 P8)
+
+| ID | 제목 | depends_on | status | commit |
+|---|---|---|---|---|
+| P8.1 | projection 오류 분류 + Dry 원격 clone 금지 (F-1, F-2, F-3) | PC-7 | todo | |
+| P8.2 | Docker 런처: 프로젝트 repo 개별 마운트 + 호스트 uid (F-5a, F-5b) | P8.1 | todo | |
+| P8.3 | 죽은 워커 정리: task.failed 보장 + reaper (F-5c, F-5) | P8.2 | todo | |
+| P8.4 | API: repo 유일 409, events 폴백, 시크릿 fail-closed (F-6, F-7, F-8) | P8.1 | todo | |
+| P8.5 | ingest 중복 XADD 제거 (F-11), tool_calls 확인 (F-12) | P8.1 | todo | |
+| P8.6 | run-api no-reload, repos/ gitignore, 문서·환경 불일치 (F-4, F-10) | P8.3, P8.4, P8.5 | todo | |
+| **PC-8** | 외부 점검 절차 재실행: `docker` 런처로 REPO_ROOT 밖 로컬 repo 프로젝트 → Task done, 죽은 워커 복구, 스트림 중복 0 | P8.6 | pending | |
 
 ---
 
@@ -697,6 +717,66 @@ discussion_comment, pull_request, pull_request_review; `check_suite`는 선택),
 - 사람: 실제 Issue/PR/Discussion 스크린샷 또는 URL을 `docs/pc/PC-7.md`에, 마지막에 `cleanup_repo.py --apply`
 - pass: 자동 전부 + Goal 1개의 Task ≥ 1이 사람 머지로 done
 - 소유: `docs/pc/PC-7.md`
+
+---
+
+### P8 — 상주 운영 결함 수정 (2026-09-15 추가, ## 7의 하위)
+
+근거: 별도 세션의 외부 점검 리포트 F-1~F-12 (`/home/lhjin0j/.claude/jobs/8428db5e/tmp/run-report-2026-09-15-rerun.md`, 사본 `docs/review/runcheck-2026-09-15.md`). PC-6/PC-7은 깨끗한 DB(`pc6`/`pc7`)·Redis DB 12/13·inprocess 런처로 돌렸기 때문에 기본 환경(DB `hitl`·Redis 0의 과거 데이터, docker 런처)의 결함을 못 봤다. 결정 D-43~D-50.
+
+### P8.1 projection 오류 분류 + Dry 원격 clone 금지
+- depends_on: PC-7
+- owned_paths: `control_plane/events/projection.py`, `control_plane/repo_cache.py`, `control_plane/runtime.py`, `tests/events/test_projection.py`, `tests/test_repo_cache.py`, `tests/runtime/test_runtime.py`
+- red: (a) 프로젝트 행이 없는 `task.created`(FK 위반, sqlite는 `PRAGMA foreign_keys`로 재현 또는 `_require` 경로)를 `handle`하면 `ProjectionTransient`가 아니라 retry 스트림에 들어가고 5회 뒤 포기한다(XAUTOCLAIM 재전달 0회 — `bus.handler_failed` 없음) (b) `IntegrityError`는 `_TRANSIENT`에 없다 (c) `RepoCache(dry_run=True)`(또는 token_getter None)로 `owner/name`을 `ensure`하면 네트워크 호출 없이 `RepoUnavailable`(subprocess 호출 0 — monkeypatch) (d) `Runtime`은 `settings.dry_run`을 RepoCache에 전달
+- green: `_TRANSIENT`에서 `IntegrityError` 분리 → `OrderingError`로 래핑, `RepoCache(dry_run=)`
+- gate: `make check`
+- notes: D-48, D-49.
+
+### P8.2 Docker 런처: 프로젝트 repo 개별 마운트 + 호스트 uid
+- depends_on: P8.1
+- owned_paths: `control_plane/scheduler/launcher.py`, `control_plane/runtime.py`, `worker/entrypoint.py`, `tests/scheduler/test_launcher_docker.py`, `tests/integration/test_launcher.py`
+- red: (a) `DockerCliLauncher.launch(spec)`의 argv(테스트는 `docker_bin`을 기록용 스텁으로)에 `-v <spec.repo_url>:<spec.repo_url>`가 REPO_ROOT 밖 로컬 경로일 때 추가된다; 안이면 root 마운트 하나만 (b) `--user <uid>:<gid>`와 `-e HOME=/tmp/worker-home`가 기본으로 들어간다(`user=None`이면 생략) (c) 통합: 호스트 uid 소유·기본 권한(755)인 bare remote를 **chmod 없이** 마운트해 워커가 push 성공 (d) 워커 entrypoint는 HOME이 없어도 git이 동작(`GIT_CONFIG_NOSYSTEM`, `safe.directory *`는 env로)
+- green: `mounts` 동적 추가, `user` 인자, entrypoint의 git env
+- gate: `make check && make test-integration`
+- notes: D-43, F-5a/F-5b. Dockerfile은 그대로(uid 10001 기본).
+
+### P8.3 죽은 워커 정리
+- depends_on: P8.2
+- owned_paths: `agents/base.py`, `control_plane/runtime.py`, `control_plane/scheduler/launcher.py`, `control_plane/scheduler/scheduler.py`, `tests/agents/test_base.py`, `tests/runtime/test_reaper.py`, `tests/scheduler/test_scheduler.py`
+- red: (a) `BaseAgent.run`: `execute` 예외 → 이벤트 순서 `task.started → run.started → task.failed{reason:"error", attempt} → run.finished{failed}`; `outcome=failed`인데 `task.failed`를 이미 낸 경우(scope/tests_failed)는 중복 발행 없음 (b) `WorkerLauncher.is_alive(worker_id) -> bool`: Fake는 set으로 제어, InProcess는 asyncio Task 상태, Docker는 `inspect .State.Running`(스텁) (c) `Runtime` reaper(주기 5s): in_flight run의 워커가 죽었고 그 run의 `run.finished`가 없으면 `task.failed{reason:"worker_died", attempt}` + `run.finished{outcome:"failed", agent_outcome:"failed", error:"worker died"}`(actor system:scheduler) → Task ready(attempt<max)→재배정 / blocked; `timeout_min+5분` 초과면 `reason:"timeout"` (d) 기동 시 DB `assigned/running` Task 중 in_flight에 없는 것 → 같은 처리(`worker_died`) — 외부 점검의 runcheck3~5 고착이 풀린다
+- green: `Scheduler.in_flight_runs`(task→(run_id, worker_id, started_at)), `Runtime._reap_loop`
+- gate: `make check`
+- notes: D-44. `run.finished`는 워커가 안 낸 경우에만 system이 대신 낸다(체인에 두 번 안 남게 `run_id` 기준 확인).
+
+### P8.4 API: repo 유일, events 폴백, 시크릿 fail-closed
+- depends_on: P8.1
+- owned_paths: `control_plane/api/projects.py`, `control_plane/api/goals.py`, `control_plane/api/app.py`, `github_adapter/webhooks.py`, `tests/api/test_api.py`, `tests/github_adapter/test_webhooks.py`
+- red: (a) 같은 `repo`로 `POST /projects` 두 번 → 두 번째 409(projection 전이어도 — events 조회) (b) `POST /projects` 201 직후(pump 없이) `POST /goals` → 202, `GET /projects/{id}` → 200(events 폴백, `created_at`은 이벤트 ts) (c) `WebhookHandler(secret="")`에 어떤 요청이든 503, 서명이 맞아도 (d) `app()`이 dry_run=false인데 secret 비면 경고 로그
+- green: `projects.py`·`goals.py`에 `_project_exists(state, id)`(projection → events 순), 409, `webhooks.py` fail-closed
+- gate: `make check`
+- notes: D-45, D-46, D-50.
+
+### P8.5 ingest 중복 XADD 제거 + tool_calls 확인
+- depends_on: P8.1
+- owned_paths: `control_plane/scheduler/scheduler.py`, `control_plane/events/chain.py`, `tests/scheduler/test_scheduler.py`, `tests/events/test_bus.py`
+- red: (a) 워커가 XADD한 `task.started`를 ingest한 뒤 relay를 돌려도 스트림 entry 수가 늘지 않는다(중복 0), DB `events` 행의 `stream_id`는 워커 메시지 id, `published_at` 설정 (b) `run.tool_called` ingest → `tool_calls` 행 1건, `events` 행 0건(D-31 확인 테스트) (c) WS `?since`는 DB seq 기준이라 서명본 미XADD와 무관(기존 테스트 유지)
+- green: `Scheduler.ingest(event, message_id=)`가 `append_signed` 후 부기 컬럼 갱신; `Delivery.message_id` 전달
+- gate: `make check`
+- notes: D-47, F-11, F-12(D-31 설계대로 — 리포트에 답).
+
+### P8.6 no-reload, gitignore, 문서·환경 불일치
+- depends_on: P8.3, P8.4, P8.5
+- owned_paths: `Makefile`, `.gitignore`, `docs/runbook.md`, `.env.example`, `tests/fixtures/sample_repo/.gitignore`, `docs/review/runcheck-2026-09-15.md`
+- red: 없음(문서·설정). 
+- green: `run-api`는 `API_RELOAD=1`일 때만 `--reload --reload-dir control_plane`; `.gitignore`에 `repos/`; sample_repo에 `.pytest_cache/` gitignore + 정리; runbook에 "docker 런처는 REPO_ROOT 밖 로컬 경로도 개별 마운트, 호스트 uid로 실행", 이미지 태그(`foreman-worker:dev` 기본, 통합 테스트는 `:test`) 명시, MinIO 미사용 명시; `.env`의 `HITL_LLM_MODEL` 중복 줄은 사용자에게 안내(에이전트는 `.env`를 읽지 않음); 리포트 사본 저장
+- gate: `scripts/check_runbook.sh && make check`
+- notes: D-48, F-4, F-10.
+
+### PC-8 외부 점검 절차 재실행
+- 자동: `make check`, `make test-integration`, `scripts/check_runbook.sh`
+- 자동(외부 점검과 같은 환경: 기본 DB `hitl`·Redis 0·**docker 런처**, `make run-control-plane` + `make run-api`): (1) 기동 직후 `bus.handler_failed`·`ProjectionTransient` 무한 재전달 0, 과거 고착 Task(runcheck3~5)가 5분 안에 `worker_died`로 ready/blocked (2) `HITL_REPO_ROOT` **밖** 로컬 경로 repo로 프로젝트 → Goal → `/approve` → 워커 컨테이너가 push 성공 → PR(dry) → done (3) 같은 repo로 두 번째 프로젝트 409 (4) 스트림 distinct id == entry 수 (5) 컨테이너를 `docker kill` 하면 5분 안에 `task.failed{worker_died}` → 재배정
+- 사람: 리포트의 확인 절차 6개 항목별 통과 표, `docs/pc/PC-8.md`
+- pass: 자동 전부
 
 ---
 
