@@ -154,7 +154,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | D-40 | **PC-5 판정은 PC-6 이후, Anthropic으로** (검토 2026-09-13). PC-5는 Anthropic 크레딧 부족으로 pending인데 P6는 플랫폼을 돌리기 위한 전제이므로 §0.1의 "PC pass 전 다음 Plan 금지"를 이 한 번 예외로 한다: P6.1은 P5.5에 의존하고, PC-5의 실 LLM 항목·사람 항목은 PC-6 통과 뒤 `HITL_LLM_PROVIDER=anthropic`으로 한 번에 판정한다. MVP 1(dev) 완료 = PC-6 pass + PC-5 pass | P6.1, PC-5, PC-6 |
 | D-41 | **워커는 실 GitHub에도 토큰을 받지 않는다** (제안 2026-09-14, X.1). 워커는 지금처럼 `RepoCache` 로컬 clone(마운트)에만 push 하고, control plane의 `PrOpener`가 PR을 열기 전에 그 clone에서 `git push origin <branch>`를 App installation 토큰(`x-access-token`)으로 수행한다. 토큰은 control plane 메모리에만 있고 로그·이벤트·워커 env에 안 나간다(§12 유지). 대안(기각 제안): `WORKER_TOKEN`으로 1시간 토큰을 워커에 전달 — 워커가 신뢰 경계를 넘는다 | P7.2 |
 | D-42 | **실 GitHub 검증은 사용자 소유 테스트 repo + App 1개** (X.1). `HITL_DRY_RUN=false`는 `.env`에서만 켜고 기본값은 그대로 true. 실 호출 전 `scripts/github_app_check.py`(읽기 전용)가 권한·설치·웹훅 구독을 확인하고, 끝나면 `scripts/cleanup_repo.py`가 `ai-platform:` 마커가 있는 Issue/PR/Discussion을 닫고 `ai/*` 브랜치를 지운다(마커 없는 것은 절대 건드리지 않음) | P7.1, P7.4 |
-| D-43 | **워커 컨테이너는 호스트 uid로 실행** (제안 2026-09-15, F-5b). `DockerCliLauncher`가 `--user <uid>:<gid>`(control plane 프로세스의 것)와 `HOME=/tmp/worker-home`으로 띄워 마운트된 repo에 push 할 수 있게 한다. Dockerfile의 uid 10001은 기본값으로만 남는다. 대안(기각): repo를 777로 chmod — 호스트 파일 권한을 깨뜨림 | P8.2 |
+| D-43 | **워커 컨테이너는 호스트 uid로 실행** (사용자 결정 2026-09-15, F-5b). `DockerCliLauncher`가 `--user <uid>:<gid>`(control plane 프로세스의 것)와 `HOME=/tmp/worker-home`으로 띄워 마운트된 repo에 push 할 수 있게 한다. Dockerfile의 uid 10001은 기본값으로만 남는다. 대안(기각): repo를 777로 chmod — 호스트 파일 권한을 깨뜨림 | P8.2 |
 | D-44 | **죽은 워커는 control plane이 정리** (F-5/F-5c). (1) `BaseAgent.run`은 `execute`가 예외로 끝나거나 outcome이 failed인데 `task.failed`를 아직 안 냈으면 `task.failed{reason: "error", attempt}`를 `run.finished` 앞에 발행 (2) `Runtime` reaper 루프: in_flight run마다 `launcher.is_alive(worker_id)`(docker inspect / in-process Task)와 `timeout_min + 5분`을 확인해 죽었으면 `task.failed{reason: "worker_died"|"timeout", attempt}`(actor system:scheduler) — projection이 ready/blocked로 옮기고 Scheduler 슬롯을 반환 (3) 기동 시 DB의 `assigned/running` Task 중 in_flight에 없는 것(이전 프로세스의 잔재)은 같은 경로로 `worker_died` 처리 | P8.3 |
 | D-45 | **같은 repo의 프로젝트는 하나** (F-6). `POST /projects`가 `projects.repo_full_name`(또는 아직 projection 전이면 `events`의 `project.created.payload.repo`)이 같으면 409. 웹훅 라우팅이 유일해진다 | P8.4 |
 | D-46 | **쓰기 직후 읽기는 events 테이블로 보강** (F-7). `POST /goals`·`GET /projects/{id}`가 projection 행이 없으면 `events`의 `project.created`로 존재를 확인한다(DB 갱신은 여전히 projection만, 읽기 폴백일 뿐). Goal 진행률 등 나머지는 그대로 projection | P8.4 |
@@ -774,7 +774,8 @@ discussion_comment, pull_request, pull_request_review; `check_suite`는 선택),
 
 ### PC-8 외부 점검 절차 재실행
 - 자동: `make check`, `make test-integration`, `scripts/check_runbook.sh`
-- 자동(외부 점검과 같은 환경: 기본 DB `hitl`·Redis 0·**docker 런처**, `make run-control-plane` + `make run-api`): (1) 기동 직후 `bus.handler_failed`·`ProjectionTransient` 무한 재전달 0, 과거 고착 Task(runcheck3~5)가 5분 안에 `worker_died`로 ready/blocked (2) `HITL_REPO_ROOT` **밖** 로컬 경로 repo로 프로젝트 → Goal → `/approve` → 워커 컨테이너가 push 성공 → PR(dry) → done (3) 같은 repo로 두 번째 프로젝트 409 (4) 스트림 distinct id == entry 수 (5) 컨테이너를 `docker kill` 하면 5분 안에 `task.failed{worker_died}` → 재배정
+- 사전(사용자 결정 2026-09-15): 개발 DB `hitl` drop → `make migrate`, Redis 0 `FLUSHDB` — 외부 점검의 runcheck* 데이터는 지운다. 고착 복구(P8.3 (d))는 PC-8 (5)에서 컨테이너를 죽여 재현한다
+- 자동(외부 점검과 같은 환경: 기본 DB `hitl`·Redis 0·**docker 런처**, `make run-control-plane` + `make run-api`): (1) 기동 직후 `bus.handler_failed`·`ProjectionTransient` 무한 재전달 0 (2) `HITL_REPO_ROOT` **밖** 로컬 경로 repo로 프로젝트 → Goal → `/approve` → 워커 컨테이너가 push 성공 → PR(dry) → done (3) 같은 repo로 두 번째 프로젝트 409 (4) 스트림 distinct id == entry 수 (5) 컨테이너를 `docker kill` 하면 5분 안에 `task.failed{worker_died}` → 재배정
 - 사람: 리포트의 확인 절차 6개 항목별 통과 표, `docs/pc/PC-8.md`
 - pass: 자동 전부
 
