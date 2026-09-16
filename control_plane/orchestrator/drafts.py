@@ -126,10 +126,10 @@ class TaskDraft(BaseModel):
     epic: str = ""
 
 
-_REF_RE = re.compile(r"^(T-\d+)\s*:?\s*$")
+_REF_RE = re.compile(r"^(?:task\s*)?t-?(\d+)\s*[:.)-]?\s*$", re.I)  # "T-1", "T1:", "Task T1"
 
 
-_NUM_PREFIX_RE = re.compile(r"^t-\d+\s*[:.)-]?\s*")
+_NUM_PREFIX_RE = re.compile(r"^(?:task\s*)?t-?\d+\s*[:.)-]?\s*")
 
 
 def _norm_title(text: str) -> str:
@@ -139,15 +139,20 @@ def _norm_title(text: str) -> str:
     return re.sub(r"\s+", " ", t).strip()
 
 
+def _title_number(title: str) -> str | None:
+    m = re.match(r"^\s*(?:task\s*)?t-?(\d+)\b", title, re.I)
+    return m.group(1) if m else None
+
+
 def _resolve_ref(dep: str, titles: list[str]) -> str:
-    """depends_on 정규화: 제목 그대로 → "T-1" 번호 → 정규화 동치 → 유일한 접두/포함 (P9 #2)."""
+    """depends_on 정규화: 제목 그대로 → "T-1"/"T1"/"Task T1" 번호 → 정규화 동치 → 유일한 접두/포."""
     dep = dep.strip()
     if dep in titles:
         return dep
     m = _REF_RE.match(dep)
     if m:
         num = m.group(1)
-        hits = [t for t in titles if re.match(rf"^{re.escape(num)}\b", t)]
+        hits = [t for t in titles if _title_number(t) == num]
         if len(hits) == 1:
             return hits[0]
     nd = _norm_title(dep)
@@ -182,7 +187,12 @@ class DecomposeResult(BaseModel):
         known = set(titles)
         epic_titles = {e.title for e in self.epics}
         for t in self.tasks:
-            t.depends_on = [_resolve_ref(dep, titles) for dep in t.depends_on]  # PC-7: "T-1" → 제목
+            resolved: list[str] = []
+            for dep in t.depends_on:  # PC-7: "T-1" → 제목; 4차: "Task T1"·"T1"도, 중복 제거
+                r = _resolve_ref(dep, titles)
+                if r not in resolved:
+                    resolved.append(r)
+            t.depends_on = resolved
             for dep in t.depends_on:
                 if dep == t.title:
                     raise ValueError(f"task {t.title!r} depends on itself")
@@ -267,7 +277,7 @@ def drop_placeholder_paths(result: DecomposeResult) -> list[str]:
 
 
 _TEST_TITLE_RE = re.compile(
-    r"^\s*(t-\d+\s*[:.)-]?\s*)?(write|add|create)\s+(unit\s+)?tests?\b", re.I
+    r"^\s*((task\s*)?t-?\d+\s*[:.)-]?\s*)?(write|add|create)\s+(unit\s+)?tests?\b", re.I
 )
 
 
@@ -288,21 +298,43 @@ def infer_dependencies(result: DecomposeResult) -> list[str]:
             name = parts[-1]
             if name.endswith(".py") and name != "__init__.py":
                 modules.setdefault(name[:-3], []).append(t.title)
+    by_title = {o.title: o for o in result.tasks}
     for t in result.tasks:
         text = f"{t.title}\n{t.spec}"
         for stem, owners in modules.items():
-            if len(owners) != 1 or owners[0] == t.title:
-                continue
-            owner = owners[0]
             stem_re = re.escape(stem)
-            pattern = rf"(\b{stem_re}\.py\b|\bfrom\s+{stem_re}\b|\bimport\s+{stem_re}\b)"
+            pattern = (
+                rf"(\b{stem_re}\.py\b|\bfrom\s+(?:[\w.]+\.)?{stem_re}\b|"
+                rf"\bimport\s+(?:[\w.]+\.)?{stem_re}\b)"
+            )
             if not re.search(pattern, text):
                 continue
-            owner_task = next(o for o in result.tasks if o.title == owner)
-            if owner in t.depends_on or t.title in owner_task.depends_on:
+            for owner in owners:  # 4차 라이브 #1: 소유자가 여럿이면 전부에 의존 (유일 조건 삭제)
+                owner_task = by_title[owner]
+                if owner == t.title or owner in t.depends_on or t.title in owner_task.depends_on:
+                    continue
+                t.depends_on.append(owner)
+                notes.append(f"'{t.title}' depends on '{owner}' (mentions {stem})")
+    return notes
+
+
+def serialize_shared_files(result: DecomposeResult) -> list[str]:
+    """같은 소스 파일을 나눠 가진 Task는 목록 순서로 의존을 건다 (4차 라이브 #5).
+    Scheduler의 겹침 직렬화만으로는 뒤 Task가 앞 Task의 머지 전 main에서 분기해 충돌한다."""
+    notes: list[str] = []
+    owners: dict[str, list[TaskDraft]] = {}
+    for t in result.tasks:
+        for p in t.owned_paths:
+            if "*" in p or is_test_path(p):
                 continue
-            t.depends_on.append(owner)
-            notes.append(f"'{t.title}' depends on '{owner}' (mentions {stem})")
+            owners.setdefault(p, []).append(t)
+    for path, ts in owners.items():
+        for i in range(1, len(ts)):
+            later, earlier = ts[i], ts[i - 1]
+            if earlier.title in later.depends_on or later.title in earlier.depends_on:
+                continue
+            later.depends_on.append(earlier.title)
+            notes.append(f"'{later.title}' depends on '{earlier.title}' (shares {path})")
     return notes
 
 
@@ -312,15 +344,10 @@ DEPENDENCY_FILE_RE = re.compile(
     r"package\.json|[^/]*-lock\.(json|yaml|yml)|yarn\.lock|pnpm-lock\.yaml|go\.(mod|sum)|"
     r"Cargo\.(toml|lock))$"
 )
-_INSTALL_TITLE_RE = re.compile(
-    r"^\s*(t-\d+\s*[:.)-]?\s*)?(install|set\s*up|setup|configure|add)\s+(the\s+)?"
-    r"(project\s+)?(dependenc|requirement|package|pip|flask|pytest|environment|venv)",
-    re.I,
-)
 
 
 def strip_dependency_tasks(result: DecomposeResult) -> tuple[DecomposeResult, list[str]]:
-    """의존성 파일을 소유 경로에서 빼고, 설치/셋업 성격 Task는 버린다 (3차 라이브 #1).
+    """의존성 파일을 소유 경로에서 빼고, 그것만 소유하던 Task는 버린다 (3차 #1, 4차 #2).
     버린 Task에 의존하던 Task는 그 Task의 의존으로 재배선한다."""
     notes: list[str] = []
     tasks = list(result.tasks)
@@ -331,10 +358,10 @@ def strip_dependency_tasks(result: DecomposeResult) -> tuple[DecomposeResult, li
             notes.append(f"removed dependency files {deps_files} from '{t.title}'")
     dropped: dict[str, list[str]] = {}
     for t in list(tasks):
-        if _INSTALL_TITLE_RE.match(t.title) or not t.owned_paths:
+        if not t.owned_paths:  # 4차 라이브 #2: 제목이 아니라 "의존성 파일만 소유"일 때만 버린다
             dropped[t.title] = list(t.depends_on)
             tasks.remove(t)
-            notes.append(f"dropped dependency/setup task '{t.title}'")
+            notes.append(f"dropped dependency-only task '{t.title}'")
     if dropped:
         for t in tasks:
             deps: list[str] = []
@@ -509,7 +536,13 @@ async def decompose_with_retry(
             pre_notes = drop_placeholder_paths(parsed)
             parsed, dep_notes = strip_dependency_tasks(parsed)  # 3차 라이브 #1
             parsed, merge_notes = merge_test_only_tasks(parsed)  # 합치면 테스트 경로가 채워진다
-            merge_notes = [*pre_notes, *dep_notes, *merge_notes, *infer_dependencies(parsed)]
+            merge_notes = [
+                *pre_notes,
+                *dep_notes,
+                *merge_notes,
+                *serialize_shared_files(parsed),
+                *infer_dependencies(parsed),
+            ]
             missing = missing_test_paths(parsed)
             if missing and attempt < attempts - 1:
                 last_error = (
@@ -520,8 +553,16 @@ async def decompose_with_retry(
                 parsed = None
         if isinstance(parsed, DecomposeResult):
             normalized, notes = augment_test_paths(parsed)
-            if merge_notes or notes:
-                log.warning("decompose.normalized", changes=[*merge_notes, *notes])
+            changes = [*merge_notes, *notes]
+            if changes:
+                log.warning("decompose.normalized", changes=changes)
+            # 4차 라이브 #3: 성공 시에도 원문 꼬리를 남긴다 (라이브에서 규칙이 안 먹은 원인 추적용)
+            log.info(
+                "decompose.result",
+                tasks=[t.title for t in normalized.tasks],
+                changes=changes,
+                raw=(completion.text or "")[-1500:],
+            )
             return normalized
         messages = [
             *messages,

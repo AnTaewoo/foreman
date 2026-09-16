@@ -406,18 +406,24 @@ def test_prompts_include_environment_contract() -> None:
         assert "pytest -q" in text
 
 
-# 4차 라이브 #1·#5: calculator.py를 T1·T2가 나눠 소유하자 "소유자 유일" 조건 때문에 app Task에 의존이 안 붙어
-# 병렬 실행 → import 실패 → blocked. 소유자가 여럿이면 전부에 의존하고, 같은 소스 파일을 가진 Task끼리는
+# 4차 라이브 #1·#5: calculator.py를 T1·T2가 나눠 소유하자 "소유자 유일" 조건 때문에 app Task에 의존
+# 병렬 실행 → import 실패 → blocked. 소유자가 여럿이면 전부에 의존하고, 같은 소스 파일을 가진 Task끼
 # 목록 순서로 의존을 건다(뒤 Task가 앞 Task의 머지 뒤에 돈다)
 async def test_shared_file_owners_all_become_dependencies() -> None:
     provider = FakeProvider(script=[
         result(
-            src_task("Task T1: add and subtract", ["src/calculator.py", "tests/test_calculator.py"]),
-            src_task("Task T2: multiply and divide", ["src/calculator.py", "tests/test_calculator.py"]),
+            src_task(
+                "Task T1: add and subtract",
+                ["src/calculator.py", "tests/test_calculator.py"],
+            ),
+            src_task(
+                "Task T2: multiply and divide",
+                ["src/calculator.py", "tests/test_calculator.py"],
+            ),
             src_task(
                 "Task T3: Set Up Flask Application",
                 ["src/app.py", "tests/test_app.py"],
-                spec="src/app.py imports `from src.calculator import add, subtract, multiply, divide`",
+                spec="src/app.py imports `from src.calculator import add, divide`",
             ),
         ),
     ])  # fmt: skip
@@ -428,7 +434,9 @@ async def test_shared_file_owners_all_become_dependencies() -> None:
         "Task T1: add and subtract",
         "Task T2: multiply and divide",
     ]
-    assert "Task T3: Set Up Flask Application" in by  # #2: 제목이 "Set Up…"이어도 소스가 있으면 남는다
+    assert (
+        "Task T3: Set Up Flask Application" in by
+    )  # #2: 제목이 "Set Up…"이어도 소스가 있으면 남는다
 
 
 # 4차 라이브 #2: 설치 Task 제거는 제목이 아니라 "의존성 파일만 소유"일 때만
@@ -436,7 +444,11 @@ async def test_install_task_dropped_only_when_it_owns_only_dependency_files() ->
     provider = FakeProvider(script=[
         result(
             src_task("Install dependencies", ["requirements.txt"]),
-            src_task("Setup Flask app", ["src/app.py", "tests/test_app.py"], ["Install dependencies"]),
+            src_task(
+                "Setup Flask app",
+                ["src/app.py", "tests/test_app.py"],
+                ["Install dependencies"],
+            ),
         ),
     ])  # fmt: skip
     out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
@@ -464,14 +476,19 @@ async def test_task_prefix_forms_are_recognized() -> None:
     assert merged.tasks[0].owned_paths == ["calculator.py", "tests/test_calculator.py"]
 
 
-# 4차 라이브 #3: 분해가 성공해도 모델 원문 꼬리와 정규화 기록을 로그에 남긴다 (라이브에서 병합 미작동 원인 추적용)
+# 4차 라이브 #3: 분해가 성공해도 모델 원문 꼬리와 정규화 기록을 로그에 남긴다 (라이브에서 병합 미작
 async def test_decompose_logs_raw_and_notes_on_success() -> None:
     from structlog.testing import capture_logs
 
     provider = FakeProvider(script=[
         result(
             src_task("Create maths module", ["src/maths.py"]),
-            src_task("Write tests for maths", ["tests/test_maths.py"], ["Create maths module"], kind="test"),
+            src_task(
+                "Write tests for maths",
+                ["tests/test_maths.py"],
+                ["Create maths module"],
+                kind="test",
+            ),
         ),
     ])  # fmt: skip
     with capture_logs() as logs:
