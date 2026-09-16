@@ -228,6 +228,13 @@ class ProjectCreatedPayload(TypedDict):
     members: NotRequired[list[dict[str, str]]]  # P5.2 추가(additive): [{user_id, role}] §4.1
 
 
+class ProjectUpdatedPayload(TypedDict):
+    """P9 (D-54): 프로젝트 보관/복원. 행·이벤트는 지우지 않는다(append-only). 키는 선택."""
+
+    archived: NotRequired[bool]
+    by: NotRequired[str]
+
+
 class GoalCreatedPayload(TypedDict):
     title: str
     description: str
@@ -334,6 +341,7 @@ class PrOpenedPayload(TypedDict):
 
 PAYLOAD_TYPES: dict[EventType, type[Any]] = {  # Any: TypedDict 클래스들
     EventType.PROJECT_CREATED: ProjectCreatedPayload,
+    EventType.PROJECT_UPDATED: ProjectUpdatedPayload,
     EventType.GOAL_CREATED: GoalCreatedPayload,
     EventType.GOAL_PLAN_PROPOSED: GoalPlanProposedPayload,
     EventType.EPIC_CREATED: EpicCreatedPayload,

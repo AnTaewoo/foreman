@@ -459,10 +459,13 @@ async def test_repo_check_real_mode_runs_app_check(
     assert [(i["name"], i["ok"]) for i in body["items"]] == [("auth", True), ("discussions", False)]
 
 
-# P9 (D-54): DELETE /projects/{id} = 보관. 남은 Goal·Task 취소 → project.updated{archived} → 목록에서 제외,
+# P9 (D-54): DELETE /projects/{id} = 보관. Goal·Task 취소 → project.updated{archived} → 제외,
 # 새 Goal 409, 같은 repo로 다시 연결 가능. 이벤트·GitHub 산출물은 그대로
 async def test_delete_project_archives_and_cancels(
-    client: httpx.AsyncClient, pump: Pump, publish: Publish, factory: async_sessionmaker[AsyncSession]
+    client: httpx.AsyncClient,
+    pump: Pump,
+    publish: Publish,
+    factory: async_sessionmaker[AsyncSession],
 ) -> None:
     pid = await make_project(client, pump)
     gid = await make_goal(client, pump, pid)

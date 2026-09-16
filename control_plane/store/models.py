@@ -106,6 +106,7 @@ class Project(Base):
     default_branch: Mapped[str] = mapped_column(String(200), default="main")
     protected_paths: Mapped[list[Any]] = mapped_column(JSONType, default=list)
     members: Mapped[list[Any]] = mapped_column(JSONType, default=list)
+    archived_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)  # D-54 (0004)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utc_now, onupdate=utc_now)
 

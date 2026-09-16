@@ -95,8 +95,11 @@ async def _goal(state: StateDep, project_id: str, goal_id: str) -> m.Goal:
 async def create_goal(
     project_id: str, body: GoalIn, state: StateDep, user: UserDep
 ) -> GoalAccepted:
-    if await find_project(state, project_id) is None:  # D-46: projection 전이면 events
+    project = await find_project(state, project_id)  # D-46: projection 전이면 events
+    if project is None:
         raise HTTPException(404, "project not found")
+    if project.archived_at is not None:  # D-54
+        raise HTTPException(409, "project is archived")
     await goal_quota(state, project_id)  # 데모 모드 한도 (P9.3)
     gid = str(ULID())
     await publish(
@@ -251,11 +254,10 @@ async def reject_goal(
     return await _decide(project_id, goal_id, state, user, approved=False, reason=body.reason)
 
 
-@router.post("/{goal_id}/cancel", status_code=202, dependencies=[AdminDep])
-async def cancel_goal(
-    project_id: str, goal_id: str, body: CancelIn, state: StateDep, user: UserDep
-) -> CancelOut:
-    await _goal(state, project_id, goal_id)
+async def cancel_goal_cascade(
+    state: StateDep, project_id: str, goal_id: str, user: str, reason: str
+) -> list[str]:
+    """goal.cancelled + 미완 Task마다 task.cancelled (B9). 취소된 Task id. DELETE /projects도 씀."""
     async with state.factory() as s:
         pending = (
             (
@@ -276,7 +278,7 @@ async def cancel_goal(
             actor=actor,
             type=EventType.GOAL_CANCELLED,
             subject=Subject(entity="goal", id=goal_id),
-            payload={"reason": body.reason, "by": user},
+            payload={"reason": reason, "by": user},
             correlation_id=goal_id,
             causation_id=None,
         ),
@@ -287,7 +289,7 @@ async def cancel_goal(
             actor=actor,
             type=EventType.TASK_CANCELLED,
             subject=Subject(entity="task", id=tid),
-            payload={"reason": body.reason, "by": user, "cascade_from": goal_id},
+            payload={"reason": reason, "by": user, "cascade_from": goal_id},
             correlation_id=goal_id,
             causation_id=cancelled.id,
         )
@@ -295,4 +297,13 @@ async def cancel_goal(
     ]
     if cascade:
         await publish(state, *cascade)
-    return CancelOut(id=goal_id, cancelled_tasks=list(pending))
+    return list(pending)
+
+
+@router.post("/{goal_id}/cancel", status_code=202, dependencies=[AdminDep])
+async def cancel_goal(
+    project_id: str, goal_id: str, body: CancelIn, state: StateDep, user: UserDep
+) -> CancelOut:
+    await _goal(state, project_id, goal_id)
+    pending = await cancel_goal_cascade(state, project_id, goal_id, user, body.reason)
+    return CancelOut(id=goal_id, cancelled_tasks=pending)

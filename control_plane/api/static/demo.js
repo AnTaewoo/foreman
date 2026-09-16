@@ -66,10 +66,12 @@
   async function loadProject() {
     const { items } = await api("/projects");
     if (!items.length) {
-      $("project-name").textContent = "— 프로젝트가 없습니다 (관리자가 POST /projects로 만듭니다)";
+      $("project-name").textContent = "— 프로젝트가 없습니다. 아래 \"GitHub repo 연결\"로 만드세요";
       $("goal-submit").disabled = true;
+      $("delete-project").hidden = true;
       return;
     }
+    $("delete-project").hidden = false;
     const wanted = new URLSearchParams(location.search).get("project") || safeGet("foreman.project");
     state.project = items.find((p) => p.id === wanted) || items[0];
     $("project-name").textContent = `· ${state.project.name} (${state.project.repo})`;
@@ -197,6 +199,17 @@
   $("approve").onclick = async () => {
     try { await api(`/projects/${state.project.id}/goals/${state.goalId}/approve`, { method: "POST" }); toast("승인했습니다. Task → Issue → 워커 순으로 진행됩니다."); refreshSoon(); }
     catch (e) { toast(e.message); }
+  };
+  $("delete-project").onclick = async () => {
+    if (!state.project) return;
+    const p = state.project;
+    if (!confirm(`프로젝트 "${p.name}" (${p.repo})를 삭제(보관)할까요?\n남은 Goal·Task는 취소되고 목록에서 사라집니다. GitHub의 Issue/PR/Discussion과 이벤트 기록은 남습니다.`)) return;
+    const headers = {}; const tok = $("connect-token").value.trim(); if (tok) headers["X-Admin-Token"] = tok;
+    try {
+      await api(`/projects/${p.id}`, { method: "DELETE", headers });
+      safeSet("foreman.project", "");
+      const u = new URL(location.href); u.searchParams.delete("project"); location.href = u.toString();
+    } catch (e) { toast(e.message); }
   };
   $("cancel-goal").onclick = async () => {
     if (!state.goalId || !confirm("이 Goal과 남은 Task를 취소할까요? (GitHub Issue/PR은 그대로 남습니다)")) return;

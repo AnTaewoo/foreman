@@ -762,6 +762,7 @@ MVP 1 제출·시연용으로 API 서버가 `GET /`에서 정적 1페이지를 �
 GET    /                               # 데모 콘솔 정적 페이지 (§11.0, MVP 1 임시)
 POST   /projects                       # repo 연결 (installation_id)
 GET    /projects/{id}
+DELETE /projects/{id}                  # 보관: 미완 Goal·Task 취소 + project.updated{archived} (D-54, 행·이벤트 유지)
 PATCH  /projects/{id}/policy           # → Decision(T3) 생성
 POST   /projects/{id}/pause | /resume | /emergency-stop
 

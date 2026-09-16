@@ -90,7 +90,7 @@ async def test_cancel_and_task_patch_require_admin(demo: httpx.AsyncClient, pump
         await demo.post(f"/projects/{pid}/goals/{gid}/cancel", json={}, headers=ADMIN)
     ).status_code == 202
     assert (await demo.get(f"/projects/{pid}/goals")).status_code == 200
-    assert (await demo.delete(f"/projects/{pid}")).status_code == 401  # 삭제(보관)도 관리 토큰 (D-54)
+    assert (await demo.delete(f"/projects/{pid}")).status_code == 401  # 삭제(보관)도 관리 토큰
     assert (await demo.delete(f"/projects/{pid}", headers=ADMIN)).status_code == 202
 
 

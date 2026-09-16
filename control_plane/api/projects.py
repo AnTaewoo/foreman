@@ -50,6 +50,7 @@ class ProjectOut(BaseModel):
     repo_url: str | None = None  # owner/name이면 GitHub 링크 (P9.1)
     default_branch: str
     created_at: datetime
+    archived_at: datetime | None = None  # D-54: 보관됨(목록에서 제외, 새 Goal 409)
 
 
 class ProjectList(BaseModel):
@@ -77,9 +78,12 @@ class RepoCheckOut(BaseModel):
 
 
 @router.get("")
-async def list_projects(state: StateDep) -> ProjectList:
+async def list_projects(state: StateDep, include_archived: bool = False) -> ProjectList:
+    stmt = select(m.Project).order_by(m.Project.created_at)
+    if not include_archived:  # D-54
+        stmt = stmt.where(m.Project.archived_at.is_(None))
     async with state.factory() as s:
-        rows = (await s.execute(select(m.Project).order_by(m.Project.created_at))).scalars().all()
+        rows = (await s.execute(stmt)).scalars().all()
     return ProjectList(
         items=[
             ProjectOut(
@@ -89,10 +93,62 @@ async def list_projects(state: StateDep) -> ProjectList:
                 repo_url=gh_url(r.repo_full_name),
                 default_branch=r.default_branch,
                 created_at=r.created_at,
+                archived_at=r.archived_at,
             )
             for r in rows
         ]
     )
+
+
+class ProjectDeleted(BaseModel):
+    id: str
+    cancelled_goals: list[str]
+
+
+@router.delete("/{project_id}", status_code=202, dependencies=[AdminDep])
+async def delete_project(project_id: str, state: StateDep, user: UserDep) -> ProjectDeleted:
+    """D-54: 삭제 = 보관. 미완 Goal·Task를 취소하고 project.updated{archived: true}를 낸다.
+    이벤트·GitHub Issue/PR/Discussion은 그대로 남는다. 같은 repo는 다시 연결할 수 있다."""
+    from control_plane.api.goals import cancel_goal_cascade
+    from control_plane.store.enums import GoalStatus
+
+    view = await find_project(state, project_id)
+    if view is None:
+        raise HTTPException(404, "project not found")
+    if view.archived_at is not None:
+        raise HTTPException(409, "project is already archived")
+    async with state.factory() as s:
+        open_goals = (
+            (
+                await s.execute(
+                    select(m.Goal.id)
+                    .where(
+                        m.Goal.project_id == project_id,
+                        m.Goal.status.not_in((GoalStatus.DONE, GoalStatus.CANCELLED)),
+                    )
+                    .order_by(m.Goal.created_at, m.Goal.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    cancelled: list[str] = []
+    for gid in open_goals:
+        await cancel_goal_cascade(state, project_id, gid, user, "project archived")
+        cancelled.append(gid)
+    await publish(
+        state,
+        Event(
+            project_id=project_id,
+            actor=human(user),
+            type=EventType.PROJECT_UPDATED,
+            subject=Subject(entity="project", id=project_id),
+            payload={"archived": True, "by": user},
+            correlation_id=project_id,
+            causation_id=None,
+        ),
+    )
+    return ProjectDeleted(id=project_id, cancelled_goals=cancelled)
 
 
 @router.post("", status_code=201, dependencies=[AdminDep])  # 데모 모드면 X-Admin-Token (P9.3)
@@ -174,4 +230,5 @@ async def get_project(project_id: str, state: StateDep) -> ProjectOut:
         repo_url=gh_url(view.repo),
         default_branch=view.default_branch,
         created_at=view.created_at,
+        archived_at=view.archived_at,
     )

@@ -122,6 +122,17 @@ async def _goal_created(session: AsyncSession, event: Event) -> None:
     row.created_at = event.ts
 
 
+@on(E.PROJECT_UPDATED)
+async def _project_updated(session: AsyncSession, event: Event) -> None:
+    """D-54: archived 키만 반영한다(보관/복원). 다른 키는 MVP 1에서 없다."""
+    project = await _require(session, m.Project, event.subject.id, event)
+    archived = event.payload.get("archived")
+    if archived is True:
+        project.archived_at = event.ts
+    elif archived is False:
+        project.archived_at = None
+
+
 @on(E.GOAL_PLAN_PROPOSED)
 async def _goal_plan_proposed(session: AsyncSession, event: Event) -> None:
     goal = await _require(session, m.Goal, event.subject.id, event)
@@ -360,7 +371,7 @@ on(E.PR_CLOSED, E.PR_CHECKS_PASSED, E.PR_CHECKS_FAILED, E.PR_REVIEW_SUBMITTED)(n
 on(
     E.DECISION_OPENED, E.DECISION_AGENT_VOTED, E.DECISION_HUMAN_RESPONDED, E.DECISION_RESOLVED,
     E.DECISION_EXPIRED, E.POLICY_UPDATED, E.POLICY_TIER_OVERRIDDEN, E.BUDGET_WARNING,
-    E.BUDGET_EXCEEDED, E.PROJECT_UPDATED, E.PROJECT_PAUSED, E.PROJECT_RESUMED, E.AGENT_KILLED,
+    E.BUDGET_EXCEEDED, E.PROJECT_PAUSED, E.PROJECT_RESUMED, E.AGENT_KILLED,
     E.CONTROL_EMERGENCY_STOP,
 )(noop)  # fmt: skip
 

@@ -93,6 +93,7 @@ class ProjectView:
     members: list[dict[str, str]]
     created_at: datetime
     projected: bool
+    archived_at: datetime | None = None  # D-54
 
 
 async def find_project(state: AppState, project_id: str) -> ProjectView | None:
@@ -107,6 +108,7 @@ async def find_project(state: AppState, project_id: str) -> ProjectView | None:
                 [dict(x) for x in row.members],
                 row.created_at,
                 True,
+                row.archived_at,
             )
         ev = await s.scalar(
             select(m.Event).where(
@@ -128,12 +130,25 @@ async def find_project(state: AppState, project_id: str) -> ProjectView | None:
 
 
 async def repo_taken(state: AppState, repo: str) -> bool:
-    """같은 repo의 프로젝트가 이미 있나 (D-45, F-6) — projection과 events 둘 다 본다."""
+    """같은 repo의 (보관되지 않은) 프로젝트가 이미 있나 (D-45, D-54) — projection·events 둘 다."""
     async with state.factory() as s:
-        if await s.scalar(select(m.Project.id).where(m.Project.repo_full_name == repo)):
+        rows = (
+            await s.execute(
+                select(m.Project.id, m.Project.archived_at).where(m.Project.repo_full_name == repo)
+            )
+        ).all()
+        if any(archived_at is None for _, archived_at in rows):
             return True
-        rows = await s.execute(select(m.Event.payload).where(m.Event.type == "project.created"))
-        return any(str(p.get("repo")) == repo for (p,) in rows.all())
+        projected = {pid for pid, _ in rows}
+        created = await s.execute(
+            select(m.Event.subject_id, m.Event.payload).where(m.Event.type == "project.created")
+        )
+        candidates = [pid for pid, p in created.all() if str(p.get("repo")) == repo]
+        updated = await s.execute(
+            select(m.Event.subject_id, m.Event.payload).where(m.Event.type == "project.updated")
+        )
+        archived = {pid for pid, p in updated.all() if p.get("archived") is True}
+    return any(pid not in projected and pid not in archived for pid in candidates)
 
 
 _OWNER_NAME = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")

@@ -444,7 +444,7 @@ async def test_plan_proposed_stores_markdown(
         assert goal is not None and goal.plan_markdown == "# Plan\n- a"
 
 
-# P9 (D-54): 프로젝트 "삭제" = project.updated{archived: true} → projects.archived_at (행·이벤트는 남는다)
+# P9 (D-54): 프로젝트 "삭제" = project.updated{archived: true} → archived_at (행·이벤트는 남는다)
 async def test_project_archived_via_project_updated(
     factory: async_sessionmaker[AsyncSession], bus: EventBus, projection: Projection
 ) -> None:
@@ -471,6 +471,7 @@ async def test_project_archived_via_project_updated(
 
 # (h)(i) 핸들러 등록
 def test_all_event_types_have_handlers_and_unused_are_noop() -> None:
+    # D-54: project.updated는 이제 archived를 반영하는 핸들러가 있다 (noop 아님)
     assert set(HANDLERS) == set(EventType)
     for t in (
         E.PR_CLOSED,
@@ -486,7 +487,6 @@ def test_all_event_types_have_handlers_and_unused_are_noop() -> None:
         E.POLICY_TIER_OVERRIDDEN,
         E.BUDGET_WARNING,
         E.BUDGET_EXCEEDED,
-        E.PROJECT_UPDATED,
         E.PROJECT_PAUSED,
         E.PROJECT_RESUMED,
         E.AGENT_KILLED,
