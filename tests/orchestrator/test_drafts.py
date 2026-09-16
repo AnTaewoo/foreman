@@ -498,6 +498,87 @@ async def test_decompose_logs_raw_and_notes_on_success() -> None:
     assert any("merged" in n for n in events["decompose.result"]["changes"])
 
 
+# 5차 전 검토 #1 (중): 언급 추론은 방향이 없어 "app.py will call these" 한 줄로 T1→app 간선이 생기고,
+# 소유자 전부 규칙과 합쳐져 3-사이클 → emit CycleError → Goal 전체 blocked. 증거는 import 문만 인정하고,
+# 간선을 넣기 전에 사이클이 생기면 버리고 기록한다
+async def test_inferred_edges_never_create_cycles_and_need_import_evidence() -> None:
+    provider = FakeProvider(script=[
+        result(
+            src_task(
+                "Task T1: calculator add",
+                ["src/calculator.py", "tests/test_calculator.py"],
+                spec="add(); app.py will call these",  # 파일명 언급만 — 증거 아님
+            ),
+            src_task("Task T2: calculator mul", ["src/calculator.py", "tests/test_calc_mul.py"]),
+            src_task(
+                "Task T3: Flask app",
+                ["src/app.py", "tests/test_app.py"],
+                spec="from src.calculator import add, mul",
+            ),
+        ),
+    ])  # fmt: skip
+    out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
+    by = {t.title: t for t in out.tasks}
+    assert by["Task T1: calculator add"].depends_on == []
+    assert by["Task T2: calculator mul"].depends_on == ["Task T1: calculator add"]
+    assert sorted(by["Task T3: Flask app"].depends_on) == [
+        "Task T1: calculator add",
+        "Task T2: calculator mul",
+    ]
+    # import 증거가 있어도 사이클이면 간선을 버린다
+    provider = FakeProvider(script=[
+        result(
+            src_task("A", ["a.py", "tests/test_a.py"], spec="from b import x"),
+            src_task("B", ["b.py", "tests/test_b.py"], ["A"], spec="import a"),
+        ),
+    ])  # fmt: skip
+    out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
+    by = {t.title: t for t in out.tasks}
+    assert by["B"].depends_on == ["A"] and by["A"].depends_on == []
+
+
+# 5차 전 검토 #4: 디렉토리 이름 후보(tests/test_utils.py)가 두 Task에 같이 붙어 공유 파일이 생겼다 →
+# 다른 Task가 이미 소유한 후보는 넣지 않는다
+async def test_augment_does_not_create_shared_test_files() -> None:
+    provider = FakeProvider(script=[
+        result(
+            src_task("slugify", ["src/utils/slugify.py"]),
+            src_task("greet", ["src/utils/greet.py"]),
+        ),
+        result(
+            src_task("slugify", ["src/utils/slugify.py"]),
+            src_task("greet", ["src/utils/greet.py"]),
+        ),
+    ])  # fmt: skip
+    out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
+    a, b = out.tasks
+    assert "tests/test_slugify.py" in a.owned_paths and "tests/test_greet.py" in b.owned_paths
+    assert not (set(a.owned_paths) & set(b.owned_paths))
+
+
+# 5차 전 검토 #3: 원문 꼬리 1500자로는 규칙이 안 먹은 원인을 못 본다 → 정규화 전 Task 목록을 같이 돌려준다
+async def test_decompose_full_returns_parsed_tasks_before_normalization() -> None:
+    from control_plane.orchestrator.drafts import decompose_with_retry_full
+
+    provider = FakeProvider(script=[
+        result(
+            src_task("Create maths module", ["src/maths.py"]),
+            src_task("Write tests for maths", ["tests/test_maths.py"], ["Create maths module"], kind="test"),
+        ),
+    ])  # fmt: skip
+    _, changes, raw_tail, parsed = await decompose_with_retry_full(
+        provider, repo_summary="R", plan="P", goal="G"
+    )
+    assert [t["title"] for t in parsed] == ["Create maths module", "Write tests for maths"]
+    assert parsed[1] == {
+        "title": "Write tests for maths",
+        "kind": "test",
+        "owned_paths": ["tests/test_maths.py"],
+        "depends_on": ["Create maths module"],
+    }
+    assert any("merged" in c for c in changes) and raw_tail
+
+
 # X.2: 프롬프트 세트 규칙 — 심볼 색인 재사용, 기대값·fresh state, 겹치지 않으면 의존 금지, T-n
 def test_prompt_set_rules_x2() -> None:
     analyze = (PROMPTS / "analyze.md").read_text(encoding="utf-8")

@@ -234,6 +234,7 @@ async def test_resume_approved() -> None:
     decomposed = sink.events[2].payload
     assert decomposed["tasks"] == ["Add users route", "Add users validation"]
     assert isinstance(decomposed["changes"], list) and '"tasks"' in decomposed["raw_tail"]
+    assert [t["title"] for t in decomposed["parsed"]] == ["Add users route", "Add users validation"]
     assert [t["title"] for t in out["tasks"]] == ["Add users route", "Add users validation"]
     assert out["epics"][0]["title"] == "Users API"
     assert out["issues"] == [
