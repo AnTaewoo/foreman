@@ -95,6 +95,9 @@ class PrOpener:
         if event.type is EventType.TASK_FAILED:
             await self._handle_failed(event)
             return
+        if event.type is EventType.TASK_BLOCKED:
+            await self._handle_blocked(event)
+            return
         if event.type is not EventType.TASK_COMPLETED:
             return
         branch = event.payload.get("branch")
@@ -164,6 +167,32 @@ class PrOpener:
             await self._bus.publish(s, opened)
         self.opened.append(key)
         log.info("pr_opener.opened", task_id=task.id, pr_number=pr.number, head=branch)
+
+    async def _handle_blocked(self, event: Event) -> None:
+        """3차 라이브 #2: needs_decision 안내 코멘트는 워커(Dry)가 아니라 control plane이 올린다."""
+        payload = event.payload
+        if payload.get("reason") != "needs_decision":
+            return
+        run_id = str(payload.get("run_id") or "")
+        key = (event.project_id, event.subject.id, f"needs-decision:{run_id}")
+        if key in self._failed_seen:
+            return
+        async with self._factory() as s:
+            task = await s.get(m.Task, event.subject.id)
+            project = await s.get(m.Project, event.project_id)
+        if task is None or project is None or task.issue_number is None:
+            return
+        self._failed_seen.add(key)
+        files = ", ".join(f"`{f}`" for f in (payload.get("files") or []))
+        body = (
+            f"**승인 필요** — 이 Task는 의존성 파일을 바꾸려 합니다: {files}\n\n"
+            "설계 §8.2에 따라 T2 결정입니다. `/approve` 또는 `/reject <이유>`로 답해 주세요. "
+            "(MVP 1에서는 승인 뒤 재개가 아직 없으므로 Task를 다시 만들어야 합니다)"
+        )
+        await self._github.comment(
+            project.repo_full_name, task.issue_number, body, key=f"needs-decision:{run_id}"
+        )
+        log.info("pr_opener.needs_decision_reported", task_id=task.id, run_id=run_id)
 
     async def _handle_failed(self, event: Event) -> None:
         """P9 bug #5: push the failed attempt WIP branch and comment the test tail (no PR)."""

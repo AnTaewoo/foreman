@@ -12,6 +12,10 @@
 
 {repo_summary}
 
+# Environment (worker)
+
+{environment}
+
 # Instructions
 
 Produce a Plan for this Goal as a JSON object with exactly these fields

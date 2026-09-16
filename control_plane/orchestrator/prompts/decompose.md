@@ -16,6 +16,10 @@
 
 {repo_summary}
 
+# Environment (worker)
+
+{environment}
+
 # Instructions
 
 Decompose the approved plan into Tasks. Return ONLY a JSON object matching this schema:

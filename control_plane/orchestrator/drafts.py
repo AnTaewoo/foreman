@@ -196,12 +196,26 @@ class DecomposeResult(BaseModel):
 # --------------------------------------------------------------------------- Prompts
 
 
+# 3차 라이브 #1: "Flask 써도 되나요?"가 결정 항목이 되고 "Install Flask" Task가 생긴 건
+# 아무도 워커 환경을 알려주지 않았기 때문 → plan/decompose 프롬프트에 환경 계약을 넣는다
+ENVIRONMENT_CONTRACT = (
+    "Python 3.12 with pytest and flask already installed (also httpx, pydantic, sqlalchemy). "
+    "Test command: `pytest -q` from the repository root (the root is on PYTHONPATH, so top-level "
+    "modules import directly). Workers cannot install packages or change requirements/pyproject/"
+    "package manifests. Do not plan tasks that install or configure dependencies, and do not list "
+    "already-installed packages (flask, pytest) under Decisions Expected."
+)
+
+
 def render_prompt(name: str, **variables: str) -> str:
-    """``prompts/<name>.md`` → 근거 주석 제거 + ``str.format`` 치환 (빠진 변수는 KeyError)."""
+    """``prompts/<name>.md`` → 근거 주석 제거 + ``str.format`` 치환 (빠진 변수는 KeyError).
+    ``{environment}``는 주지 않으면 ``ENVIRONMENT_CONTRACT``."""
     text = (PROMPTS_DIR / f"{name}.md").read_text(encoding="utf-8")
     if text.startswith("<!--"):
         end = text.index("-->") + len("-->")
         text = text[end:].lstrip("\n")
+    if "{environment}" in text and "environment" not in variables:
+        variables = {**variables, "environment": ENVIRONMENT_CONTRACT}
     return text.format(**variables)
 
 
@@ -292,6 +306,53 @@ def infer_dependencies(result: DecomposeResult) -> list[str]:
     return notes
 
 
+# agents/coding.py DEPENDENCY_FILES 와 같은 규칙 (어댑터 계층을 import 하지 않는다)
+DEPENDENCY_FILE_RE = re.compile(
+    r"(^|/)(pyproject\.toml|requirements[^/]*\.txt|uv\.lock|poetry\.lock|Pipfile(\.lock)?|"
+    r"package\.json|[^/]*-lock\.(json|yaml|yml)|yarn\.lock|pnpm-lock\.yaml|go\.(mod|sum)|"
+    r"Cargo\.(toml|lock))$"
+)
+_INSTALL_TITLE_RE = re.compile(
+    r"^\s*(t-\d+\s*[:.)-]?\s*)?(install|set\s*up|setup|configure|add)\s+(the\s+)?"
+    r"(project\s+)?(dependenc|requirement|package|pip|flask|pytest|environment|venv)",
+    re.I,
+)
+
+
+def strip_dependency_tasks(result: DecomposeResult) -> tuple[DecomposeResult, list[str]]:
+    """의존성 파일을 소유 경로에서 빼고, 설치/셋업 성격 Task는 버린다 (3차 라이브 #1).
+    버린 Task에 의존하던 Task는 그 Task의 의존으로 재배선한다."""
+    notes: list[str] = []
+    tasks = list(result.tasks)
+    for t in tasks:
+        deps_files = [p for p in t.owned_paths if DEPENDENCY_FILE_RE.search(p)]
+        if deps_files:
+            t.owned_paths = [p for p in t.owned_paths if p not in deps_files]
+            notes.append(f"removed dependency files {deps_files} from '{t.title}'")
+    dropped: dict[str, list[str]] = {}
+    for t in list(tasks):
+        if _INSTALL_TITLE_RE.match(t.title) or not t.owned_paths:
+            dropped[t.title] = list(t.depends_on)
+            tasks.remove(t)
+            notes.append(f"dropped dependency/setup task '{t.title}'")
+    if dropped:
+        for t in tasks:
+            deps: list[str] = []
+            for d in t.depends_on:
+                for d2 in dropped.get(d, [d]):
+                    hops = 0
+                    while d2 in dropped and hops < 10:  # 연쇄로 버려진 경우
+                        chain = dropped[d2]
+                        d2 = chain[0] if chain else ""
+                        hops += 1
+                    if d2 and d2 != t.title and d2 not in deps:
+                        deps.append(d2)
+            t.depends_on = deps
+    used = {t.epic for t in tasks if t.epic}
+    epics = [e for e in result.epics if not used or e.title in used]
+    return DecomposeResult(epics=epics, tasks=tasks), notes
+
+
 def missing_test_paths(result: DecomposeResult) -> list[str]:
     """테스트 경로를 하나도 소유하지 않은 코드 Task 제목들."""
     return [
@@ -323,6 +384,15 @@ def suggested_test_paths(owned: list[str]) -> list[str]:
     return out
 
 
+def _owns_stem(c: TaskDraft, stems: set[str]) -> bool:
+    """Task가 test_<stem>에 해당하는 소스 모듈을 소유하는가 (3차 라이브 #3)."""
+    return any(
+        q.replace("\\", "/").split("/")[-1][:-3] in stems
+        for q in c.owned_paths
+        if q.endswith(".py") and not is_test_path(q)
+    )
+
+
 def merge_test_only_tasks(result: DecomposeResult) -> tuple[DecomposeResult, list[str]]:
     """테스트만 소유하고 구현 Task 하나에 의존하는 Task는 그 구현 Task에 합친다 (패턴 2)."""
     notes: list[str] = []
@@ -331,11 +401,19 @@ def merge_test_only_tasks(result: DecomposeResult) -> tuple[DecomposeResult, lis
     merged_into: dict[str, str] = {}
     for t in list(tasks):
         only_tests = bool(t.owned_paths) and all(is_test_path(p) for p in t.owned_paths)
-        if not (only_tests or _is_test_task(t)) or len(t.depends_on) != 1:
+        if not (only_tests or _is_test_task(t)) or not t.depends_on:
             continue
-        target = by_title.get(t.depends_on[0])
-        if target is None or target is t or all(is_test_path(p) for p in target.owned_paths):
+        candidates = [by_title[d] for d in t.depends_on if d in by_title and by_title[d] is not t]
+        candidates = [c for c in candidates if not all(is_test_path(p) for p in c.owned_paths)]
+        if not candidates:
             continue
+        # 3차 라이브 #3: 의존이 여럿이면 test_<stem>과 맞는 모듈을 소유한 Task로, 없으면 마지막
+        stems = {
+            re.sub(r"^test_|_test$", "", pth.replace("\\", "/").split("/")[-1][:-3])
+            for pth in t.owned_paths
+            if pth.endswith(".py")
+        }
+        target = next((c for c in candidates if _owns_stem(c, stems)), candidates[-1])
         for p in t.owned_paths:
             if p not in target.owned_paths:
                 target.owned_paths.append(p)
@@ -429,10 +507,9 @@ async def decompose_with_retry(
                 parsed = None
         if isinstance(parsed, DecomposeResult):
             pre_notes = drop_placeholder_paths(parsed)
-            parsed, merge_notes = merge_test_only_tasks(
-                parsed
-            )  # 합치면 테스트 경로가 채워질 수 있다
-            merge_notes = [*pre_notes, *merge_notes, *infer_dependencies(parsed)]
+            parsed, dep_notes = strip_dependency_tasks(parsed)  # 3차 라이브 #1
+            parsed, merge_notes = merge_test_only_tasks(parsed)  # 합치면 테스트 경로가 채워진다
+            merge_notes = [*pre_notes, *dep_notes, *merge_notes, *infer_dependencies(parsed)]
             missing = missing_test_paths(parsed)
             if missing and attempt < attempts - 1:
                 last_error = (

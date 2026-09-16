@@ -297,7 +297,7 @@ async def test_pr_opener_reports_failed_attempt(
     assert len(github.snapshot()["repos"][repo]["issues"][12]["comments"]) == 1
 
 
-# 3차 라이브 #2: "승인 필요" 코멘트가 워커의 Dry client에서 나가 GitHub에 안 올라갔다 → control plane이 대신 게시
+# 3차 라이브 #2: "승인 필요" 코멘트가 워커(Dry)에서 나가 GitHub에 없었다 → control plane이 게시
 async def test_pr_opener_posts_needs_decision_comment(
     factory: async_sessionmaker[AsyncSession], redis: Redis, tmp_path: Path
 ) -> None:
