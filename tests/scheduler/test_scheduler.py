@@ -519,3 +519,44 @@ async def test_recover_orphans_on_startup(
     fin = [e for e in await fresh.events("run.finished") if e.subject_id == run1]
     assert len(fin) == 1
     assert (await fresh.task("T1")).status in (TaskStatus.READY, TaskStatus.ASSIGNED)
+
+
+# ------------------------------------------ P8.5 (D-47, F-11): ingest한 워커 이벤트는 relay가 다시 XADD 안 함
+async def test_ingest_marks_published_no_duplicate_xadd(
+    factory: async_sessionmaker[AsyncSession], redis: Redis
+) -> None:
+    from worker.publish import RedisPublisher
+
+    h = Harness(factory, redis)
+    await h.publish(*BOOTSTRAP, task_created("T1", [], ["src/a/**"]))
+    await h.pump()
+    run_id = h.launcher.specs[0].run_id
+    stream = f"events:{PID}"
+    before = await redis.xlen(stream)
+    agent = Actor(type="agent", id="coding-1")
+    started = ev(E.TASK_STARTED, "task", "T1", {"run_id": run_id}, actor=agent)
+    called = ev(
+        E.RUN_TOOL_CALLED,
+        "run",
+        run_id,
+        {"tool": "fs.read", "args_digest": "d", "duration_ms": 1},
+        actor=agent,
+    )
+    await RedisPublisher(redis)(started)
+    await RedisPublisher(redis)(called)
+    assert await redis.xlen(stream) == before + 2
+    await h.pump()  # ingest(서명·DB) + relay
+    assert await redis.xlen(stream) == before + 2  # 서명본을 다시 XADD 하지 않았다 (F-11)
+    async with h.factory() as s:
+        row = await s.scalar(select(m.Event).where(m.Event.id == started.id))
+        tool_rows = (
+            (await s.execute(select(m.ToolCall).where(m.ToolCall.id == called.id))).scalars().all()
+        )
+        ev_rows = (await s.execute(select(m.Event).where(m.Event.id == called.id))).scalars().all()
+    assert (
+        row is not None and row.published_at is not None and row.stream_id
+    )  # 워커 메시지 id로 표시
+    assert (
+        len(tool_rows) == 1 and ev_rows == []
+    )  # F-12: run.tool_called는 tool_calls에만 (D-31 설계)
+    assert (await h.task("T1")).status is TaskStatus.RUNNING
