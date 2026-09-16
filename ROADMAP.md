@@ -264,7 +264,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P8.2 | Docker 런처: 프로젝트 repo 개별 마운트 + 호스트 uid (F-5a, F-5b) | P8.1 | done | fd4060d |
 | P8.3 | 죽은 워커 정리: task.failed 보장 + reaper (F-5c, F-5) | P8.2 | done | 1a4e5dc |
 | P8.4 | API: repo 유일 409, events 폴백, 시크릿 fail-closed (F-6, F-7, F-8) | P8.1 | done | 18416d6 |
-| P8.5 | ingest 중복 XADD 제거 (F-11), tool_calls 확인 (F-12) | P8.1 | todo | |
+| P8.5 | ingest 중복 XADD 제거 (F-11), tool_calls 확인 (F-12) | P8.1 | done | 1897264 |
 | P8.6 | run-api no-reload, repos/ gitignore, 문서·환경 불일치 (F-4, F-10) | P8.3, P8.4, P8.5 | todo | |
 | **PC-8** | 외부 점검 절차 재실행: `docker` 런처로 REPO_ROOT 밖 로컬 repo 프로젝트 → Task done, 죽은 워커 복구, 스트림 중복 0 | P8.6 | pending | |
 

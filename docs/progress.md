@@ -215,3 +215,4 @@
 | 2026-09-16T11:10 | P8.2 | Green+Gate | 개별 마운트, --user 호스트 uid, WORKER_WORKDIR/git env; make check 467, test-integration 6 (chmod 없이 push) | fd4060d |
 | 2026-09-16T11:40 | P8.3 | Green+Gate | task.failed 보장, is_alive, reap/recover_orphans, reaper 루프; make check 472 | 1a4e5dc |
 | 2026-09-16T12:20 | P8.4 | Green+Gate | 409/폴백/검증/목록/approve·reject API/fail-closed; make check 479 | 18416d6 |
+| 2026-09-16T12:50 | P8.5 | Green+Gate | ingest → mark_published_by_id, 중복 XADD 0, tool_calls 확인; make check 480 | 1897264 |
