@@ -11,6 +11,8 @@ from pathlib import Path
 
 import structlog
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -24,6 +26,7 @@ from control_plane.orchestrator.runner import GoalRunner
 from github_adapter import get_discussions_client, get_github_client, make_token_provider
 
 log = structlog.get_logger(__name__)
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 def create_app(
@@ -83,6 +86,14 @@ def create_app(
 
     for r in (projects.router, goals.router, tasks.router, events.router, stream.router):
         application.include_router(r)
+
+    # P9.2 (D-52): 데모 콘솔 — MVP 1 임시 정적 1페이지 (설계 §11.0). Mission Control(MVP 5) 아님
+    application.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+    @application.get("/", include_in_schema=False)
+    async def console() -> FileResponse:
+        return FileResponse(STATIC_DIR / "index.html")
+
     if runner is not None:
         application.include_router(approvals.build_webhook(state, runner))
     return application

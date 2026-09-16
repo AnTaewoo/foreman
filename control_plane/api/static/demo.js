@@ -1,0 +1,200 @@
+/* Foreman 데모 콘솔 (P9.2, D-52). 빌드 없음, 같은 origin의 API만 호출한다.
+ * 상태: project(첫 프로젝트) · goals 목록 · 선택 goal 상세(plan, tasks) · WS 이벤트 로그.
+ * WS 이벤트가 오면 500ms 디바운스로 goal/tasks를 다시 읽는다(읽기는 projection 반영 후). */
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const EXAMPLES = [
+    "Add a /users CRUD endpoint with tests",
+    "Add a maths helpers module with add and mul functions and tests",
+    "Add input validation for POST /users and return 400 on bad payloads, with tests",
+  ];
+  const state = { demo: { user_id: "judge" }, project: null, goals: [], goalId: null, lastSeq: 0, ws: null, timer: null };
+
+  // ---- helpers ---------------------------------------------------------
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  let toastTimer = null;
+  function toast(msg, ms = 6000) {
+    const t = $("toast"); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+  }
+  async function api(path, opts = {}) {
+    const headers = { "X-User-Id": state.demo.user_id, ...(opts.headers || {}) };
+    if (opts.body) headers["Content-Type"] = "application/json";
+    const r = await fetch(path, { ...opts, headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
+    let data = null;
+    try { data = await r.json(); } catch (_) { /* 본문 없음 */ }
+    if (!r.ok) {
+      const detail = data && data.detail ? (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)) : r.statusText;
+      throw new Error(`${r.status}: ${detail}`);
+    }
+    return data;
+  }
+  // 아주 작은 markdown → HTML (제목/목록/코드/강조만). 입력은 전부 escape 한다.
+  function md(src) {
+    const lines = String(src || "").split("\n"); const out = []; let inList = false, inCode = false;
+    const inline = (s) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+    for (const raw of lines) {
+      const line = raw.replace(/\r$/, "");
+      if (line.startsWith("```")) { if (inList) { out.push("</ul>"); inList = false; } inCode = !inCode; out.push(inCode ? "<pre><code>" : "</code></pre>"); continue; }
+      if (inCode) { out.push(esc(line) + "\n"); continue; }
+      const h = /^(#{1,3})\s+(.*)$/.exec(line);
+      const li = /^\s*[-*]\s+(.*)$/.exec(line);
+      if (li) { if (!inList) { out.push("<ul>"); inList = true; } out.push(`<li>${inline(li[1])}</li>`); continue; }
+      if (inList) { out.push("</ul>"); inList = false; }
+      if (h) { out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); continue; }
+      if (line.trim() === "") continue;
+      out.push(`<p>${inline(line)}</p>`);
+    }
+    if (inList) out.push("</ul>"); if (inCode) out.push("</code></pre>");
+    return out.join("");
+  }
+  const badge = (s) => `<span class="badge ${esc(s)}">${esc(s)}</span>`;
+  const link = (url, text) => url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(text)} ↗</a>` : '<span class="muted">—</span>';
+  const isShowcase = (g) => /^\[showcase\]/i.test(g.title || "");
+  const ts = (iso) => { try { return new Date(iso).toLocaleTimeString("ko-KR", { hour12: false }); } catch (_) { return iso; } };
+
+  // ---- load ------------------------------------------------------------
+  async function loadDemo() {
+    try { state.demo = await api("/demo"); } catch (_) { /* 데모 모드 아님 */ }
+    const n = $("demo-note");
+    n.textContent = state.demo.demo_mode
+      ? `데모 모드: 프로젝트당 동시에 진행되는 Goal ${state.demo.max_running_goals}개, 시간당 ${state.demo.goals_per_hour}개까지. 승인자 계정 "${state.demo.user_id}"로 동작합니다.`
+      : `승인자 계정 "${state.demo.user_id}"로 동작합니다.`;
+  }
+  async function loadProject() {
+    const { items } = await api("/projects");
+    if (!items.length) {
+      $("project-name").textContent = "— 프로젝트가 없습니다 (관리자가 POST /projects로 만듭니다)";
+      $("goal-submit").disabled = true;
+      return;
+    }
+    state.project = items[0];
+    $("project-name").textContent = `· ${state.project.name} (${state.project.repo})`;
+    const rl = $("repo-link");
+    if (state.project.repo_url) rl.href = state.project.repo_url; else rl.hidden = true;
+  }
+  async function loadGoals() {
+    if (!state.project) return;
+    const { items } = await api(`/projects/${state.project.id}/goals`);
+    state.goals = [...items.filter(isShowcase), ...items.filter((g) => !isShowcase(g))];
+    renderGoals();
+  }
+  async function loadGoal() {
+    if (!state.goalId) return;
+    const pid = state.project.id;
+    const [goal, tasks] = await Promise.all([
+      api(`/projects/${pid}/goals/${state.goalId}`),
+      api(`/projects/${pid}/tasks`),
+    ]);
+    renderGoal(goal, tasks.items.filter((t) => t.goal_id === goal.id));
+  }
+  async function loadEvents() {
+    if (!state.project) return;
+    for (let i = 0; i < 10; i++) { // 최대 10페이지(5000건)까지 따라잡는다
+      const page = await api(`/projects/${state.project.id}/events?since=${state.lastSeq}&limit=500`);
+      for (const e of page.items) pushEvent(e);
+      if (page.items.length < 500) break;
+    }
+  }
+  const refreshSoon = () => { clearTimeout(state.timer); state.timer = setTimeout(async () => { try { await loadGoals(); await loadGoal(); } catch (e) { console.warn(e); } }, 500); };
+
+  // ---- render ----------------------------------------------------------
+  function renderGoals() {
+    const ul = $("goals"); ul.innerHTML = "";
+    if (!state.goals.length) { ul.innerHTML = '<li class="muted">아직 Goal이 없습니다 — 위에서 하나 만들어 보세요.</li>'; return; }
+    for (const g of state.goals) {
+      const li = document.createElement("li");
+      li.className = (g.id === state.goalId ? "active " : "") + (isShowcase(g) ? "showcase" : "");
+      li.innerHTML = `<span class="t" title="${esc(g.title)}">${esc(g.title)}</span>${badge(g.status)}<span class="muted small">${g.done}/${g.total}</span>`;
+      li.onclick = () => selectGoal(g.id);
+      ul.appendChild(li);
+    }
+  }
+  function renderGoal(goal, tasks) {
+    $("detail").hidden = false;
+    $("goal-title-view").textContent = goal.title;
+    $("goal-status").outerHTML = badge(goal.status).replace("<span", '<span id="goal-status"');
+    $("approve-box").hidden = goal.status !== "awaiting_plan_approval";
+    const dl = $("discussion-link");
+    if (goal.plan_discussion_url) { dl.href = goal.plan_discussion_url; dl.hidden = false; } else dl.hidden = true;
+    const plan = $("plan");
+    if (goal.plan_markdown) { plan.className = "plan"; plan.innerHTML = md(goal.plan_markdown); }
+    else { plan.className = "plan muted"; plan.textContent = ["draft", "planning"].includes(goal.status) ? "Plan을 만드는 중… (로컬 LLM, 1~3분)" : "Plan 본문이 없습니다."; }
+    $("task-count").textContent = tasks.length ? `${goal.done}/${tasks.length} done` : "";
+    const tb = $("tasks").querySelector("tbody"); tb.innerHTML = "";
+    tasks.sort((a, b) => (a.issue_number || 0) - (b.issue_number || 0));
+    for (const t of tasks) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${t.issue_number ?? ""}</td><td>${esc(t.title)}<br><span class="muted small">${esc(t.owned_paths.join(", "))}</span></td><td>${badge(t.status)}</td><td>${t.attempt_count}</td><td>${link(t.issue_url, `#${t.issue_number ?? ""}`)}</td><td>${link(t.pr_url, `PR #${t.pr_number ?? ""}`)}${t.branch_name ? `<br><code class="small">${esc(t.branch_name)}</code>` : ""}</td>`;
+      const sr = document.createElement("tr"); sr.className = "spec-row";
+      sr.innerHTML = `<td></td><td class="spec" colspan="5">${esc(t.spec || "")}</td>`;
+      tr.onclick = () => sr.classList.toggle("open");
+      tb.appendChild(tr); tb.appendChild(sr);
+    }
+  }
+  function pushEvent(e) {
+    if (e.seq != null && e.seq <= state.lastSeq) return; // replay/live 중복
+    if (e.seq != null) state.lastSeq = Math.max(state.lastSeq, e.seq);
+    if (e.type === "run.tool_called") return; // 툴 호출은 너무 많다 (체인 밖, D-31)
+    const ul = $("events");
+    const li = document.createElement("li");
+    const p = e.payload || {};
+    const extra = p.reason || p.branch || p.pr_number || p.title || p.summary || "";
+    li.innerHTML = `<span class="ts">${ts(e.ts)}</span><code>${esc(e.type)}</code> <span class="muted">${esc(e.subject.entity)}:${esc(String(e.subject.id).slice(-6))}</span> ${esc(String(extra).slice(0, 120))}`;
+    ul.prepend(li);
+    while (ul.children.length > 200) ul.removeChild(ul.lastChild);
+    refreshSoon();
+  }
+
+  // ---- ws --------------------------------------------------------------
+  function connectWs() {
+    if (!state.project) return;
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${proto}//${location.host}/projects/${state.project.id}/stream?since=${state.lastSeq}`);
+    state.ws = ws;
+    ws.onopen = () => { $("ws-state").textContent = "실시간"; };
+    ws.onmessage = (m) => { try { pushEvent(JSON.parse(m.data)); } catch (e) { console.warn(e); } };
+    ws.onclose = () => { $("ws-state").textContent = "재연결 중…"; setTimeout(connectWs, 3000); };
+    ws.onerror = () => ws.close();
+  }
+
+  // ---- actions ---------------------------------------------------------
+  async function selectGoal(id) {
+    state.goalId = id; renderGoals();
+    try { await loadGoal(); } catch (e) { toast(e.message); }
+  }
+  $("goal-form").onsubmit = async (ev) => {
+    ev.preventDefault();
+    if (!state.project) return;
+    const title = $("goal-title").value.trim(); if (!title) return;
+    $("goal-submit").disabled = true;
+    try {
+      const g = await api(`/projects/${state.project.id}/goals`, { method: "POST", body: { title } });
+      $("goal-title").value = "";
+      toast("Goal을 만들었습니다. Plan이 올라오면 Approve 버튼이 보입니다.");
+      await loadGoals(); await selectGoal(g.id);
+    } catch (e) { toast(e.message); } finally { $("goal-submit").disabled = false; }
+  };
+  $("approve").onclick = async () => {
+    try { await api(`/projects/${state.project.id}/goals/${state.goalId}/approve`, { method: "POST" }); toast("승인했습니다. Task → Issue → 워커 순으로 진행됩니다."); refreshSoon(); }
+    catch (e) { toast(e.message); }
+  };
+  $("reject").onclick = async () => {
+    try { await api(`/projects/${state.project.id}/goals/${state.goalId}/reject`, { method: "POST", body: { reason: $("reject-reason").value } }); toast("거절했습니다."); refreshSoon(); }
+    catch (e) { toast(e.message); }
+  };
+  for (const ex of EXAMPLES) {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = ex;
+    b.onclick = () => { $("goal-title").value = ex; };
+    $("examples").appendChild(b);
+  }
+
+  // ---- boot ------------------------------------------------------------
+  (async () => {
+    try {
+      await loadDemo(); await loadProject(); await loadGoals(); await loadEvents();
+      if (state.goals.length) await selectGoal(state.goals[0].id);
+      connectWs();
+    } catch (e) { toast(`초기화 실패: ${e.message}`); }
+  })();
+})();

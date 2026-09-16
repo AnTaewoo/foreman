@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Foreman — HITL 데모 콘솔</title>
+  <link rel="stylesheet" href="/static/demo.css">
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>Foreman <span class="muted">HITL Multi-Agent Dev Platform · 데모 콘솔</span></h1>
+      <p class="lead">
+        Goal 한 문장 → AI 에이전트 팀이 <b>Plan → Issue → 브랜치 → PR</b>을 만들고,
+        사람은 <b>Plan 승인</b>과 <b>PR 머지</b>만 합니다. 모든 상태 변화는 서명된 이벤트 체인으로 남습니다.
+      </p>
+    </div>
+    <nav class="links">
+      <a id="repo-link" href="#" target="_blank" rel="noopener">대상 GitHub repo ↗</a>
+      <a href="/docs" target="_blank" rel="noopener">API 문서 ↗</a>
+      <a href="https://github.com/AnTaewoo/foreman" target="_blank" rel="noopener">소스 ↗</a>
+    </nav>
+  </header>
+
+  <section class="howto">
+    <ol>
+      <li><b>Goal 만들기</b> — 아래 예시 버튼 하나를 누르고 "Goal 생성". 1~3분 뒤 Plan이 올라옵니다(로컬 LLM).</li>
+      <li><b>Plan 승인</b> — Plan 본문을 읽고 <b>Approve</b>. 그러면 Task가 GitHub Issue로 만들어지고 워커 컨테이너가 코드를 씁니다.</li>
+      <li><b>PR 확인</b> — Task마다 draft PR 링크가 생깁니다. <b>PR 머지는 repo 소유자가 GitHub에서</b> 합니다(사람 승인 지점). 머지되면 Task가 done이 되고 다음 Task가 배정됩니다.</li>
+    </ol>
+    <p class="muted small" id="demo-note"></p>
+  </section>
+
+  <main class="grid">
+    <section class="col">
+      <h2>Goals <span class="muted" id="project-name"></span></h2>
+      <form id="goal-form">
+        <div class="examples" id="examples"></div>
+        <input id="goal-title" name="title" maxlength="300" placeholder="Goal (영어 한 문장)" required>
+        <button type="submit" id="goal-submit">Goal 생성</button>
+      </form>
+      <ul id="goals" class="list"></ul>
+    </section>
+
+    <section class="col wide" id="detail" hidden>
+      <div class="detail-head">
+        <h2 id="goal-title-view"></h2>
+        <span class="badge" id="goal-status"></span>
+      </div>
+      <div class="actions" id="approve-box" hidden>
+        <button id="approve">Approve — Plan 승인</button>
+        <button id="reject" class="secondary">Reject</button>
+        <input id="reject-reason" placeholder="거절 사유 (선택)">
+      </div>
+      <details open>
+        <summary>Plan <a id="discussion-link" href="#" target="_blank" rel="noopener" hidden>Discussion ↗</a></summary>
+        <div id="plan" class="plan muted">Plan을 만드는 중…</div>
+      </details>
+      <h3>Tasks <span class="muted" id="task-count"></span></h3>
+      <table id="tasks"><thead><tr><th>#</th><th>Task</th><th>상태</th><th>시도</th><th>Issue</th><th>PR</th></tr></thead><tbody></tbody></table>
+      <h3>이벤트 <span class="muted" id="ws-state">연결 중…</span></h3>
+      <ul id="events" class="events"></ul>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="/static/demo.js"></script>
+</body>
+</html>
