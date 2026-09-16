@@ -8,9 +8,10 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from redis.asyncio import Redis
@@ -92,7 +93,15 @@ def create_app(
 
     @application.get("/", include_in_schema=False)
     async def console() -> FileResponse:
-        return FileResponse(STATIC_DIR / "index.html")
+        return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
+
+    @application.middleware("http")
+    async def _no_cache_static(request: Request, call_next: Any) -> Any:
+        # 콘솔 JS/CSS는 배포마다 바뀐다 — 옛 파일을 쓰지 않게 매번 재검증(ETag) (P9 사용자 보고)
+        response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
 
     if runner is not None:
         application.include_router(approvals.build_webhook(state, runner))
