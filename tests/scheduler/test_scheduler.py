@@ -479,7 +479,7 @@ async def test_reap_dead_worker_publishes_failed_and_reassigns(
     assert h.scheduler.in_flight == {"T1"} and h.launcher.specs[1].run_id != run1
 
 
-# (b') 죽은 것을 본 뒤 grace 안에 워커의 run.finished가 ingest되면 reap 하지 않는다 (정상 종료 = 컨테이너 사라짐)
+# (b') 죽은 것을 본 뒤 grace 안에 워커의 run.finished가 ingest되면 reap 하지 않는다 (정상 종료)
 async def test_reap_ignores_worker_that_finished_normally(
     factory: async_sessionmaker[AsyncSession], redis: Redis
 ) -> None:
