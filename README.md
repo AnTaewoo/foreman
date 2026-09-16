@@ -85,6 +85,8 @@ Dry 모드에서는 GitHub 쓰기가 로그(`would …`)로만 남고, 플랫폼
 
 ### 1. 준비 (한 번)
 
+필요한 것: git, Docker(compose v2), `uv`, `curl` + `jq`(아래 예제용). Python 3.12는 `uv sync`가 받습니다.
+
 ```bash
 git clone git@github.com:AnTaewoo/foreman.git && cd foreman
 uv sync --all-groups
@@ -138,7 +140,7 @@ curl -s "$API/projects/$PID/events?since=0" | jq '.items[].type'                
 
 읽기 API는 projection 반영(control plane이 떠 있으면 수 초) 후 값이 보입니다. 쓰기 직후의 `GET /projects/{id}`와
 `POST /goals`는 이벤트로 존재를 확인하므로 바로 됩니다. 결과는 `git -C $REPO branch`(`ai/*` 브랜치, Dry 머지 후 `main`
-전진)로 봅니다. 실행 중인 워커는 `docker ps --filter name=foreman-worker-`(종료 시 `--rm`). 전체 목록: `GET /projects`, `GET /projects/{id}/tasks?status=`.
+전진)로 봅니다. 실행 중인 워커는 `docker ps --filter name=foreman-worker-`(종료 시 `--rm`). 전체 목록: `GET /projects`(`{items: [...]}`), `GET /projects/{id}/tasks?status=`.
 
 ### 4. 실 GitHub 연결
 

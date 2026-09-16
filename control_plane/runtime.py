@@ -70,7 +70,10 @@ def build_launcher(
     settings: Settings, redis: Redis, *, mounts: list[tuple[str, str]] | None = None
 ) -> WorkerLauncher:
     if settings.worker_launcher == "docker":
-        root = str(Path(settings.repo_root).resolve())
+        root_path = Path(settings.repo_root).resolve()
+        # 없는 경로를 -v로 넘기면 Docker가 root 소유로 만든다 → 미리 호스트 사용자 소유로 (PC-8)
+        root_path.mkdir(parents=True, exist_ok=True)
+        root = str(root_path)
         return DockerCliLauncher(
             image=settings.worker_image,
             redis_url=host_url(settings.redis_url),
