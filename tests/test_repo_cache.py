@@ -119,3 +119,31 @@ def test_token_url_and_masking(tmp_path: Path) -> None:
             git_env=GENV,
         ).ensure("org/none")
     assert "ghs_SECRET" not in str(exc.value)
+
+
+# P8.1 (D-48, F-1): Dry 모드(또는 토큰 없음)에서는 원격 clone을 시도하지 않는다 — subprocess 호출 0
+def test_dry_mode_never_clones_remote(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess as sp
+
+    from control_plane.repo_cache import RepoCache, RepoUnavailable
+
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        sp,
+        "run",
+        lambda *a, **k: (
+            calls.append(list(a[0])) or (_ for _ in ()).throw(AssertionError("no subprocess"))
+        ),
+    )
+    cache = RepoCache(tmp_path / "root", dry_run=True)
+    with pytest.raises(RepoUnavailable, match="dry"):
+        cache.ensure("org/demo")
+    with pytest.raises(RepoUnavailable, match="dry"):
+        cache.ensure("https://github.com/org/demo.git")
+    assert calls == []
+    local = tmp_path / "local"
+    local.mkdir()
+    assert cache.ensure(str(local)) == local.resolve()  # 로컬 경로는 그대로
+    # 실 모드지만 토큰 없음 → 역시 clone 안 함
+    with pytest.raises(RepoUnavailable, match="token"):
+        RepoCache(tmp_path / "r2", dry_run=False).ensure("org/demo")

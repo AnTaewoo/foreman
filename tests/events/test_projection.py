@@ -581,3 +581,39 @@ async def test_task_completed_sets_branch_name(
         task = await s.get(m.Task, "T1")
     assert task is not None and task.status is TaskStatus.IN_REVIEW
     assert task.branch_name == "ai/e/1-t"
+
+
+# P8.1 (D-49, F-3): IntegrityError(FK 등)는 transient가 아니다 → D-30 재시도 큐(ack), 5회 뒤 포기
+async def test_integrity_error_goes_to_retry_not_transient(
+    factory: async_sessionmaker[AsyncSession], redis: Redis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sqlalchemy.exc import IntegrityError
+
+    from control_plane.events.bus import retry_stream_key
+
+    bus = EventBus(redis)
+    projection = Projection(factory, bus)
+    ev_ = Event(
+        project_id="PX", actor=Actor(type="system", id="t"), type=EventType.PROJECT_CREATED,
+        subject=Subject(entity="project", id="PX"),
+        payload={"name": "x", "repo": "r", "default_branch": "main"},
+        correlation_id="PX", causation_id=None,
+    )  # fmt: skip
+    async with factory() as s:
+        signed = await bus.publish(s, ev_)
+        await s.commit()
+
+    async def boom(session: AsyncSession, event: Event) -> None:
+        raise IntegrityError("insert", {}, Exception("FOREIGN KEY constraint failed"))
+
+    monkeypatch.setitem(proj_mod.HANDLERS, EventType.PROJECT_CREATED, boom)
+    delivery = Delivery(event=signed, message_id="1-0", attempt=1, group="g", consumer="c", seq=1)
+    await projection.handle(delivery)  # ProjectionTransient가 아니라 정상 반환(ack)
+    assert await redis.xlen(retry_stream_key("PX")) == 1
+    # 6번째 시도(attempt > max)면 포기 → projection_error 기록
+    await projection.handle(
+        Delivery(event=signed, message_id="1-1", attempt=6, group="g", consumer="c", seq=1)
+    )
+    async with factory() as s:
+        row = await s.get(m.Event, signed.id)
+    assert row is not None and row.projection_error and "gave up" in row.projection_error

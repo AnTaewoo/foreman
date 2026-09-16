@@ -305,3 +305,15 @@ def test_worker_env_carries_prices() -> None:
         env["WORKER_LLM_PRICE_IN_PER_MTOK"] == "3.0"
         and env["WORKER_LLM_PRICE_OUT_PER_MTOK"] == "15.0"
     )
+
+
+# P8.1: Runtime의 RepoCache는 settings.dry_run을 받는다
+def test_runtime_repo_cache_is_dry_in_dry_mode(
+    factory: async_sessionmaker[AsyncSession], redis: Redis
+) -> None:
+    from control_plane.runtime import Runtime
+
+    rt = Runtime(
+        settings_for("sqlite+aiosqlite://", dry_run=True), factory, redis, launcher=FakeLauncher()
+    )
+    assert rt.repo_cache.dry_run is True
