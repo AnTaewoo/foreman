@@ -442,3 +442,80 @@ async def test_ingest_out_of_order_goes_to_retry_queue(
         await s.commit()
     applied = await h.projection.apply_retries(PID, now=datetime.now(UTC) + timedelta(hours=3))
     assert applied == 1 and (await h.task("T1")).status is TaskStatus.RUNNING
+
+
+# ---------------------------------------------------------------- P8.3 (D-44, F-5/F-5c) 죽은 워커 정리
+# (b) launcher.is_alive — Fake는 dead 집합으로 제어
+async def test_reap_dead_worker_publishes_failed_and_reassigns(
+    factory: async_sessionmaker[AsyncSession], redis: Redis
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    h = Harness(factory, redis, max_workers=1)
+    await h.publish(*BOOTSTRAP, task_created("T1", [], ["src/a/**"]))
+    await h.pump()
+    assert h.scheduler.in_flight == {"T1"}
+    run1 = h.launcher.specs[0].run_id
+    worker1 = f"fake-{run1}"
+    # 워커가 아무 이벤트도 못 내고 죽음 (F-5a 상황)
+    h.launcher.dead.add(worker1)
+    reaped = await h.scheduler.reap(now=datetime.now(UTC))
+    assert reaped == [("T1", run1, "worker_died")]
+    await h.pump()
+    failed = await h.events("task.failed")
+    assert failed[0].payload == {"run_id": run1, "reason": "worker_died", "attempt": 1}
+    assert failed[0].actor_id == "scheduler"
+    fin = await h.events("run.finished")
+    assert fin[0].subject_id == run1 and fin[0].payload["outcome"] == "failed"
+    assert fin[0].payload["error"] == "worker died"
+    # 슬롯 반환 → attempt<max이므로 재배정(새 run)
+    assert [e.subject_id for e in await h.events("task.assigned")] == ["T1", "T1"]
+    assert h.scheduler.in_flight == {"T1"} and h.launcher.specs[1].run_id != run1
+
+
+# (c) 타임아웃: timeout_min + 5분 지나면 reason=timeout; 살아 있는 워커는 건드리지 않는다
+async def test_reap_timeout_and_alive(
+    factory: async_sessionmaker[AsyncSession], redis: Redis
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    h = Harness(factory, redis, max_workers=2)
+    await h.publish(
+        *BOOTSTRAP, task_created("T1", [], ["src/a/**"]), task_created("T2", [], ["src/b/**"])
+    )
+    await h.pump()
+    assert await h.scheduler.reap(now=datetime.now(UTC)) == []  # 둘 다 살아 있음
+    late = datetime.now(UTC) + timedelta(minutes=45 + 6)
+    reaped = await h.scheduler.reap(now=late)
+    assert sorted(r[0] for r in reaped) == ["T1", "T2"] and all(r[2] == "timeout" for r in reaped)
+    await h.pump()
+    assert all(e.payload["reason"] == "timeout" for e in await h.events("task.failed"))
+    assert all(e.payload["outcome"] == "timeout" for e in await h.events("run.finished"))
+
+
+# (d) 기동 시 DB에 assigned/running인데 in_flight에 없는 Task(이전 프로세스 잔재) → worker_died 처리
+async def test_recover_orphans_on_startup(
+    factory: async_sessionmaker[AsyncSession], redis: Redis
+) -> None:
+    h = Harness(factory, redis, max_workers=1)
+    await h.publish(*BOOTSTRAP, task_created("T1", [], ["src/a/**"]))
+    await h.pump()
+    run1 = h.launcher.specs[0].run_id
+    await h.publish(
+        ev(
+            E.TASK_STARTED, "task", "T1", {"run_id": run1}, actor=Actor(type="agent", id="coding-1")
+        ),
+        ev(E.RUN_STARTED, "run", run1, {"task_id": "T1", "agent_id": "coding-1", "model": "fake"}),
+    )
+    await h.pump()
+    assert (await h.task("T1")).status is TaskStatus.RUNNING
+    # "새 프로세스": in_flight 비어 있는 새 Scheduler
+    fresh = Harness(factory, redis, max_workers=1)
+    orphans = await fresh.scheduler.recover_orphans()
+    assert orphans == [("T1", run1)]
+    await fresh.pump()
+    failed = await fresh.events("task.failed")
+    assert failed[-1].payload["reason"] == "worker_died" and failed[-1].payload["run_id"] == run1
+    fin = [e for e in await fresh.events("run.finished") if e.subject_id == run1]
+    assert len(fin) == 1
+    assert (await fresh.task("T1")).status in (TaskStatus.READY, TaskStatus.ASSIGNED)

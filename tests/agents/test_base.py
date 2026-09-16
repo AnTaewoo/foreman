@@ -254,3 +254,35 @@ async def test_run_finished_cost_from_prices(spy: Spy) -> None:
     )
     await explicit.run(make_input())
     assert spy.events[-1].payload["cost_usd"] == 0.01  # execute가 준 값 우선
+
+
+# P8.3 (D-44, F-5c): execute 예외 / task.failed 없는 failed → BaseAgent가 task.failed를 run.finished 앞에 보장
+class FailNoEventAgent(BaseAgent):
+    async def execute(self, input: AgentInput) -> AgentOutput:
+        return AgentOutput(
+            outcome="failed", summary="crashed quietly", error="no task.failed emitted"
+        )
+
+
+class FailWithEventAgent(BaseAgent):
+    async def execute(self, input: AgentInput) -> AgentOutput:
+        await self.publish(
+            input, EventType.TASK_FAILED, "task", input.task.id,
+            {"run_id": input.run_id, "reason": "tests_failed", "attempt": input.task.attempt},
+        )  # fmt: skip
+        return AgentOutput(outcome="failed", summary="tests", error="tests failed")
+
+
+async def test_run_guarantees_task_failed(spy: Spy) -> None:
+    await BoomAgent(publish=spy.publish, provider=FakeProvider(script=[])).run(make_input())
+    assert spy.types() == ["task.started", "run.started", "task.failed", "run.finished"]
+    failed = spy.events[2].payload
+    assert failed["reason"] == "error" and failed["run_id"] == "01RUN" and failed["attempt"] == 1
+    spy.events.clear()
+    await FailNoEventAgent(publish=spy.publish, provider=FakeProvider(script=[])).run(make_input())
+    assert spy.types() == ["task.started", "run.started", "task.failed", "run.finished"]
+    spy.events.clear()
+    await FailWithEventAgent(publish=spy.publish, provider=FakeProvider(script=[])).run(
+        make_input()
+    )
+    assert spy.types().count("task.failed") == 1  # 이미 냈으면 중복 없음
