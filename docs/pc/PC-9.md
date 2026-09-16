@@ -1,7 +1,7 @@
 # PC-9 — 심사자 워크스루 (공개 데모 foreman.antaewoo.com)
 
 - 일시: 2026-09-16 코드 준비 완료 (커밋 e3a00da) · 배포·워크스루는 사용자 sudo 단계(`docs/deploy.md` 1~9) 뒤
-- 판정: **pending — 배포됨(demo_up.sh, 19:14 KST), showcase Goal 진행 중, 사람 항목 대기**
+- 판정: **pending — 배포됨(demo_up.sh, 19:14 KST). showcase: Discussion #3 승인 → Issue #4~#9 → PR #10·#11(draft) 열림. 사람 항목(머지·웹훅 URL) 대기**
 - 구성: nginx(443, 사용자) → `127.0.0.1:8000` `foreman-api.service` + `foreman-control-plane.service`(docker 런처),
   `HITL_DRY_RUN=false`·`HITL_DEMO_MODE=true`(유닛), 실 GitHub `AnTaewoo/foreman_test`(public), LLM `qwen2.5-coder:14b`.
 
@@ -15,6 +15,7 @@
 | 데모 가드 (임시 API) | `POST /projects` 토큰 없음 401, 토큰 201, 같은 repo 409 → `demo_seed.py` 재사용 |
 | `curl -I https://foreman.antaewoo.com/` 200, `/health` | 200 / `{"status":"ok"}` (19:00 KST) |
 | WS `wss://foreman.antaewoo.com/projects/<id>/stream` 연결 | ok — 첫 이벤트 `project.created` 수신 |
+| showcase: Goal → Plan(Discussion #3) → 승인 → Issue #4~#9 → 워커 2개(docker, host uid) → push → PR #10·#11 | ok (19:14~19:17 KST, 14b) |
 
 ## 사람 항목 — 시크릿 창에서 (배포 후, 가능하면 다른 네트워크)
 
@@ -44,3 +45,6 @@ pass 조건: 자동 전부 + 사람 12개. 제출 전(09-20) 시크릿 창에서
 - 배포 직후 세 건 수정(§6 "P9 배포"): 0.0.0.0 바인드, runner의 project.created 폴백, 상대 repo_root clone 경로,
   runner_error → goal.cancelled. 그 사이 만든 showcase Goal 2개는 cancelled로 남아 있다(콘솔 고정 제외).
 - systemd는 아직 미적용 — `deploy/demo_up.sh`로 떠 있다. 옮길 때: `deploy/demo_down.sh` → `sudo systemctl enable --now …`.
+- reaper 경쟁 발견·수정(§6 P9 배포 (6)): 정상 종료한 워커를 `worker_died`로 오판 → `REAP_DEAD_GRACE_S=60`. control plane만 재시작(19:23).
+- 남은 사용자 단계: GitHub App 웹훅 URL을 `https://foreman.antaewoo.com/webhooks/github`로(지금은 smee라 **PR 머지가 플랫폼에 안 들어온다**),
+  PR #10·#11 머지, (선택) systemd 전환·`OLLAMA_KEEP_ALIVE`.
