@@ -32,6 +32,15 @@ REQUIRED_EVENTS: frozenset[str] = frozenset(
 )
 # check_suite는 Checks 권한이 있어야 구독 목록에 보인다. MVP 1은 pr.checks_*가 noop → 선택(경고만)
 OPTIONAL_EVENTS: frozenset[str] = frozenset({"check_suite"})
+PLAN_CATEGORY = "Plans"  # same value as orchestrator.graph.PLAN_CATEGORY
+_DISCUSSIONS_QUERY = """
+query RepoDiscussions($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    hasDiscussionsEnabled
+    discussionCategories(first: 50) { nodes { name } }
+  }
+}
+"""
 _LEVEL = {"read": 1, "write": 2, "admin": 3}
 
 
@@ -170,8 +179,37 @@ async def run_check(settings: Any, http: httpx.AsyncClient, *, repo: str) -> Che
             if ok
             else f"{repo} not accessible (installation has {names}, GET /repos → {r2.status_code})",
         )
+        # 6b) Discussions 켜짐 + 카테고리 Plans (P9): 없으면 Plan Discussion 생성이 실패한다
+        if ok:
+            owner, name = repo.split("/", 1)
+            g = await http.post(
+                "/graphql",
+                headers=inst_headers,
+                json={"query": _DISCUSSIONS_QUERY, "variables": {"owner": owner, "name": name}},
+            )
+            node = (
+                ((g.json().get("data") or {}).get("repository") or {})
+                if g.status_code == 200
+                else {}
+            )
+            enabled = bool(node.get("hasDiscussionsEnabled"))
+            cats = [
+                str(c.get("name"))
+                for c in ((node.get("discussionCategories") or {}).get("nodes") or [])
+            ]
+            if not enabled:
+                report.add(
+                    "discussions", False, "Discussions disabled on the repo (Settings → Features)"
+                )
+            elif PLAN_CATEGORY not in cats:
+                report.add("discussions", False, f"category {PLAN_CATEGORY!r} missing (has {cats})")
+            else:
+                report.add("discussions", True, f"enabled, categories {cats}")
+        else:
+            report.add("discussions", False, "skipped (repo not accessible)")
     else:
         report.add("repo", False, f"{repo}: skipped (no token)")
+        report.add("discussions", False, "skipped (no token)")
 
     # 7) webhook config
     r = await http.get("/app/hook/config", headers=jwt_headers)
