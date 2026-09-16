@@ -122,6 +122,20 @@ async def test_goal_runs_until_plan_approval(
     assert [e.type for e in await events_of(factory, "task.created")] == []
 
 
+# P9 (D-46 확장): 프로젝트 생성 직후(projection 전) Goal을 만들어도 runner가 project.created 이벤트로 repo를 읽는다
+async def test_goal_started_before_project_projection(
+    client: httpx.AsyncClient, pump: Pump, runner: GoalRunner
+) -> None:
+    r = await client.post("/projects", json={"name": "demo", "repo": "org/demo"})
+    pid = str(r.json()["id"])
+    r = await client.post(f"/projects/{pid}/goals", json={"title": "Users API"})
+    assert r.status_code == 202, r.text
+    gid = str(r.json()["id"])
+    await runner.wait_idle()
+    assert runner.errors.get(gid) is None, runner.errors
+    assert runner.is_waiting(gid)
+
+
 # (b) /approve (작성자 = owner) → resume → goal.activated → epic/task 생성
 async def test_approve_resumes_and_creates_tasks(
     client: httpx.AsyncClient,
