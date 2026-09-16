@@ -66,11 +66,12 @@ GitHub에서 PR을 **머지** → Task done. 심사자는 이 showcase로 결과
 
 ## 새 repo 등록 (사용자가 다른 repo로 시험할 때)
 
-1. GitHub에서 repo 생성(비어 있어도 됨). **Discussions 켜기 → 카테고리 `Plans` 만들기**. App이 "All repositories"로
+1. GitHub에서 repo 생성 — **"Add a README file"을 체크**해 기본 브랜치에 커밋이 하나 있게 한다(빈 repo는 PR base가
+   없어 진행 불가, 점검 `content`가 잡는다). **Discussions 켜기 → 카테고리 `Plans` 만들기**. App이 "All repositories"로
    설치돼 있지 않으면 App 설정 → Install → 해당 repo 추가.
 2. 점검(읽기 전용): `uv run python scripts/github_app_check.py --repo AnTaewoo/<repo>` — 전부 `[ok]`.
-3. 비어 있는 repo면 샘플 앱 push: `uv run python scripts/seed_test_repo.py AnTaewoo/<repo>` (Flask + pytest 소형 앱.
-   자기 코드가 있으면 생략. Orchestrator는 파일이 있어야 Plan을 쓴다).
+3. README만 있는 repo에 샘플 앱을 넣으려면: `uv run python scripts/seed_test_repo.py AnTaewoo/<repo>` (Flask + pytest
+   소형 앱. 자기 코드가 있으면 생략).
 4. 프로젝트 등록(데모 모드가 꺼져 있으면 토큰 없이):
    ```
    uv run python scripts/demo_seed.py --repo AnTaewoo/<repo> --owner AnTaewoo --no-showcase

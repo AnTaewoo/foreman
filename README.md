@@ -147,7 +147,7 @@ curl -s "$API/projects/$PID/events?since=0" | jq '.items[].type'                
 1. GitHub App: 권한 Contents/Issues/Pull requests/Discussions **write**, Metadata read; 구독 issue_comment, discussion_comment,
    pull_request, pull_request_review; **Webhook → Active 체크**, URL은 터널 주소, secret 설정.
 2. `.env`: `HITL_GITHUB_APP_ID`, `HITL_GITHUB_APP_PRIVATE_KEY`(개행은 `\n`), `HITL_GITHUB_INSTALLATION_ID`, `HITL_GITHUB_WEBHOOK_SECRET`.
-3. 대상 repo에 Discussions를 켜고 카테고리 **Plans** 생성. App을 그 repo에 설치.
+3. 대상 repo: 기본 브랜치에 **커밋 1개 이상**(GitHub에서 만들 때 "Add a README file" 체크 — 빈 repo는 PR의 base가 없어 진행 불가), Discussions 켜고 카테고리 **Plans** 생성, App을 그 repo에 설치.
 
 ```bash
 uv run python scripts/github_app_check.py --repo owner/name        # 읽기 전용 점검 — 전부 [ok] 이어야 진행
