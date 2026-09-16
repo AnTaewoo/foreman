@@ -195,3 +195,16 @@ def test_prices_from_env() -> None:
 
     assert entrypoint.prices_from_env({"WORKER_LLM_PRICE_IN_PER_MTOK": "2.5"}) == Prices(2.5, 0.0)
     assert entrypoint.prices_from_env({}) == Prices()
+
+
+# P8.2: WORKER_WORKDIR 로 clone 위치를 정한다(호스트 uid로 실행될 때 /work가 안 열려 있을 수 있음);
+# git은 HOME 없이도 돈다(GIT_CONFIG_NOSYSTEM, safe.directory=*)
+def test_workdir_from_env_and_git_env(tmp_path: Path, worktree: Path, remote: Path) -> None:
+    events_file = tmp_path / "events.jsonl"
+    env = env_for(remote, events_file) | {"WORKER_WORKDIR": str(tmp_path / "wd")}
+    env.pop("HOME", None)
+    code = entrypoint.main(["01TASK", "--publish-file", str(events_file)], env=env)
+    assert code == 0 and (tmp_path / "wd" / "01RUN" / "repo").is_dir()
+    genv = entrypoint.git_env(env)
+    assert genv["GIT_CONFIG_NOSYSTEM"] == "1" and genv["GIT_CONFIG_COUNT"] == "1"
+    assert genv["GIT_CONFIG_KEY_0"] == "safe.directory" and genv["GIT_CONFIG_VALUE_0"] == "*"
