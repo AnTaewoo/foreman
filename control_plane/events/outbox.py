@@ -22,6 +22,15 @@ from control_plane.store import models as m
 log = structlog.get_logger(__name__)
 
 
+async def mark_published_by_id(session: AsyncSession, event_id: str, stream_id: str) -> None:
+    """이미 스트림에 있는(워커가 XADD한) 이벤트를 발행 완료로 표시 — D-47, ingest가 쓴다."""
+    await session.execute(
+        update(m.Event)
+        .where(m.Event.id == event_id)
+        .values(stream_id=stream_id, published_at=datetime.now(UTC))
+    )
+
+
 class OutboxRelay:
     def __init__(
         self,

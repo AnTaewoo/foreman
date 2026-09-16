@@ -21,6 +21,7 @@ from ulid import ULID
 
 from control_plane.events.bus import Delivery, EventBus
 from control_plane.events.chain import append_signed
+from control_plane.events.outbox import mark_published_by_id
 from control_plane.events.projection import Projection
 from control_plane.events.schema import UNCHAINED, Actor, EntityType, Event, EventType, Subject
 from control_plane.scheduler.launcher import LaunchError, LaunchSpec, WorkerLauncher
@@ -114,14 +115,18 @@ class Scheduler:
     async def handle(self, delivery: Delivery) -> None:
         event = delivery.event
         if event.signature is None:
-            await self.ingest(event)
+            await self.ingest(event, message_id=delivery.message_id)
         if event.type in RELEASERS:
             self._release(event)
         if event.type in TRIGGERS:
             await self.tick(event.project_id)
 
-    async def ingest(self, event: Event) -> None:
-        """워커 발 미서명 이벤트 → append_signed(멱등) + projection 적용."""
+    async def ingest(self, event: Event, *, message_id: str = "") -> None:
+        """워커 발 미서명 이벤트 → append_signed(멱등) + projection 적용.
+
+        D-47 (F-11): 이미 스트림에 있으므로 ``published_at``·``stream_id``(워커 메시지 id)를
+        바로 채워 relay가 서명본을 다시 XADD 하지 않게 한다.
+        """
         async with self._factory() as session:
             if event.type in UNCHAINED:
                 exists = await session.scalar(
@@ -132,6 +137,8 @@ class Scheduler:
             signed = event
             if exists is None:
                 signed = await append_signed(session, event)
+                if event.type not in UNCHAINED:  # D-47: relay가 다시 XADD 하지 않게
+                    await mark_published_by_id(session, event.id, message_id or "ingested")
                 await session.commit()
         if self._projection is not None:
             # PC-6: task.assigned가 아직 projection 전이면 순서 역전 → 예외 대신 D-30 재시도 큐

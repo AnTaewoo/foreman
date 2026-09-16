@@ -521,7 +521,7 @@ async def test_recover_orphans_on_startup(
     assert (await fresh.task("T1")).status in (TaskStatus.READY, TaskStatus.ASSIGNED)
 
 
-# ------------------------------------------ P8.5 (D-47, F-11): ingest한 워커 이벤트는 relay가 다시 XADD 안 함
+# ------------------------------ P8.5 (D-47, F-11): ingest한 워커 이벤트는 relay가 다시 XADD 안 함
 async def test_ingest_marks_published_no_duplicate_xadd(
     factory: async_sessionmaker[AsyncSession], redis: Redis
 ) -> None:
