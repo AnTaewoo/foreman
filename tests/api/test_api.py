@@ -449,7 +449,7 @@ async def test_repo_check_real_mode_runs_app_check(
             return None
 
     monkeypatch.setattr(projects_mod, "run_check", fake_run_check)
-    monkeypatch.setattr(projects_mod, "make_installation_http", lambda settings: FakeHttp())
+    monkeypatch.setattr(projects_mod, "github_http", lambda: FakeHttp())
     app1 = create_app(Settings(_env_file=None, dry_run=False), factory=factory, redis=redis)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://t") as c:
         r = await c.get("/projects/check", params={"repo": "acme/demo"})

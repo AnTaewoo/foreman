@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -24,8 +25,8 @@ from control_plane.api.deps import (
 )
 from control_plane.events.schema import Event, EventType, Subject
 from control_plane.store import models as m
-from github_adapter import make_installation_http
 from github_adapter.app_check import run_check
+from github_adapter.client import GITHUB_API_BASE_URL
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -53,6 +54,11 @@ class ProjectOut(BaseModel):
 
 class ProjectList(BaseModel):
     items: list[ProjectOut]
+
+
+def github_http() -> httpx.AsyncClient:
+    """`run_check`용 GitHub API client. auth 없음 — 테스트가 monkeypatch 한다."""
+    return httpx.AsyncClient(base_url=GITHUB_API_BASE_URL, timeout=30)
 
 
 class CheckItemOut(BaseModel):
@@ -144,7 +150,9 @@ async def check_repo(repo: str, state: StateDep) -> RepoCheckOut:
                 )
             ],
         )
-    async with make_installation_http(settings) as http:
+    async with (
+        github_http() as http
+    ):  # run_check가 JWT·installation 토큰을 직접 만든다 (인증 없는 client)
         report = await run_check(settings, http, repo=repo)
     return RepoCheckOut(
         repo=repo,
