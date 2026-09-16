@@ -50,7 +50,7 @@
   }
   const badge = (s) => `<span class="badge ${esc(s)}">${esc(s)}</span>`;
   const link = (url, text) => url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(text)} ↗</a>` : '<span class="muted">—</span>';
-  const isShowcase = (g) => /^\[showcase\]/i.test(g.title || "");
+  const isShowcase = (g) => /^\[showcase\]/i.test(g.title || "") && g.status !== "cancelled"; // 취소된 showcase는 고정 안 함
   const ts = (iso) => { try { return new Date(iso).toLocaleTimeString("ko-KR", { hour12: false }); } catch (_) { return iso; } };
 
   // ---- load ------------------------------------------------------------
