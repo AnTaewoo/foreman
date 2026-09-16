@@ -67,7 +67,7 @@
 
 ## 4. 등급별 Goal 예시
 
-**A. 된다** (검증됨 또는 같은 형태)
+**A. 된다** (검증됨 또는 같은 형태 — 데모·발표는 이 등급 안에서: 공유 파일 없이 모듈당 Task 하나, 3개 이하)
 - `Add a maths helpers module with add and mul functions and tests`
 - `Add a greet_all(names) helper in src/app/utils.py with tests`
 - `Add GET /health returning {"status": "ok"} with a test`

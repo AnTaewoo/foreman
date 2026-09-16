@@ -33,6 +33,7 @@ class EventType(StrEnum):
     GOAL_CREATED = "goal.created"
     GOAL_PLAN_PROPOSED = "goal.plan_proposed"
     GOAL_ACTIVATED = "goal.activated"
+    GOAL_DECOMPOSED = "goal.decomposed"  # D-56 (additive): 분해 결과 기록
     GOAL_BLOCKED = "goal.blocked"
     GOAL_COMPLETED = "goal.completed"
     GOAL_CANCELLED = "goal.cancelled"
@@ -235,6 +236,14 @@ class ProjectUpdatedPayload(TypedDict):
     by: NotRequired[str]
 
 
+class GoalDecomposedPayload(TypedDict):
+    """D-56: 분해 결과 기록 — Task 제목, 정규화 변경 목록, 원문 꼬리 (관측용, projection noop)."""
+
+    tasks: list[str]
+    changes: NotRequired[list[str]]
+    raw_tail: NotRequired[str]
+
+
 class GoalCreatedPayload(TypedDict):
     title: str
     description: str
@@ -344,6 +353,7 @@ PAYLOAD_TYPES: dict[EventType, type[Any]] = {  # Any: TypedDict 클래스들
     EventType.PROJECT_UPDATED: ProjectUpdatedPayload,
     EventType.GOAL_CREATED: GoalCreatedPayload,
     EventType.GOAL_PLAN_PROPOSED: GoalPlanProposedPayload,
+    EventType.GOAL_DECOMPOSED: GoalDecomposedPayload,
     EventType.EPIC_CREATED: EpicCreatedPayload,
     EventType.TASK_CREATED: TaskCreatedPayload,
     EventType.TASK_ASSIGNED: TaskAssignedPayload,

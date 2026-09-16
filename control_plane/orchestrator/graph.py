@@ -32,7 +32,7 @@ from control_plane.orchestrator.context import build_summary, render_summary
 from control_plane.orchestrator.drafts import (
     DecomposeError,
     PlanDraft,
-    decompose_with_retry,
+    decompose_with_retry_full,
     missing_plan_sections,
     render_prompt,
     system_prompt,
@@ -207,7 +207,7 @@ def build_graph(
         working: OrchestratorState = {**state, "last_event_id": activated.id}
         goal_text = f"{state['goal_title']}\n\n{state.get('goal_description', '')}".strip()
         try:
-            result = await decompose_with_retry(
+            result, changes, raw_tail = await decompose_with_retry_full(
                 deps.provider,
                 repo_summary=state["repo_summary"],
                 plan=state["plan"],
@@ -220,11 +220,23 @@ def build_graph(
                 _event(working, EventType.GOAL_BLOCKED, {"reason": f"decompose: {exc}"})
             )
             return {"error": f"decompose failed: {exc}", "last_event_id": blocked.id}
+        # D-56: 가장 많이 실패하는 단계의 산출물을 이벤트로 보존 (원문 꼬리·정규화 기록·Task 제목)
+        decomposed = await deps.publish(
+            _event(
+                working,
+                EventType.GOAL_DECOMPOSED,
+                {
+                    "tasks": [t.title for t in result.tasks],
+                    "changes": changes,
+                    "raw_tail": raw_tail,
+                },
+            )
+        )
         return {
             "epics": [e.model_dump() for e in result.epics],
             "tasks": [t.model_dump() for t in result.tasks],
             "error": None,
-            "last_event_id": activated.id,
+            "last_event_id": decomposed.id,
         }
 
     def route_after_decompose(state: OrchestratorState) -> str:

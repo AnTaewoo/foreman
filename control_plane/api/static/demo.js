@@ -3,10 +3,11 @@
  * WS 이벤트가 오면 500ms 디바운스로 goal/tasks를 다시 읽는다(읽기는 projection 반영 후). */
 (() => {
   const $ = (id) => document.getElementById(id);
+  // 등급 A(boundary.md): 공유 파일 없이 모듈당 Task 하나, 3개 이하 — 지금 구조가 안정적으로 완주하는 형태
   const EXAMPLES = [
-    "Add a /users CRUD endpoint with tests",
     "Add a maths helpers module with add and mul functions and tests",
-    "Add input validation for POST /users and return 400 on bad payloads, with tests",
+    "Add a slugify(text) utility module that lowercases and hyphenates, with tests",
+    "Add a greet(name) helper module returning 'Hello, <name>!' with tests",
   ];
   const state = { demo: { user_id: "judge" }, project: null, goals: [], goalId: null, lastSeq: 0, ws: null, timer: null };
 

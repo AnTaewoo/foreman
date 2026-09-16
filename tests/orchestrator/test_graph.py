@@ -222,7 +222,7 @@ async def test_resume_approved() -> None:
     assert sink.types() == [
         "goal.plan_proposed",
         "goal.activated",
-        "goal.decomposed",  # D-56: 분해 원문 꼬리·정규화 기록·Task 제목 — 가장 많이 실패하는 단계를 관측
+        "goal.decomposed",  # D-56: 분해 원문 꼬리·정규화 기록·Task 제목 보존
         "epic.created",
         "task.created",
         "task.created",

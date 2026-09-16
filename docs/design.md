@@ -223,7 +223,7 @@ Event  (append-only)
 
 | 도메인 | 이벤트 |
 |---|---|
-| goal | goal.created, goal.plan_proposed, goal.activated, goal.blocked, goal.completed, goal.cancelled |
+| goal | goal.created, goal.plan_proposed, goal.activated, goal.decomposed (D-56, 분해 기록), goal.blocked, goal.completed, goal.cancelled |
 | epic | epic.created, epic.activated, epic.completed |
 | task | task.created, task.assigned, task.started, task.blocked, task.completed, task.failed, task.retried, task.escalated, task.cancelled |
 | run | run.started, run.tool_called¹, run.tool_denied, run.artifact_produced, run.finished |

@@ -484,7 +484,7 @@ def normalize_tasks(result: DecomposeResult) -> tuple[DecomposeResult, list[str]
     return out, [*n1, *n2]
 
 
-async def decompose_with_retry(
+async def decompose_with_retry_full(
     provider: ModelProvider,
     *,
     repo_summary: str,
@@ -493,8 +493,8 @@ async def decompose_with_retry(
     model: str | None = None,
     attempts: int = 2,
     min_tasks: int = 1,
-) -> DecomposeResult:
-    """LLM 분해 → 검증. 실패하면 이전 응답 + 오류를 붙여 재요청 (최대 ``attempts``회).
+) -> tuple[DecomposeResult, list[str], str]:
+    """LLM 분해 → 검증 → 정규화. (결과, 정규화 기록, 원문 꼬리). 실패하면 재요청(최대 attempts회).
 
     ``min_tasks`` (X.2): 그보다 적게 쪼개면 오류를 붙여 재요청 — 작은 모델의 뭉뚱그리기 방지.
     """
@@ -557,13 +557,14 @@ async def decompose_with_retry(
             if changes:
                 log.warning("decompose.normalized", changes=changes)
             # 4차 라이브 #3: 성공 시에도 원문 꼬리를 남긴다 (라이브에서 규칙이 안 먹은 원인 추적용)
+            raw_tail = (completion.text or "")[-1500:]
             log.info(
                 "decompose.result",
                 tasks=[t.title for t in normalized.tasks],
                 changes=changes,
-                raw=(completion.text or "")[-1500:],
+                raw=raw_tail,
             )
-            return normalized
+            return normalized, changes, raw_tail
         messages = [
             *messages,
             Message(role="assistant", content=completion.text or "(empty)"),
@@ -579,6 +580,29 @@ async def decompose_with_retry(
     raise DecomposeError(
         f"decompose failed after {attempts} attempts: {last_error}\nraw: {(last_raw or '')[-1500:]}"
     )
+
+
+async def decompose_with_retry(
+    provider: ModelProvider,
+    *,
+    repo_summary: str,
+    plan: str,
+    goal: str,
+    model: str | None = None,
+    attempts: int = 2,
+    min_tasks: int = 1,
+) -> DecomposeResult:
+    """``decompose_with_retry_full``의 결과만 (스크립트·테스트용)."""
+    result, _, _ = await decompose_with_retry_full(
+        provider,
+        repo_summary=repo_summary,
+        plan=plan,
+        goal=goal,
+        model=model,
+        attempts=attempts,
+        min_tasks=min_tasks,
+    )
+    return result
 
 
 def _short_error(exc: Exception) -> str:
