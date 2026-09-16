@@ -222,6 +222,7 @@ async def test_resume_approved() -> None:
     assert sink.types() == [
         "goal.plan_proposed",
         "goal.activated",
+        "goal.decomposed",  # D-56: 분해 원문 꼬리·정규화 기록·Task 제목 — 가장 많이 실패하는 단계를 관측
         "epic.created",
         "task.created",
         "task.created",
@@ -230,6 +231,9 @@ async def test_resume_approved() -> None:
     for prev, cur in zip(sink.events, sink.events[1:], strict=False):
         assert cur.causation_id == prev.id
     assert sink.events[1].payload == {"by": "alice"}
+    decomposed = sink.events[2].payload
+    assert decomposed["tasks"] == ["Add users route", "Add users validation"]
+    assert isinstance(decomposed["changes"], list) and '"tasks"' in decomposed["raw_tail"]
     assert [t["title"] for t in out["tasks"]] == ["Add users route", "Add users validation"]
     assert out["epics"][0]["title"] == "Users API"
     assert out["issues"] == [

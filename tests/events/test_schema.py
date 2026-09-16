@@ -27,11 +27,11 @@ from control_plane.events.schema import (
     verify_chain,
 )
 
-# 설계 §4.2 표 (D-19·D-27·D-31 반영) — 44개. 이 목록이 진실이고 Enum이 여기에 맞춰야 한다.
+# 설계 §4.2 표 (D-19·D-27·D-31·D-56 반영) — 45개. 이 목록이 진실이고 Enum이 여기에 맞춰야 한다.
 DESIGN_EVENT_NAMES: list[str] = [
-    # goal (6)
-    "goal.created", "goal.plan_proposed", "goal.activated", "goal.blocked", "goal.completed",
-    "goal.cancelled",
+    # goal (7 = 6 + goal.decomposed, D-56: 분해 원문·정규화 기록 보존)
+    "goal.created", "goal.plan_proposed", "goal.activated", "goal.decomposed", "goal.blocked",
+    "goal.completed", "goal.cancelled",
     # epic (3, D-27)
     "epic.created", "epic.activated", "epic.completed",
     # task (9 = 8 + task.cancelled, D-27)
@@ -69,8 +69,8 @@ def _event(**overrides: Any) -> Event:
 
 # ---------------------------------------------------------------- (a) EventType 44개 양방향
 def test_event_type_matches_design_table_exactly() -> None:
-    assert len(DESIGN_EVENT_NAMES) == 44
-    assert len(set(DESIGN_EVENT_NAMES)) == 44
+    assert len(DESIGN_EVENT_NAMES) == 45
+    assert len(set(DESIGN_EVENT_NAMES)) == 45
     enum_values = {e.value for e in EventType}
     assert enum_values - set(DESIGN_EVENT_NAMES) == set(), "설계에 없는 타입"
     assert set(DESIGN_EVENT_NAMES) - enum_values == set(), "Enum에 빠진 타입"

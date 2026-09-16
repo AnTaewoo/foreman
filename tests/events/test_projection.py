@@ -493,6 +493,7 @@ def test_all_event_types_have_handlers_and_unused_are_noop() -> None:
         E.CONTROL_EMERGENCY_STOP,
         E.TASK_ESCALATED,
         E.RUN_ARTIFACT_PRODUCED,
+        E.GOAL_DECOMPOSED,  # D-56: 기록용, projection은 noop
     ):
         assert HANDLERS[t] is noop, t
         assert HANDLERS[t].__name__ == "noop"
