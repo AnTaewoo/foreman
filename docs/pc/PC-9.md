@@ -58,3 +58,5 @@ pass 조건: 자동 전부 + 사람 12개. 제출 전(09-20) 시크릿 창에서
   (§6 "P9 버그 #2~#8"). 대상 repo `foreman_demo`는 커밋 0개였다 — 점검에 `content` 항목 추가. 재시험 전 repo에 커밋이 필요.
 - 23:3x KST 2차 라이브(다른 세션): 머지 → 웹훅 2초 → 의존 Task 자동 배정은 정상. 후속 PR #10·#11 충돌(옛 base) + clone의
   origin에 토큰 잔류 → §6 "P9 버그 #9~#10"으로 수정·배포(51ecc98). PR #10·#11은 닫는 것을 권함(중복 Task 산출물).
+- 00:2x KST 3차 라이브(다른 세션, foreman_calculator): Task #3 "Install Flask"가 requirements.txt로 needs_decision → Goal 사망.
+  §6 "P9 3차 라이브" #1~#3 수정·배포(1b2397b). "Task 완료 정의 = 인수 테스트" 제안은 §6 결정 요청으로 올림(D-55 후보).

@@ -45,7 +45,7 @@
 | 모델 컨텍스트 | Ollama 기본 **4,096 토큰**(provider가 num_ctx를 안 정함) | `agents/llm/ollama.py`, `ollama ps` | 요약+프롬프트가 길면 조용히 잘린다. Anthropic이면 해당 없음 |
 | 실행 가능한 명령 | `pytest`, `python -m pytest`, `ruff`, `mypy`, `npm test`, `npm run test`, `make`, `uv run pytest`만. 파이프·리다이렉트 금지, 600초. `PYTHONPATH`=repo 루트 | `agents/tools/shell.py` | 테스트가 이 명령 하나로 돌아야 한다. pyproject 없는 repo도 루트 모듈 import 가능 |
 | 워커 실행 환경 | foreman 자체 venv(`uv sync --all-groups`; `fixtures` 그룹 = flask). **대상 repo 의존성은 설치하지 않는다** | `worker/Dockerfile` | stdlib + pytest + flask(+foreman 의존성)로 돌아가는 코드만 |
-| 의존성 변경 | `pyproject.toml`/`requirements*`/`package.json`/락 파일을 건드리면 `needs_decision` → Issue 코멘트 + `task.blocked` | `agents/coding.py` | **MVP 1엔 재개 경로가 없다**(`task.retried` 미발행) → 그 Task와 후속은 멈춤 (C) |
+| 의존성 변경 | `pyproject.toml`/`requirements*`/`package.json`/락 파일을 건드리면 `needs_decision` → Issue 코멘트(control plane) + `task.blocked`. 분해는 의존성 파일·설치 Task를 만들지 않고, Plan은 워커 환경(flask·pytest 설치됨)을 안다 | `agents/coding.py`, `drafts.py` | **MVP 1엔 재개 경로가 없다**(`task.retried` 미발행) → 그 Task와 후속은 멈춤 (C) |
 | 쓰기 범위 | Task의 `owned_paths` 밖 쓰기는 툴이 거부 → `scope_violation` 실패 | `agents/tools/fs.py` | 모델이 분해 때 경로를 빠뜨리면 3회 실패 → blocked. PC-8·showcase의 주 실패 원인 |
 | 재시도·시간 | run 최대 3회 × run 안의 편집→테스트 반복 3회, 워커 타임아웃 45분(+5분 정리), Goal당 Task ≥ 3 | `store/models.py`, `scheduler.py`, `agents/coding.py` | 3 run 뒤 blocked. 후속 Task는 **영원히 대기**(데드락 감지는 MVP 2). 실패마다 Issue 코멘트에 테스트 출력 꼬리 |
 | 병렬 | owned_paths가 겹치면 직렬, 동시 워커 = `HITL_SCHEDULER_MAX_WORKERS`(GPU 1개면 2가 현실적) | `scheduler.py` | 라우트가 `main.py` 한 파일이면 전 Task 직렬 → 첫 실패가 전부를 막는다 |
@@ -63,7 +63,7 @@
 3. **기존 객체 재사용 실패** — Flask 앱의 전역 `store`를 import하지 않고 새 `UserStore()`를 만들어 테스트만 통과/실패 반복(14b가 지시를 3회 무시).
 4. **중복 Task** — 선행 Task가 이미 구현한 함수를 "정의"하는 Task가 diff 0으로 PR만 생김(무해, 머지 필요).
 5. **첫 Task 실패 → 나머지 대기** — 같은 파일을 공유해 직렬인 경우.
-6. **의존성 파일 변경** → blocked(재개 없음).
+6. **의존성 파일 변경** → blocked(재개 없음). *(2026-09-17 완화: 분해가 의존성 파일·"Install X" Task를 제거하고 환경 계약을 Plan에 준다)*
 
 ## 4. 등급별 Goal 예시
 
