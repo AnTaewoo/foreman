@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import pytest
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -409,3 +411,49 @@ async def test_goal_list_plan_markdown_and_links(
     assert (
         await client.get(f"/projects/{pid}/goals/00000000000000000000000000")
     ).status_code == 404
+
+
+# P9 (콘솔 repo 연결): GET /projects/check?repo=owner/name — 읽기 전용 App 점검을 콘솔에서 미리 본다
+async def test_repo_check_dry_and_bad_format(client: httpx.AsyncClient) -> None:
+    r = await client.get("/projects/check", params={"repo": "acme/demo"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["repo"] == "acme/demo" and body["dry_run"] is True and body["ok"] is False
+    assert body["items"][0]["name"] == "dry_run" and "HITL_DRY_RUN" in body["items"][0]["detail"]
+    assert (await client.get("/projects/check", params={"repo": "not a repo"})).status_code == 400
+    assert (await client.get("/projects/check", params={"repo": REPO})).status_code == 400
+
+
+async def test_repo_check_real_mode_runs_app_check(
+    factory: async_sessionmaker[AsyncSession], redis: Redis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from control_plane.api import projects as projects_mod
+    from control_plane.api.app import create_app
+    from control_plane.config import Settings
+    from github_adapter.app_check import CheckReport
+
+    seen: list[str] = []
+
+    async def fake_run_check(settings: Any, http: Any, *, repo: str) -> CheckReport:
+        seen.append(repo)
+        rep = CheckReport()
+        rep.add("auth", True, "app ok")
+        rep.add("discussions", False, "category 'Plans' not found")
+        return rep
+
+    class FakeHttp:
+        async def __aenter__(self) -> FakeHttp:
+            return self
+
+        async def __aexit__(self, *a: Any) -> None:
+            return None
+
+    monkeypatch.setattr(projects_mod, "run_check", fake_run_check)
+    monkeypatch.setattr(projects_mod, "make_installation_http", lambda settings: FakeHttp())
+    app1 = create_app(Settings(_env_file=None, dry_run=False), factory=factory, redis=redis)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://t") as c:
+        r = await c.get("/projects/check", params={"repo": "acme/demo"})
+    assert r.status_code == 200 and seen == ["acme/demo"]
+    body = r.json()
+    assert body["dry_run"] is False and body["ok"] is False
+    assert [(i["name"], i["ok"]) for i in body["items"]] == [("auth", True), ("discussions", False)]
