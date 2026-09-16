@@ -71,6 +71,21 @@ GitHub에서 PR을 **머지** → Task done. 심사자는 이 showcase로 결과
 
 심사 기간(제출 ~ +7일)에는 cleanup·DB 초기화를 **하지 않는다**(DB↔repo 불일치). 종료 후 6번 + cleanup을 한 번에.
 
+## 새 repo 등록 (사용자가 다른 repo로 시험할 때)
+
+1. GitHub에서 repo 생성(비어 있어도 됨). **Discussions 켜기 → 카테고리 `Plans` 만들기**. App이 "All repositories"로
+   설치돼 있지 않으면 App 설정 → Install → 해당 repo 추가.
+2. 점검(읽기 전용): `uv run python scripts/github_app_check.py --repo AnTaewoo/<repo>` — 전부 `[ok]`.
+3. 비어 있는 repo면 샘플 앱 push: `uv run python scripts/seed_test_repo.py AnTaewoo/<repo>` (Flask + pytest 소형 앱.
+   자기 코드가 있으면 생략. Orchestrator는 파일이 있어야 Plan을 쓴다).
+4. 프로젝트 등록(관리 토큰):
+   ```
+   export $(grep ^HITL_ADMIN_TOKEN= .env)
+   uv run python scripts/demo_seed.py --repo AnTaewoo/<repo> --owner AnTaewoo --no-showcase
+   ```
+   → 콘솔 상단 "프로젝트" 선택 상자(둘 이상일 때) 또는 `https://foreman.antaewoo.com/?project=<id>`.
+5. Goal 생성 → Plan 승인 → Issue → PR. PR 머지 → Task done은 **App 웹훅 URL**이 이 서버를 가리켜야 들어온다.
+
 ## 운영
 
 - 로그: `journalctl -u foreman-api -f`, `journalctl -u foreman-control-plane -f` (json). 토큰·키는 로그에 없다.

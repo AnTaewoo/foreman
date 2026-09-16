@@ -61,6 +61,7 @@
       ? `데모 모드: 프로젝트당 동시에 진행되는 Goal ${state.demo.max_running_goals}개, 시간당 ${state.demo.goals_per_hour}개까지. 승인자 계정 "${state.demo.user_id}"로 동작합니다.`
       : `승인자 계정 "${state.demo.user_id}"로 동작합니다.`;
   }
+  // 프로젝트 선택: ?project=<id> > 마지막 선택(localStorage) > 첫 항목. 둘 이상이면 <select> 표시
   async function loadProject() {
     const { items } = await api("/projects");
     if (!items.length) {
@@ -68,11 +69,24 @@
       $("goal-submit").disabled = true;
       return;
     }
-    state.project = items[0];
+    const wanted = new URLSearchParams(location.search).get("project") || safeGet("foreman.project");
+    state.project = items.find((p) => p.id === wanted) || items[0];
     $("project-name").textContent = `· ${state.project.name} (${state.project.repo})`;
     const rl = $("repo-link");
-    if (state.project.repo_url) rl.href = state.project.repo_url; else rl.hidden = true;
+    if (state.project.repo_url) { rl.href = state.project.repo_url; rl.hidden = false; } else rl.hidden = true;
+    const sel = $("project"); sel.innerHTML = "";
+    for (const p of items) {
+      const o = document.createElement("option"); o.value = p.id; o.textContent = `${p.name} — ${p.repo}`;
+      o.selected = p.id === state.project.id; sel.appendChild(o);
+    }
+    $("project-label").hidden = items.length < 2;
+    sel.onchange = () => {
+      safeSet("foreman.project", sel.value);
+      const u = new URL(location.href); u.searchParams.set("project", sel.value); location.href = u.toString();
+    };
   }
+  function safeGet(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }
+  function safeSet(k, v) { try { localStorage.setItem(k, v); } catch (_) { /* 무시 */ } }
   async function loadGoals() {
     if (!state.project) return;
     const { items } = await api(`/projects/${state.project.id}/goals`);
