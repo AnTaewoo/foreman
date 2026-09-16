@@ -176,6 +176,28 @@ async def test_runs_to_interrupt() -> None:
     assert "Add users endpoint" in provider.calls[0].messages[0].content
 
 
+# P9 발견: Discussion 제목이 "Plan #<rev>: <goal title>"뿐이라 같은 제목의 Goal(심사자들이 같은 예시 버튼)이
+# 이전 Goal의 Discussion을 재사용했다(멱등 = 제목). 제목에 Goal 짧은 id를 넣어 Goal마다 유일하게 한다
+async def test_plan_discussion_title_is_unique_per_goal() -> None:
+    deps1, sink1, _, _ = make([PLAN_JSON])
+    shared = deps1.discussions
+    graph1 = build_graph(deps1, checkpointer=MemorySaver())
+    await graph1.ainvoke(state0(), CFG)
+    deps2, sink2, _, _ = make([PLAN_JSON])
+    deps2.discussions = shared  # 같은 repo의 Discussions
+    graph2 = build_graph(deps2, checkpointer=MemorySaver())
+    s2 = state0()
+    s2["goal_id"] = "G2"
+    await graph2.ainvoke(s2, {"configurable": {"thread_id": "G2"}})
+    n1 = sink1.events[0].payload["plan_discussion_number"]
+    n2 = sink2.events[0].payload["plan_discussion_number"]
+    assert n1 != n2
+    titles = {d["title"] for d in shared.snapshot()["repos"]["org/demo"]["discussions"].values()}
+    assert len(titles) == 2
+    assert any("G1" in t and "Add users endpoint" in t and t.startswith("Plan #1") for t in titles)
+    assert any("G2" in t for t in titles)
+
+
 async def test_plan_retry_once_then_error() -> None:
     deps, sink, provider, _ = make(["garbage", PLAN_JSON])
     graph = build_graph(deps, checkpointer=MemorySaver())
