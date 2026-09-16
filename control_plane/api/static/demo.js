@@ -56,6 +56,7 @@
   // ---- load ------------------------------------------------------------
   async function loadDemo() {
     try { state.demo = await api("/demo"); } catch (_) { /* 데모 모드 아님 */ }
+    $("connect-token").hidden = !state.demo.demo_mode;
     const n = $("demo-note");
     n.textContent = state.demo.demo_mode
       ? `데모 모드: 프로젝트당 동시에 진행되는 Goal ${state.demo.max_running_goals}개, 시간당 ${state.demo.goals_per_hour}개까지. 승인자 계정 "${state.demo.user_id}"로 동작합니다.`
@@ -197,6 +198,38 @@
     try { await api(`/projects/${state.project.id}/goals/${state.goalId}/reject`, { method: "POST", body: { reason: $("reject-reason").value } }); toast("거절했습니다."); refreshSoon(); }
     catch (e) { toast(e.message); }
   };
+  // ---- GitHub repo 연결 (POST /projects) + 사전 점검 (GET /projects/check) ------------------
+  function renderCheck(body) {
+    const ul = $("connect-check"); ul.innerHTML = "";
+    for (const it of body.items) {
+      const li = document.createElement("li"); li.className = it.ok ? "ok" : "bad";
+      li.textContent = `${it.name}: ${it.detail}`; ul.appendChild(li);
+    }
+    return body.ok;
+  }
+  $("connect-check-btn").onclick = async () => {
+    const repo = $("connect-repo").value.trim(); if (!repo) return;
+    $("connect-check-btn").disabled = true;
+    try { const ok = renderCheck(await api(`/projects/check?repo=${encodeURIComponent(repo)}`)); toast(ok ? "점검 통과 — 연결할 수 있습니다." : "점검 실패 항목이 있습니다."); }
+    catch (e) { toast(e.message); } finally { $("connect-check-btn").disabled = false; }
+  };
+  $("connect-form").onsubmit = async (ev) => {
+    ev.preventDefault();
+    const repo = $("connect-repo").value.trim(); if (!repo) return;
+    const owner = repo.includes("/") ? repo.split("/")[0] : state.demo.user_id;
+    const members = [{ user_id: owner, role: "owner" }];
+    if (owner !== state.demo.user_id) members.push({ user_id: state.demo.user_id, role: "approver" });
+    const headers = {}; const tok = $("connect-token").value.trim(); if (tok) headers["X-Admin-Token"] = tok;
+    $("connect-submit").disabled = true;
+    try {
+      const p = await api("/projects", { method: "POST", headers, body: {
+        name: $("connect-name").value.trim() || repo.split("/").pop(),
+        repo, default_branch: $("connect-branch").value.trim() || "main", members } });
+      safeSet("foreman.project", p.id);
+      const u = new URL(location.href); u.searchParams.set("project", p.id); location.href = u.toString();
+    } catch (e) { toast(e.message); } finally { $("connect-submit").disabled = false; }
+  };
+
   for (const ex of EXAMPLES) {
     const b = document.createElement("button"); b.type = "button"; b.textContent = ex;
     b.onclick = () => { $("goal-title").value = ex; };

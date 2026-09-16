@@ -36,6 +36,23 @@
     <section class="col">
       <h2>Goals <span class="muted" id="project-name"></span></h2>
       <label class="small muted" id="project-label" hidden>프로젝트 <select id="project"></select></label>
+      <details id="connect" class="connect">
+        <summary>GitHub repo 연결</summary>
+        <form id="connect-form">
+          <input id="connect-repo" placeholder="owner/name (예: AnTaewoo/my-repo)" required>
+          <div class="row">
+            <input id="connect-name" placeholder="프로젝트 이름 (비우면 repo 이름)">
+            <input id="connect-branch" placeholder="기본 브랜치" value="main">
+          </div>
+          <input id="connect-token" placeholder="관리 토큰 (데모 모드일 때만)" hidden>
+          <div class="row">
+            <button type="button" id="connect-check-btn" class="secondary">점검</button>
+            <button type="submit" id="connect-submit">연결</button>
+          </div>
+          <ul id="connect-check" class="check"></ul>
+          <p class="small muted">repo에 Discussions를 켜고 카테고리 <b>Plans</b>가 있어야 하며 GitHub App이 설치돼 있어야 합니다. "점검"이 전부 ok면 연결하세요.</p>
+        </form>
+      </details>
       <form id="goal-form">
         <div class="examples" id="examples"></div>
         <input id="goal-title" name="title" maxlength="300" placeholder="Goal (영어 한 문장)" required>

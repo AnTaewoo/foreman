@@ -12,6 +12,7 @@ from ulid import ULID
 
 from control_plane.api.demo_guard import AdminDep
 from control_plane.api.deps import (
+    _OWNER_NAME,
     StateDep,
     UserDep,
     find_project,
@@ -23,6 +24,8 @@ from control_plane.api.deps import (
 )
 from control_plane.events.schema import Event, EventType, Subject
 from control_plane.store import models as m
+from github_adapter import make_installation_http
+from github_adapter.app_check import run_check
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -50,6 +53,21 @@ class ProjectOut(BaseModel):
 
 class ProjectList(BaseModel):
     items: list[ProjectOut]
+
+
+class CheckItemOut(BaseModel):
+    name: str
+    ok: bool
+    detail: str
+
+
+class RepoCheckOut(BaseModel):
+    """`GET /projects/check?repo=owner/name` — 연결 전 읽기 전용 App 점검 (P9 콘솔)."""
+
+    repo: str
+    dry_run: bool
+    ok: bool
+    items: list[CheckItemOut]
 
 
 @router.get("")
@@ -103,6 +121,36 @@ async def create_project(body: ProjectIn, state: StateDep, user: UserDep) -> Pro
         repo_url=gh_url(body.repo),
         default_branch=body.default_branch,
         created_at=event.ts,
+    )
+
+
+@router.get("/check")
+async def check_repo(repo: str, state: StateDep) -> RepoCheckOut:
+    """App 인증·설치·권한·웹훅·Discussions(Plans) 점검. 쓰기 없음. `/{project_id}`보다 먼저 선언."""
+    if not _OWNER_NAME.match(repo):
+        raise HTTPException(400, "repo must be owner/name")
+    settings = state.settings
+    if settings.dry_run:
+        return RepoCheckOut(
+            repo=repo,
+            dry_run=True,
+            ok=False,
+            items=[
+                CheckItemOut(
+                    name="dry_run",
+                    ok=False,
+                    detail="HITL_DRY_RUN=true: remote repos are not cloned (D-48) — "
+                    "run with HITL_DRY_RUN=false or use a local path",
+                )
+            ],
+        )
+    async with make_installation_http(settings) as http:
+        report = await run_check(settings, http, repo=repo)
+    return RepoCheckOut(
+        repo=repo,
+        dry_run=False,
+        ok=report.ok,
+        items=[CheckItemOut(name=i.name, ok=i.ok, detail=i.detail) for i in report.items],
     )
 
 

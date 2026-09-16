@@ -43,3 +43,8 @@ tr.spec-row { display:none; } tr.spec-row.open { display:table-row; }
 ul.events { list-style:none; margin:0; padding:0; max-height:280px; overflow:auto; font-size:12px; }
 ul.events li { padding:3px 0; border-bottom:1px dashed var(--line); } ul.events .ts { color:var(--muted); margin-right:6px; }
 .toast { position:fixed; right:16px; bottom:16px; max-width:420px; padding:10px 14px; background:#222; color:#fff; border-radius:6px; box-shadow:0 4px 16px rgba(0,0,0,.25); }
+.connect { margin:8px 0 12px; } .connect summary { cursor:pointer; font-weight:600; }
+.connect form { display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+.row { display:flex; gap:6px; } .row input { flex:1; }
+ul.check { list-style:none; margin:0; padding:0; font-size:12px; }
+ul.check li { padding:2px 0; } ul.check li.ok::before { content:"✔ "; color:var(--ok); } ul.check li.bad::before { content:"✘ "; color:var(--bad); }
