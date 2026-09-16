@@ -457,8 +457,8 @@ async def test_reap_dead_worker_publishes_failed_and_reassigns(
     assert h.scheduler.in_flight == {"T1"}
     run1 = h.launcher.specs[0].run_id
     worker1 = f"fake-{run1}"
-    # 워커가 아무 이벤트도 못 내고 죽음 (F-5a 상황). P9 배포 발견: 컨테이너는 run.finished를 XADD 한 뒤
-    # 바로 사라지고(--rm) ingest는 체인(PR 생성 등) 뒤에 오므로, 죽은 것을 본 뒤 REAP_DEAD_GRACE_S 동안 기다린다
+    # 워커가 아무 이벤트도 못 내고 죽음 (F-5a). P9 배포 발견: 컨테이너는 run.finished를 XADD 한 뒤
+    # 바로 사라지고(--rm) ingest는 체인 뒤에 오므로, 죽은 것을 본 뒤 REAP_DEAD_GRACE_S 동안 기다린다
     from control_plane.scheduler.scheduler import REAP_DEAD_GRACE_S
 
     h.launcher.dead.add(worker1)

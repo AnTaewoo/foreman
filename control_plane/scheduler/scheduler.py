@@ -62,6 +62,8 @@ def _slugify(text: str) -> str:
 
 
 REAP_GRACE_MIN = 5
+# 컨테이너가 사라진 뒤 이만큼 기다린다 — 정상 종료(--rm)와 run.finished ingest 사이 경쟁 (P9 배포)
+REAP_DEAD_GRACE_S = 60
 
 
 @dataclass
@@ -74,6 +76,7 @@ class InFlight:
     started_at: datetime
     timeout_min: int
     attempt: int
+    dead_since: datetime | None = None  # is_alive False를 처음 본 시각 (REAP_DEAD_GRACE_S)
 
 
 class Scheduler:
@@ -354,8 +357,14 @@ class Scheduler:
             if now > deadline:
                 reason = "timeout"
             elif not await self._launcher.is_alive(inf.worker_id):
+                if inf.dead_since is None:
+                    inf.dead_since = now  # 정상 종료면 곧 run.finished가 in_flight를 비운다
+                    continue
+                if (now - inf.dead_since).total_seconds() < REAP_DEAD_GRACE_S:
+                    continue
                 reason = "worker_died"
             else:
+                inf.dead_since = None
                 continue
             await self._fail_run(inf, reason)
             self.in_flight.discard(task_id)
