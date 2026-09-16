@@ -207,7 +207,7 @@ def build_graph(
         working: OrchestratorState = {**state, "last_event_id": activated.id}
         goal_text = f"{state['goal_title']}\n\n{state.get('goal_description', '')}".strip()
         try:
-            result, changes, raw_tail = await decompose_with_retry_full(
+            result, changes, raw_tail, parsed_tasks = await decompose_with_retry_full(
                 deps.provider,
                 repo_summary=state["repo_summary"],
                 plan=state["plan"],
@@ -229,6 +229,7 @@ def build_graph(
                     "tasks": [t.title for t in result.tasks],
                     "changes": changes,
                     "raw_tail": raw_tail,
+                    "parsed": parsed_tasks,
                 },
             )
         )

@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import structlog
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -285,9 +285,36 @@ def _is_test_task(t: TaskDraft) -> bool:
     return t.kind == "test" or bool(_TEST_TITLE_RE.match(t.title))
 
 
+def _reaches(tasks: list[TaskDraft], start: str, target: str) -> bool:
+    """start가 depends_on을 따라 target에 닿는가 (간선 추가 전 사이클 검사, 5차 전 검토 #1)."""
+    by_title = {t.title: t for t in tasks}
+    seen: set[str] = set()
+    stack = [start]
+    while stack:
+        cur = stack.pop()
+        if cur == target:
+            return True
+        if cur in seen or cur not in by_title:
+            continue
+        seen.add(cur)
+        stack.extend(by_title[cur].depends_on)
+    return False
+
+
+def _add_edge(tasks: list[TaskDraft], t: TaskDraft, owner: str, why: str, notes: list[str]) -> None:
+    """t → owner 의존 추가. 이미 있거나 사이클이 생기면 넣지 않고 기록만 (추론 간선은 약한 증거)."""
+    if owner == t.title or owner in t.depends_on:
+        return
+    if _reaches(tasks, owner, t.title):
+        notes.append(f"skipped '{t.title}' → '{owner}' ({why}): would create a cycle")
+        return
+    t.depends_on.append(owner)
+    notes.append(f"'{t.title}' depends on '{owner}' ({why})")
+
+
 def infer_dependencies(result: DecomposeResult) -> list[str]:
-    """spec/제목이 다른 Task 소유 모듈(파일명·import)을 언급하면 의존을 추가한다 (2차 라이브 (b)).
-    역방향 의존이 이미 있으면 사이클을 피하려고 건너뛴다."""
+    """spec/제목의 import 문이 다른 Task 소유 모듈을 가리키면 소유자 전부에 의존 (2차 b, 4차 #1).
+    파일명 언급("app.py will call these")은 방향이 없어 증거로 쓰지 않는다 (5차 전 검토 #1)."""
     notes: list[str] = []
     modules: dict[str, list[str]] = {}  # stem → owner titles
     for t in result.tasks:
@@ -298,23 +325,17 @@ def infer_dependencies(result: DecomposeResult) -> list[str]:
             name = parts[-1]
             if name.endswith(".py") and name != "__init__.py":
                 modules.setdefault(name[:-3], []).append(t.title)
-    by_title = {o.title: o for o in result.tasks}
     for t in result.tasks:
         text = f"{t.title}\n{t.spec}"
         for stem, owners in modules.items():
             stem_re = re.escape(stem)
             pattern = (
-                rf"(\b{stem_re}\.py\b|\bfrom\s+(?:[\w.]+\.)?{stem_re}\b|"
-                rf"\bimport\s+(?:[\w.]+\.)?{stem_re}\b)"
+                rf"(\bfrom\s+(?:[\w.]+\.)?{stem_re}\s+import\b|\bimport\s+(?:[\w.]+\.)?{stem_re}\b)"
             )
             if not re.search(pattern, text):
                 continue
-            for owner in owners:  # 4차 라이브 #1: 소유자가 여럿이면 전부에 의존 (유일 조건 삭제)
-                owner_task = by_title[owner]
-                if owner == t.title or owner in t.depends_on or t.title in owner_task.depends_on:
-                    continue
-                t.depends_on.append(owner)
-                notes.append(f"'{t.title}' depends on '{owner}' (mentions {stem})")
+            for owner in owners:
+                _add_edge(result.tasks, t, owner, f"imports {stem}", notes)
     return notes
 
 
@@ -330,11 +351,7 @@ def serialize_shared_files(result: DecomposeResult) -> list[str]:
             owners.setdefault(p, []).append(t)
     for path, ts in owners.items():
         for i in range(1, len(ts)):
-            later, earlier = ts[i], ts[i - 1]
-            if earlier.title in later.depends_on or later.title in earlier.depends_on:
-                continue
-            later.depends_on.append(earlier.title)
-            notes.append(f"'{later.title}' depends on '{earlier.title}' (shares {path})")
+            _add_edge(result.tasks, ts[i], ts[i - 1].title, f"shares {path}", notes)
     return notes
 
 
@@ -471,8 +488,9 @@ def augment_test_paths(result: DecomposeResult) -> tuple[DecomposeResult, list[s
     notes: list[str] = []
     for t in result.tasks:
         if _is_code_task(t) and not any(is_test_path(p) for p in t.owned_paths):
-            extra = suggested_test_paths(t.owned_paths)
-            t.owned_paths.extend(extra)
+            taken = {p for o in result.tasks if o is not t for p in o.owned_paths}
+            extra = [p for p in suggested_test_paths(t.owned_paths) if p not in taken]
+            t.owned_paths.extend(extra)  # 5차 전 검토 #4: 다른 Task가 가진 후보는 넣지 않는다
             notes.append(f"added test paths to '{t.title}': {extra}")
     return result, notes
 
@@ -493,8 +511,8 @@ async def decompose_with_retry_full(
     model: str | None = None,
     attempts: int = 2,
     min_tasks: int = 1,
-) -> tuple[DecomposeResult, list[str], str]:
-    """LLM 분해 → 검증 → 정규화. (결과, 정규화 기록, 원문 꼬리). 실패하면 재요청(최대 attempts회).
+) -> tuple[DecomposeResult, list[str], str, list[dict[str, Any]]]:
+    """LLM 분해 → 검증 → 정규화. (결과, 정규화 기록, 원문 꼬리, 정규화 전 Task 목록).
 
     ``min_tasks`` (X.2): 그보다 적게 쪼개면 오류를 붙여 재요청 — 작은 모델의 뭉뚱그리기 방지.
     """
@@ -525,6 +543,15 @@ async def decompose_with_retry_full(
             )
             parsed = None
         if isinstance(parsed, DecomposeResult):
+            parsed_tasks = [  # 5차 전 검토 #3: 규칙이 안 먹은 원인을 보려면 정규화 입력이 필요하다
+                {
+                    "title": t.title,
+                    "kind": t.kind,
+                    "owned_paths": list(t.owned_paths),
+                    "depends_on": list(t.depends_on),
+                }
+                for t in parsed.tasks
+            ]
             placeholders = placeholder_paths(parsed)
             if placeholders and attempt < attempts - 1:
                 last_error = (
@@ -564,7 +591,7 @@ async def decompose_with_retry_full(
                 changes=changes,
                 raw=raw_tail,
             )
-            return normalized, changes, raw_tail
+            return normalized, changes, raw_tail, parsed_tasks
         messages = [
             *messages,
             Message(role="assistant", content=completion.text or "(empty)"),
@@ -593,7 +620,7 @@ async def decompose_with_retry(
     min_tasks: int = 1,
 ) -> DecomposeResult:
     """``decompose_with_retry_full``의 결과만 (스크립트·테스트용)."""
-    result, _, _ = await decompose_with_retry_full(
+    result, _, _, _ = await decompose_with_retry_full(
         provider,
         repo_summary=repo_summary,
         plan=plan,

@@ -195,7 +195,7 @@ async def test_decompose_augments_test_paths_on_final_attempt() -> None:
     assert by["Setup server"].owned_paths[:2] == ["main.py", "server/__init__.py"]
     logic = by["Calculator logic"].owned_paths
     assert "tests/test_calculator.py" in logic and "tests/test_logic.py" in logic
-    assert "tests/test_server.py" in logic  # 디렉토리 이름 — 모델이 실제로 고른 이름들
+    assert "tests/test_server.py" not in logic  # 5차 전 검토 #4: 앞 Task가 가진 후보는 공유 안 함
 
 
 async def test_decompose_merges_test_only_tasks_into_implementation() -> None:
@@ -498,8 +498,8 @@ async def test_decompose_logs_raw_and_notes_on_success() -> None:
     assert any("merged" in n for n in events["decompose.result"]["changes"])
 
 
-# 5차 전 검토 #1 (중): 언급 추론은 방향이 없어 "app.py will call these" 한 줄로 T1→app 간선이 생기고,
-# 소유자 전부 규칙과 합쳐져 3-사이클 → emit CycleError → Goal 전체 blocked. 증거는 import 문만 인정하고,
+# 5차 전 검토 #1 (중): 언급 추론은 방향이 없어 "app.py will call these"로 T1→app 간선이 생기고,
+# 소유자 전부 규칙과 합쳐져 3-사이클 → CycleError → Goal blocked. 증거는 import 문만,
 # 간선을 넣기 전에 사이클이 생기면 버리고 기록한다
 async def test_inferred_edges_never_create_cycles_and_need_import_evidence() -> None:
     provider = FakeProvider(script=[
@@ -556,14 +556,19 @@ async def test_augment_does_not_create_shared_test_files() -> None:
     assert not (set(a.owned_paths) & set(b.owned_paths))
 
 
-# 5차 전 검토 #3: 원문 꼬리 1500자로는 규칙이 안 먹은 원인을 못 본다 → 정규화 전 Task 목록을 같이 돌려준다
+# 5차 전 검토 #3: 원문 꼬리 1500자로는 원인을 못 본다 → 정규화 전 Task 목록을 같이 돌려준다
 async def test_decompose_full_returns_parsed_tasks_before_normalization() -> None:
     from control_plane.orchestrator.drafts import decompose_with_retry_full
 
     provider = FakeProvider(script=[
         result(
             src_task("Create maths module", ["src/maths.py"]),
-            src_task("Write tests for maths", ["tests/test_maths.py"], ["Create maths module"], kind="test"),
+            src_task(
+                "Write tests for maths",
+                ["tests/test_maths.py"],
+                ["Create maths module"],
+                kind="test",
+            ),
         ),
     ])  # fmt: skip
     _, changes, raw_tail, parsed = await decompose_with_retry_full(

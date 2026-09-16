@@ -242,6 +242,9 @@ class GoalDecomposedPayload(TypedDict):
     tasks: list[str]
     changes: NotRequired[list[str]]
     raw_tail: NotRequired[str]
+    parsed: NotRequired[
+        list[dict[str, Any]]
+    ]  # 정규화 전 Task {title, kind, owned_paths, depends_on}
 
 
 class GoalCreatedPayload(TypedDict):
