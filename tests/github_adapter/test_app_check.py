@@ -50,7 +50,14 @@ def mock_all(
     hook_url: str = "https://smee.io/abc",
     categories: list[str] | None = None,
     discussions_enabled: bool = True,
+    empty_repo: bool = False,
 ) -> None:
+    # P9 버그 #1: 커밋 0개인 repo도 8/8 통과했다 → 기본 브랜치 존재 확인
+    router.get(f"/repos/{repo}/branches/main").mock(
+        return_value=httpx.Response(404, json={"message": "Branch not found"})
+        if empty_repo
+        else httpx.Response(200, json={"name": "main", "commit": {"sha": "abc"}})
+    )
     cats = ["General", "Plans"] if categories is None else categories
     router.post("/graphql").mock(
         return_value=httpx.Response(
@@ -141,13 +148,26 @@ async def test_all_ok(
         "permissions",
         "events",
         "repo",
+        "content",  # P9 버그 #1: 기본 브랜치에 커밋이 있어야 Plan·워커가 돈다
         "discussions",  # P9: Discussions 켜짐 + 카테고리 Plans (없으면 Plan 게시가 실패한다)
         "webhook",
     ]
     assert all(i.ok for i in report.items)
     text = report.render()
     assert "ghs_SECRET_TOKEN" not in text and "[ok]" in text
-    assert github_mock.calls.call_count == 7
+    assert github_mock.calls.call_count == 8
+
+
+async def test_empty_repo_fails_content_check(
+    github_mock: respx.MockRouter, http: httpx.AsyncClient, private_key_pem: str
+) -> None:
+    from github_adapter.app_check import run_check
+
+    mock_all(github_mock, empty_repo=True)
+    report = await run_check(settings(private_key_pem), http, repo="org/demo")
+    bad = [i for i in report.items if not i.ok]
+    assert [i.name for i in bad] == ["content"] and "empty" in bad[0].detail.lower()
+    assert "commit" in bad[0].detail.lower()
 
 
 # (a') Discussions가 꺼졌거나 Plans 카테고리가 없으면 discussions 항목만 FAIL

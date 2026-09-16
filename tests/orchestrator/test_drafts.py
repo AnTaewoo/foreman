@@ -224,6 +224,53 @@ async def test_decompose_merges_test_only_tasks_into_implementation() -> None:
     assert len(provider.calls) == 1
 
 
+# P9 버그 #2 (foreman_demo Goal #2): depends_on 문자열이 자기 Task 제목과 글자 단위로 안 맞아 Goal 즉사.
+# 정규화 매칭: 대소문자·구두점·공백 무시 동치 → "T-n" 접두 유무 → 유일한 접두/포함
+def test_depends_on_normalized_matching() -> None:
+    out = DecomposeResult.model_validate(
+        result(
+            src_task("T-1: Create calculator.py with add/minus", ["calculator.py", "tests/test_calculator.py"]),
+            src_task(
+                "T-2: Create app.py to set up Flask and handle /calc endpoints",
+                ["app.py", "tests/test_app.py"],
+                ["Create calculator.py with add/minus"],  # 번호 접두 없이
+            ),
+            src_task(
+                "T-3: Wire it up",
+                ["main.py", "tests/test_main.py"],
+                ["create app.py to set up flask and handle /calc endpoints."],  # 대소문자·마침표
+            ),
+        )
+    )
+    assert out.tasks[1].depends_on == ["T-1: Create calculator.py with add/minus"]
+    assert out.tasks[2].depends_on == ["T-2: Create app.py to set up Flask and handle /calc endpoints"]
+    with pytest.raises(ValidationError, match="unknown task"):
+        DecomposeResult.model_validate(
+            result(src_task("A", ["a.py", "tests/test_a.py"]), src_task("B", ["b.py"], ["Nothing like it"]))
+        )
+
+
+async def test_decompose_error_carries_raw_tail() -> None:
+    provider = FakeProvider(script=[result(task("A", ["A"])), result(task("A"), task("A"))])
+    with pytest.raises(DecomposeError) as exc:
+        await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
+    assert "raw:" in str(exc.value) and '"tasks"' in str(exc.value)  # 모델 원문 꼬리 (진단용)
+
+
+# P9 버그 #6: 테스트 전용 Task를 합친 뒤 Task가 0개 남은 Epic은 버린다 (빈 마일스톤 방지)
+async def test_merge_drops_empty_epics() -> None:
+    provider = FakeProvider(script=[
+        result(
+            src_task("Create maths module", ["src/maths.py"], epic="Impl"),
+            src_task("Write tests for maths", ["tests/test_maths.py"], ["Create maths module"], kind="test", epic="Tests"),
+            epics=["Impl", "Tests"],
+        ),
+    ])  # fmt: skip
+    out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
+    assert [t.title for t in out.tasks] == ["Create maths module"]
+    assert [e.title for e in out.epics] == ["Impl"]
+
+
 # X.2: 프롬프트 세트 규칙 — 심볼 색인 재사용, 기대값·fresh state, 겹치지 않으면 의존 금지, T-n
 def test_prompt_set_rules_x2() -> None:
     analyze = (PROMPTS / "analyze.md").read_text(encoding="utf-8")
