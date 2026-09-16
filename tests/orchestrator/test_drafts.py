@@ -153,6 +153,68 @@ async def test_decompose_min_tasks_retry() -> None:
     assert "at least 3" in provider.calls[1].messages[-1].content
 
 
+# P9 (foreman_demo 1차 Goal, 2026-09-16): 분해가 소스 파일만 owned_paths로 주고 모델은 tests/test_*.py를 쓰려 해
+# 9/9회 scope_violation → 전부 blocked. 코드가 검증한다: 코드 Task는 테스트 경로를 하나 이상 소유해야 한다
+def src_task(title: str, paths: list[str], deps: list[str] | None = None, **kw: object) -> dict[str, object]:
+    t = task(title, deps)
+    t["owned_paths"] = paths
+    t.update(kw)
+    return t
+
+
+async def test_decompose_requires_test_paths_then_retry() -> None:
+    provider = FakeProvider(script=[
+        result(src_task("Setup server", ["main.py", "server/__init__.py"])),  # 테스트 경로 없음 → 거부
+        result(src_task("Setup server", ["main.py", "server/__init__.py", "tests/test_server.py"])),
+    ])  # fmt: skip
+    out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
+    assert out.tasks[0].owned_paths == ["main.py", "server/__init__.py", "tests/test_server.py"]
+    assert len(provider.calls) == 2
+    err = provider.calls[1].messages[-1].content
+    assert "Setup server" in err and "test" in err.lower() and "owned_paths" in err
+
+
+async def test_decompose_augments_test_paths_on_final_attempt() -> None:
+    # 재요청해도 안 고치면(작은 모델) 실패시키지 않고 결정적으로 보강한다: 파일 stem + 디렉토리 이름 기반
+    provider = FakeProvider(script=[
+        result(
+            src_task("Setup server", ["main.py", "server/__init__.py"]),
+            src_task("Calculator logic", ["server/logic/calculator.py"], ["Setup server"]),
+        ),
+        result(
+            src_task("Setup server", ["main.py", "server/__init__.py"]),
+            src_task("Calculator logic", ["server/logic/calculator.py"], ["Setup server"]),
+        ),
+    ])  # fmt: skip
+    out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
+    by = {t.title: t for t in out.tasks}
+    assert "tests/test_main.py" in by["Setup server"].owned_paths
+    assert "tests/test_server.py" in by["Setup server"].owned_paths
+    assert by["Setup server"].owned_paths[:2] == ["main.py", "server/__init__.py"]
+    logic = by["Calculator logic"].owned_paths
+    assert "tests/test_calculator.py" in logic and "tests/test_logic.py" in logic
+    assert "tests/test_server.py" in logic  # 디렉토리 이름 — 모델이 실제로 고른 이름들
+
+
+async def test_decompose_merges_test_only_tasks_into_implementation() -> None:
+    # 패턴 2: "write tests for X" Task가 구현보다 먼저 돌아 import 실패 → 구현 Task로 합친다
+    provider = FakeProvider(script=[
+        result(
+            src_task("Create maths module", ["src/maths.py"]),
+            src_task("Write tests for maths", ["tests/test_maths.py"], ["Create maths module"], kind="test"),
+            src_task("Use maths in app", ["src/app.py", "tests/test_app.py"], ["Write tests for maths"]),
+        ),
+    ])  # fmt: skip
+    out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
+    titles = [t.title for t in out.tasks]
+    assert titles == ["Create maths module", "Use maths in app"]
+    impl = out.tasks[0]
+    assert impl.owned_paths == ["src/maths.py", "tests/test_maths.py"]
+    assert "Write tests for maths" in impl.spec  # 합쳐진 Task의 spec(기대값)은 보존
+    assert out.tasks[1].depends_on == ["Create maths module"]  # 의존은 구현 Task로 옮긴다
+    assert len(provider.calls) == 1
+
+
 # X.2: 프롬프트 세트 규칙 — 심볼 색인 재사용, 기대값·fresh state, 겹치지 않으면 의존 금지, T-n
 def test_prompt_set_rules_x2() -> None:
     analyze = (PROMPTS / "analyze.md").read_text(encoding="utf-8")
