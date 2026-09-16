@@ -56,7 +56,9 @@ class RepoCache:
         token_getter: Callable[[], str] | None = None,
         dry_run: bool = False,
     ) -> None:
-        self.root = Path(root)
+        self.root = Path(
+            root
+        ).resolve()  # 상대 root("./repos")는 clone cwd 기준으로 어긋난다 (P9.6)
         self.dry_run = dry_run  # D-48: Dry 모드는 원격 clone을 하지 않는다 (F-1)
         self._url_for = url_for
         self._token_getter = token_getter  # D-41: 실 모드면 installation 토큰으로 clone/fetch

@@ -232,8 +232,24 @@ class GoalRunner:
                 )
             )
         except Exception as exc:
+            # 예상 못한 오류도 Goal을 draft에 남기지 않는다 — 데모 한도가 영원히 막힌다 (P9.6 발견)
             log.error("runner.failed", goal_id=goal_id, error=repr(exc))
             self.errors[goal_id] = repr(exc)
+            reason = f"runner_error: {type(exc).__name__}: {exc}"[:500]
+            try:
+                await self.publish(
+                    Event(
+                        project_id=project_id,
+                        actor=Actor(type="system", id="orchestrator"),
+                        type=EventType.GOAL_CANCELLED,
+                        subject=Subject(entity="goal", id=goal_id),
+                        payload={"reason": reason, "by": "system"},
+                        correlation_id=goal_id,
+                        causation_id=None,
+                    )
+                )
+            except Exception as pub_exc:  # 취소 발행마저 실패하면 로그만 (DB 다운 등)
+                log.error("runner.cancel_failed", goal_id=goal_id, error=repr(pub_exc))
 
     def _after_invoke(self, project_id: str, goal_id: str, out: dict[str, Any]) -> None:
         if "__interrupt__" in out:

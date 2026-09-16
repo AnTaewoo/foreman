@@ -77,7 +77,7 @@ def test_clone_then_fetch(tmp_path: Path, remote: Path) -> None:
     assert "second" in git(path, "log", "--format=%s", "origin/main", "-n", "1")
 
 
-# P9.6 발견: 상대 경로 root("./repos")면 clone이 cwd 기준으로 엉뚱한 곳(root/<owner>/repos/…)에 생겼다
+# P9.6 발견: 상대 root("./repos")면 clone이 cwd 기준으로 root/<owner>/repos/… 에 생겼다
 def test_relative_root_clones_under_root(
     tmp_path: Path, remote: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

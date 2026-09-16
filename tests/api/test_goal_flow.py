@@ -426,7 +426,7 @@ async def test_repo_unavailable_blocks_goal(
     assert not runner.is_waiting(gid) and await events_of(factory, "goal.plan_proposed") == []
 
 
-# P9.6 발견: 예상 못한 실행 오류도 Goal을 draft에 남기지 않고 취소한다 (데모 한도가 영원히 막히지 않게)
+# P9.6 발견: 예상 못한 실행 오류도 Goal을 draft에 남기지 않고 취소한다 (데모 한도 보호)
 async def test_runner_error_cancels_goal(
     factory: async_sessionmaker[AsyncSession], redis: Redis, pump: Pump
 ) -> None:
