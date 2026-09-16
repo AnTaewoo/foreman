@@ -56,3 +56,5 @@ pass 조건: 자동 전부 + 사람 12개. 제출 전(09-20) 시크릿 창에서
   새 repo `foreman_demo` 점검 8/8 ok(웹훅 URL 갱신 확인). DB 비움 → 사용자가 콘솔에서 직접 연결해 시험(§6 "P9 repo 연결").
 - 21:5x KST: 다른 세션의 foreman_demo 라이브 테스트(Goal #2 분해 즉사, Goal #3 Task 1회 만에 blocked) 리포트 8건 중 7건 수정
   (§6 "P9 버그 #2~#8"). 대상 repo `foreman_demo`는 커밋 0개였다 — 점검에 `content` 항목 추가. 재시험 전 repo에 커밋이 필요.
+- 23:3x KST 2차 라이브(다른 세션): 머지 → 웹훅 2초 → 의존 Task 자동 배정은 정상. 후속 PR #10·#11 충돌(옛 base) + clone의
+  origin에 토큰 잔류 → §6 "P9 버그 #9~#10"으로 수정·배포(51ecc98). PR #10·#11은 닫는 것을 권함(중복 Task 산출물).
