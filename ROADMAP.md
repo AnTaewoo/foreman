@@ -280,7 +280,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P9.4 | 배포 파일(systemd) + docs/deploy.md | P9.3 | done | fa6c25e |
 | P9.5 | 데모 LLM 선정 (gemma4:e4b vs qwen2.5-coder:14b, e2e; 12b는 Ollama 업그레이드 필요) | PC-8 | done (14b 유지) | b878098 |
 | P9.6 | 데모 콘텐츠: demo_seed + showcase Goal | P9.3, P9.5 | running (스크립트 fa6c25e, 실행은 배포 후) | |
-| **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending | |
+| **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending (배포 대기 — 사용자 sudo 단계) | docs/pc/PC-9.md |
 
 ---
 
@@ -288,6 +288,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 
 | 일시 | Task | 사유 | 옵션 / 필요한 조치 |
 |---|---|---|---|
+| 2026-09-16 | (기록) P9 | 구현 조정 | 공개 데모(D-52/D-53) 하루 실행. (1) `gemma4:12b`는 이 서버 Ollama 0.20.0이 거부(412, 새 버전 필요) → `gemma4:e4b`와 14b 2회씩 비교, 동률이라 14b 유지(`docs/pc/X-2.md` P9.5) (2) 통합 테스트가 기본 `HITL_DATABASE_URL`(개발 DB `hitl`)을 downgrade base로 비웠다(`-o addopts=""` 전체 실행) → `tests/integration/conftest.py` 기본을 전용 `hitl_test`(없으면 CREATE DATABASE)로. 데모 DB 보호 (3) 데모 가드의 '진행 중' Goal은 draft도 포함(생성 직후 planning 전 상태), awaiting은 제외 (4) 레이트리밋 IP는 X-Forwarded-For를 직접 읽지 않고 scope client(uvicorn `--proxy-headers`) (5) `GET /demo`로 콘솔이 승인자 id·한도를 읽는다(토큰 없음) (6) 데모 콘솔은 외부 CDN 없이 순수 HTML/JS, markdown은 자체 최소 렌더러(escape 후) (7) PC-7·PC-8 잔여 프로세스 종료, 8000 포트 비움. nginx 사이트·인증서·DNS·systemd·App 웹훅 URL·repo public은 사용자 sudo 단계(`docs/deploy.md`) |
 | 2026-09-16 | (기록) PC-8 | 구현 조정 | fresh clone + docker 런처 실행(`docs/pc/PC-8.md`)에서 발견: (1) `HITL_REPO_ROOT`가 없으면 docker `-v`가 root 소유로 만들어 이후 API 쪽 clone이 막힘 → `build_launcher`가 먼저 `mkdir -p`(owned 밖 최소 수정 `control_plane/runtime.py`) (2) README 예제의 `jq`를 전제에 추가, `GET /projects` 응답 형태 명시. Task 결과는 14b 모델 품질(owned 밖 쓰기 거부·테스트/구현 분리)로 2 done / 2 blocked / 2 대기 — 플랫폼 동작은 설계대로 |
 | 2026-09-16 | (기록) P8.6 | scope_expand + 온보딩 점검 | 사용자가 전달한 fresh-clone 온보딩 점검(`docs/review/onboarding-2026-09-16.md`, 8건+자잘 7건)을 P8.6에서 함께 처리. owned 밖 최소 수정: (1) `control_plane/config.py` `env_ignore_empty=True`(#1 — `cp .env.example .env`만으로 기동), `llm_provider`에서 `fake` 제거(설정값이 아니라 테스트 전용 `get_provider(settings, fake=True)`), 사용처 없는 `minio_*` 필드 삭제 (2) `docker-compose.yml` MinIO `profiles: ["storage"]`(#4) (3) `Makefile` `worker-image` 타깃(#2) (4) `agents/llm/__init__.py` `get_provider(fake=)`, 테스트 4개(`fake` 주입 방식) (5) `.python-version` (6) `README.md` 재작성 — 실제 순서(docker-up → migrate → worker-image → run-control-plane → run-api), 데모 git repo 준비, API 승인(D-51), 읽기 지연·`X-User-Id`·목록 API·Ollama 안내; runbook §0~§3·§5 갱신(`--fake` 블록 제거, 호스트 uid·reaper·이미지 태그·MinIO 프로파일). `scripts/e2e_dry_run.py --fake`는 테스트(`tests/test_e2e_script.py`) 전용으로 남김 |
 | 2026-09-13 | (기록) P4.4~P4.5 | 구현 조정 | (1) 워커 LLM 설정은 `WORKER_LLM_PROVIDER/BASE_URL/MODEL/API_KEY`(+fake용 `WORKER_FAKE_SCRIPT`) 환경변수 — 명세의 변수 목록에 추가 (2) 워커의 GitHub 쓰기는 항상 DryRun(워커는 secrets 없음, §12) — 실 GitHub PR 생성은 X.1에서 control plane으로 이동 (3) `projection.handle`은 relay를 거치지 않은 미서명 이벤트(seq 없음)를 건너뛰고 Scheduler.ingest가 append_signed+apply 한다 — 같은 이벤트를 두 번 적용하면 불허 전이 (4) 기동 실패는 task.failed→ready→재배정을 attempt=max까지 반복 후 blocked (5) Dockerfile은 `readme = CLAUDE.md` 때문에 CLAUDE.md도 복사 |
