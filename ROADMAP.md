@@ -277,9 +277,9 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P9.1 | Plan 본문·Goal 목록·Task 링크 API (D-53) | PC-8 | done | fe7097c |
 | P9.2 | 데모 콘솔 정적 1페이지 `GET /` (D-52) | P9.1 | done | a930777 |
 | P9.3 | 데모 모드 가드 + 레이트리밋 (D-52) | P9.1 | done | 840283c |
-| P9.4 | 배포 파일(systemd) + docs/deploy.md | P9.3 | running | |
-| P9.5 | 데모 LLM 선정 (gemma4:12b vs qwen2.5-coder:14b, e2e) | PC-8 | todo | |
-| P9.6 | 데모 콘텐츠: demo_seed + showcase Goal | P9.3, P9.5 | todo | |
+| P9.4 | 배포 파일(systemd) + docs/deploy.md | P9.3 | done | fa6c25e |
+| P9.5 | 데모 LLM 선정 (gemma4:12b vs qwen2.5-coder:14b, e2e) | PC-8 | running | |
+| P9.6 | 데모 콘텐츠: demo_seed + showcase Goal | P9.3, P9.5 | running (스크립트 fa6c25e, 실행은 배포 후) | |
 | **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending | |
 
 ---
