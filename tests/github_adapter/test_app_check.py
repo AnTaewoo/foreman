@@ -48,7 +48,23 @@ def mock_all(
     installation_id: int = 42,
     repo: str = "org/demo",
     hook_url: str = "https://smee.io/abc",
+    categories: list[str] | None = None,
+    discussions_enabled: bool = True,
 ) -> None:
+    cats = ["General", "Plans"] if categories is None else categories
+    router.post("/graphql").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": {
+                    "repository": {
+                        "hasDiscussionsEnabled": discussions_enabled,
+                        "discussionCategories": {"nodes": [{"name": c} for c in cats]},
+                    }
+                }
+            },
+        )
+    )
     router.get("/app").mock(
         return_value=httpx.Response(
             200, json={"id": 1, "name": "foreman-dev", "permissions": perms, "events": events}
@@ -118,11 +134,38 @@ async def test_all_ok(
     report = await run_check(settings(private_key_pem), http, repo="org/demo")
     assert report.ok, report.render()
     names = [i.name for i in report.items]
-    assert names == ["app", "installation", "token", "permissions", "events", "repo", "webhook"]
+    assert names == [
+        "app",
+        "installation",
+        "token",
+        "permissions",
+        "events",
+        "repo",
+        "discussions",  # P9: Discussions 켜짐 + 카테고리 Plans (없으면 Plan 게시가 실패한다)
+        "webhook",
+    ]
     assert all(i.ok for i in report.items)
     text = report.render()
     assert "ghs_SECRET_TOKEN" not in text and "[ok]" in text
-    assert github_mock.calls.call_count == 6
+    assert github_mock.calls.call_count == 7
+
+
+# (a') Discussions가 꺼졌거나 Plans 카테고리가 없으면 discussions 항목만 FAIL
+async def test_discussions_category_required(
+    github_mock: respx.MockRouter, http: httpx.AsyncClient, private_key_pem: str
+) -> None:
+    from github_adapter.app_check import run_check
+
+    mock_all(github_mock, categories=["General", "Ideas"])
+    report = await run_check(settings(private_key_pem), http, repo="org/demo")
+    bad = [i for i in report.items if not i.ok]
+    assert [i.name for i in bad] == ["discussions"] and "Plans" in bad[0].detail
+    assert "Ideas" in bad[0].detail
+    github_mock.reset()
+    mock_all(github_mock, discussions_enabled=False)
+    report = await run_check(settings(private_key_pem), http, repo="org/demo")
+    bad = [i for i in report.items if not i.ok]
+    assert [i.name for i in bad] == ["discussions"] and "disabled" in bad[0].detail.lower()
 
 
 # (b) 권한·구독·설치·repo·웹훅 각각 빠지면 그 항목만 [FAIL], ok False
