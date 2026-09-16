@@ -213,3 +213,4 @@
 | 2026-09-16T10:30 | P8.1 | Red | IntegrityError→retry, dry clone 금지, runtime 3건 | |
 | 2026-09-16T10:45 | P8.1 | Green+Gate | _PERMANENT 분류, RepoCache(dry_run=), make check pass (463) | 5f21ec0 |
 | 2026-09-16T11:10 | P8.2 | Green+Gate | 개별 마운트, --user 호스트 uid, WORKER_WORKDIR/git env; make check 467, test-integration 6 (chmod 없이 push) | fd4060d |
+| 2026-09-16T11:40 | P8.3 | Green+Gate | task.failed 보장, is_alive, reap/recover_orphans, reaper 루프; make check 472 | 1a4e5dc |
