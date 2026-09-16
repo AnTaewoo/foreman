@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -278,3 +279,55 @@ async def test_cancel_task_and_goal(
     assert (
         await client.post(f"/projects/{pid}/goals/01NOPE0000000000000000000/cancel", json={})
     ).status_code == 404
+
+
+# ---------------------------------------------------------------- P8.4 (D-45, D-46, F-6, F-7, F-8)
+# (a) 같은 repo 두 번 → 409 (projection 전이어도 events로 판단)
+async def test_duplicate_repo_is_409(client: httpx.AsyncClient, pump: Pump) -> None:
+    r1 = await client.post("/projects", json={"name": "a", "repo": REPO})
+    assert r1.status_code == 201
+    r2 = await client.post("/projects", json={"name": "b", "repo": REPO})  # pump 없이
+    assert r2.status_code == 409 and "already" in r2.json()["detail"]
+    await pump()
+    assert (await client.post("/projects", json={"name": "c", "repo": REPO})).status_code == 409
+
+
+# (b) 201 직후 pump 없이 POST /goals 202, GET /projects/{id} 200 (events 폴백)
+async def test_read_after_write_without_projection(client: httpx.AsyncClient) -> None:
+    r = await client.post(
+        "/projects", json={"name": "demo", "repo": REPO}, headers={"X-User-Id": "alice"}
+    )
+    pid = r.json()["id"]
+    got = await client.get(f"/projects/{pid}")
+    assert got.status_code == 200 and got.json()["repo"] == REPO and got.json()["name"] == "demo"
+    g = await client.post(f"/projects/{pid}/goals", json={"title": "g", "description": "d"})
+    assert g.status_code == 202
+    assert (await client.get("/projects/01UNKNOWN00000000000000000")).status_code == 404
+
+
+# (c) 존재하지 않는 로컬 경로 → 400; owner/name·URL은 허용
+async def test_repo_validation(client: httpx.AsyncClient, tmp_path: Path) -> None:
+    bad = await client.post("/projects", json={"name": "x", "repo": "/path/to/repo"})
+    assert bad.status_code == 400 and "does not exist" in bad.json()["detail"]
+    assert (
+        await client.post("/projects", json={"name": "y", "repo": "org/demo"})
+    ).status_code == 201
+    assert (
+        await client.post("/projects", json={"name": "z", "repo": "https://github.com/o/r.git"})
+    ).status_code == 201
+    local = tmp_path / "repo"
+    local.mkdir()
+    assert (
+        await client.post("/projects", json={"name": "w", "repo": str(local)})
+    ).status_code == 201
+    assert (
+        await client.post("/projects", json={"name": "v", "repo": "not a repo"})
+    ).status_code == 400
+
+
+# (d) GET /projects 목록 (projection 기준)
+async def test_list_projects(client: httpx.AsyncClient, pump: Pump) -> None:
+    await client.post("/projects", json={"name": "one", "repo": REPO})
+    await pump()
+    items = (await client.get("/projects")).json()["items"]
+    assert [p["name"] for p in items] == ["one"] and items[0]["repo"] == REPO

@@ -474,3 +474,45 @@ def test_build_runner_real_mode_uses_token(monkeypatch: pytest.MonkeyPatch) -> N
     assert runner.repo_cache is not None and runner.repo_cache.url_for("org/demo").startswith(
         "https://x-access-token:ghs_x@"
     )
+
+
+# ------------------------------------ P8.4 (D-51): API로 Plan 승인/거절 — 웹훅·터널 없이 (F-6 리포트 항목)
+async def test_api_approve_endpoint(
+    client: httpx.AsyncClient,
+    pump: Pump,
+    runner: GoalRunner,
+    factory: async_sessionmaker[AsyncSession],
+) -> None:
+    pid, gid = await start_goal(client, pump, runner)
+    r = await client.post(f"/projects/{pid}/goals/{gid}/approve", headers={"X-User-Id": "mallory"})
+    assert r.status_code == 403 and runner.is_waiting(gid)
+    r = await client.post(f"/projects/{pid}/goals/{gid}/approve", headers={"X-User-Id": "alice"})
+    assert r.status_code == 202, r.text
+    await runner.wait_idle()
+    await pump()
+    assert not runner.is_waiting(gid)
+    assert (await client.get(f"/projects/{pid}/goals/{gid}")).json()["status"] == "active"
+    assert (await events_of(factory, "goal.activated"))[-1].payload["by"] == "alice"
+    # 대기 중이 아니면 409
+    r = await client.post(f"/projects/{pid}/goals/{gid}/approve", headers={"X-User-Id": "alice"})
+    assert r.status_code == 409
+
+
+async def test_api_reject_endpoint(
+    client: httpx.AsyncClient,
+    pump: Pump,
+    runner: GoalRunner,
+    factory: async_sessionmaker[AsyncSession],
+) -> None:
+    pid, gid = await start_goal(client, pump, runner)
+    r = await client.post(
+        f"/projects/{pid}/goals/{gid}/reject", json={"reason": "no"}, headers={"X-User-Id": "alice"}
+    )
+    assert r.status_code == 202
+    await runner.wait_idle()
+    await pump()
+    assert (await client.get(f"/projects/{pid}/goals/{gid}")).json()["status"] == "cancelled"
+    assert (await events_of(factory, "goal.cancelled"))[-1].payload == {
+        "by": "alice",
+        "reason": "no",
+    }

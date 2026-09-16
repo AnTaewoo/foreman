@@ -309,3 +309,29 @@ def test_ping_returns_pong(app: TestClient, spy: Spy) -> None:
     assert (
         post(app, "ping", "ping", delivery="d-ping-bad", sig="sha256=deadbeef").status_code == 401
     )
+
+
+# ---------------------------------------- P8.4 (D-50, F-8): 시크릿이 비면 서명이 맞아도 503 (fail-closed)
+def test_empty_secret_is_fail_closed(spy: Spy) -> None:
+    handler = WebhookHandler(
+        secret="",
+        publish=spy.publish,
+        resolve_project=resolve_project,
+        on_slash_command=spy.on_slash,
+    )
+    application = FastAPI()
+    application.include_router(build_webhook_router(handler))
+    tc = TestClient(application)
+    body = _fixture("issue_comment_approve")
+    res = tc.post(
+        "/webhooks/github",
+        content=body,
+        headers={
+            "X-GitHub-Event": "issue_comment",
+            "X-GitHub-Delivery": "d-empty",
+            "X-Hub-Signature-256": _sig(body, secret=""),
+            "Content-Type": "application/json",
+        },
+    )
+    assert res.status_code == 503 and "secret" in res.json()["detail"]
+    assert spy.commands == []
