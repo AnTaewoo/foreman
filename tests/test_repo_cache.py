@@ -75,7 +75,7 @@ def test_clone_then_fetch(tmp_path: Path, remote: Path) -> None:
     again = cache.ensure("org/demo")
     assert again == path and cache.last_action == "fetch"
     assert "second" in git(path, "log", "--format=%s", "origin/main", "-n", "1")
-    # P9 버그 #9 (foreman_test 2차 라이브): 로컬 main·워킹트리도 origin/main으로 전진해야 워커가 최신 base에서 분기한다
+    # P9 버그 #9: 로컬 main·워킹트리도 origin/main으로 전진해야 워커가 최신 base에서 분기한다
     assert "second" in git(path, "log", "--format=%s", "main", "-n", "1")
     assert (path / "NEW.md").exists()
     assert git(path, "rev-parse", "--abbrev-ref", "HEAD").strip() == "main"
@@ -94,7 +94,7 @@ def test_relative_root_clones_under_root(
     assert (path / ".git").is_dir() and not (tmp_path / "relroot" / "org" / "relroot").exists()
 
 
-# P9 버그 #10 (보안): clone/fetch 뒤 .git/config의 origin에 토큰이 남으면 안 된다 — 이 디렉토리가 워커에 마운트된다
+# P9 버그 #10 (보안): clone/fetch 뒤 origin에 토큰이 남으면 안 된다 (이 디렉토리가 워커에 마운트됨)
 def test_origin_url_never_keeps_token(tmp_path: Path, remote: Path) -> None:
     from control_plane.repo_cache import RepoCache
 
@@ -102,7 +102,13 @@ def test_origin_url_never_keeps_token(tmp_path: Path, remote: Path) -> None:
     path = cache.ensure("org/demo")
     assert git(path, "config", "remote.origin.url").strip() == "https://github.com/org/demo.git"
     # 옛 clone(토큰 URL이 origin에 남은 상태)도 다음 ensure에서 정리된다
-    git(path, "remote", "set-url", "origin", "https://x-access-token:ghs_SECRET@github.com/org/demo.git")
+    git(
+        path,
+        "remote",
+        "set-url",
+        "origin",
+        "https://x-access-token:ghs_SECRET@github.com/org/demo.git",
+    )
     cache.ensure("org/demo")
     url = git(path, "config", "remote.origin.url").strip()
     assert "ghs_SECRET" not in url and url == "https://github.com/org/demo.git"

@@ -234,6 +234,64 @@ def _is_code_task(t: TaskDraft) -> bool:
     return t.role_required == "coding" and t.kind in _CODE_KINDS
 
 
+_PLACEHOLDER_RE = re.compile(r"[<>{}]|\bpath-to\b|\.\.\.")
+
+
+def placeholder_paths(result: DecomposeResult) -> list[tuple[str, str]]:
+    """자리표시자 경로("<path-to-…>", "{module}.py", "...") — (제목, 경로) (2차 라이브 (a))."""
+    return [(t.title, p) for t in result.tasks for p in t.owned_paths if _PLACEHOLDER_RE.search(p)]
+
+
+def drop_placeholder_paths(result: DecomposeResult) -> list[str]:
+    notes: list[str] = []
+    for t in result.tasks:
+        bad = [p for p in t.owned_paths if _PLACEHOLDER_RE.search(p)]
+        if bad:
+            t.owned_paths = [p for p in t.owned_paths if p not in bad] or t.owned_paths[:1]
+            notes.append(f"dropped placeholder paths {bad} from '{t.title}'")
+    return notes
+
+
+_TEST_TITLE_RE = re.compile(
+    r"^\s*(t-\d+\s*[:.)-]?\s*)?(write|add|create)\s+(unit\s+)?tests?\b", re.I
+)
+
+
+def _is_test_task(t: TaskDraft) -> bool:
+    return t.kind == "test" or bool(_TEST_TITLE_RE.match(t.title))
+
+
+def infer_dependencies(result: DecomposeResult) -> list[str]:
+    """spec/제목이 다른 Task 소유 모듈(파일명·import)을 언급하면 의존을 추가한다 (2차 라이브 (b)).
+    역방향 의존이 이미 있으면 사이클을 피하려고 건너뛴다."""
+    notes: list[str] = []
+    modules: dict[str, list[str]] = {}  # stem → owner titles
+    for t in result.tasks:
+        for p in t.owned_paths:
+            parts = [x for x in p.replace("\\", "/").split("/") if x and "*" not in x]
+            if not parts or is_test_path(p):
+                continue
+            name = parts[-1]
+            if name.endswith(".py") and name != "__init__.py":
+                modules.setdefault(name[:-3], []).append(t.title)
+    for t in result.tasks:
+        text = f"{t.title}\n{t.spec}"
+        for stem, owners in modules.items():
+            if len(owners) != 1 or owners[0] == t.title:
+                continue
+            owner = owners[0]
+            stem_re = re.escape(stem)
+            pattern = rf"(\b{stem_re}\.py\b|\bfrom\s+{stem_re}\b|\bimport\s+{stem_re}\b)"
+            if not re.search(pattern, text):
+                continue
+            owner_task = next(o for o in result.tasks if o.title == owner)
+            if owner in t.depends_on or t.title in owner_task.depends_on:
+                continue
+            t.depends_on.append(owner)
+            notes.append(f"'{t.title}' depends on '{owner}' (mentions {stem})")
+    return notes
+
+
 def missing_test_paths(result: DecomposeResult) -> list[str]:
     """테스트 경로를 하나도 소유하지 않은 코드 Task 제목들."""
     return [
@@ -273,7 +331,7 @@ def merge_test_only_tasks(result: DecomposeResult) -> tuple[DecomposeResult, lis
     merged_into: dict[str, str] = {}
     for t in list(tasks):
         only_tests = bool(t.owned_paths) and all(is_test_path(p) for p in t.owned_paths)
-        if not only_tests or len(t.depends_on) != 1:
+        if not (only_tests or _is_test_task(t)) or len(t.depends_on) != 1:
             continue
         target = by_title.get(t.depends_on[0])
         if target is None or target is t or all(is_test_path(p) for p in target.owned_paths):
@@ -362,9 +420,19 @@ async def decompose_with_retry(
             )
             parsed = None
         if isinstance(parsed, DecomposeResult):
+            placeholders = placeholder_paths(parsed)
+            if placeholders and attempt < attempts - 1:
+                last_error = (
+                    "owned_paths contain placeholder entries — list real file paths: "
+                    + ", ".join(f"{title!r}: {path!r}" for title, path in placeholders)
+                )
+                parsed = None
+        if isinstance(parsed, DecomposeResult):
+            pre_notes = drop_placeholder_paths(parsed)
             parsed, merge_notes = merge_test_only_tasks(
                 parsed
             )  # 합치면 테스트 경로가 채워질 수 있다
+            merge_notes = [*pre_notes, *merge_notes, *infer_dependencies(parsed)]
             missing = missing_test_paths(parsed)
             if missing and attempt < attempts - 1:
                 last_error = (

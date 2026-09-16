@@ -342,7 +342,7 @@ async def test_retry_prompt_asks_for_diagnosis(worktree: Path, remote: Path, spy
     assert "test you wrote" in flat and "same object the code uses" in flat  # 진단 1(a)
 
 
-# 2차 라이브 관찰 (f): pytest exit 5(수집된 테스트 0)는 실패로 세되, 재시도 프롬프트가 원인을 알게 한다
+# 2차 라이브 관찰 (f): pytest exit 5(수집 0)는 실패로 세되, 재시도 프롬프트가 원인을 알게 한다
 def test_annotate_test_output_explains_no_tests() -> None:
     from agents.coding import annotate_test_output
 

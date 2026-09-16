@@ -285,7 +285,7 @@ async def test_merge_drops_empty_epics() -> None:
     assert [e.title for e in out.epics] == ["Impl"]
 
 
-# 2차 라이브 관찰 (a): 자리표시자 owned_paths("<path-to-config-files>")가 검증을 통과해 Task가 3 run 뒤 blocked
+# 2차 라이브 관찰 (a): 자리표시자 owned_paths("<path-to-…>")가 검증을 통과해 3 run 뒤 blocked
 async def test_decompose_rejects_placeholder_paths_then_drops() -> None:
     provider = FakeProvider(script=[
         result(src_task("Config", ["<path-to-config-files>", "config.py", "tests/test_config.py"])),
@@ -297,7 +297,7 @@ async def test_decompose_rejects_placeholder_paths_then_drops() -> None:
 
 
 # 2차 라이브 관찰 (b): app Task가 import 하는 calculator Task에 의존을 안 걸어 병렬 실행 → 충돌.
-# spec/제목이 다른 Task의 소유 모듈(파일명 또는 import 문)을 언급하면 의존을 추가한다 (역방향 의존이 없을 때)
+# spec/제목이 다른 Task의 소유 모듈(파일명·import 문)을 언급하면 의존을 추가한다 (역방향 없을 때)
 async def test_decompose_infers_dependency_from_module_mentions() -> None:
     provider = FakeProvider(script=[
         result(
@@ -307,7 +307,7 @@ async def test_decompose_infers_dependency_from_module_mentions() -> None:
                 ["app.py", "tests/test_app.py"],
                 spec="app.py imports `from calculator import Calculator` and exposes GET /calc",
             ),
-            src_task("Add README", ["README.md"], kind="docs", role_required="coding"),
+            src_task("Add README", ["README.md"], kind="research", role_required="coding"),
         ),
     ])  # fmt: skip
     out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
@@ -317,7 +317,7 @@ async def test_decompose_infers_dependency_from_module_mentions() -> None:
     assert by["Add README"].depends_on == []
 
 
-# 2차 라이브 관찰 (c): "Write tests for X" Task가 구현 파일도 같이 나열해 합치기 규칙을 빠져나갔다 → kind test 또는
+# 2차 라이브 관찰 (c): "Write tests for X" Task가 구현 파일도 나열해 합치기 규칙을 빠져나갔다 →
 # 제목이 테스트 작성이면 소유 경로에 구현 파일이 있어도 의존 대상 구현 Task로 합친다
 async def test_merge_test_task_that_also_lists_impl_files() -> None:
     provider = FakeProvider(script=[
@@ -329,7 +329,9 @@ async def test_merge_test_task_that_also_lists_impl_files() -> None:
                 ["Create calculator module"],
                 kind="test",
             ),
-            src_task("Create Flask app", ["app.py", "tests/test_app.py"], ["Write tests for calculator"]),
+            src_task(
+                "Create Flask app", ["app.py", "tests/test_app.py"], ["Write tests for calculator"]
+            ),
         ),
     ])  # fmt: skip
     out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")

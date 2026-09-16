@@ -103,9 +103,10 @@ FAKE_DECOMPOSE: dict[str, Any] = {
             "epic": "Users API",
         },
         {
-            "title": "Harden users tests",
-            "spec": "Extend tests/test_users.py (same files, runs after the first task)",
-            "kind": "test",
+            # kind "test" Task는 분해 정규화가 구현 Task로 합친다(P9) → 두 번째 Task는 feature
+            "title": "Harden users module",
+            "spec": "Extend src/app/users.py and tests/test_users.py (runs after the first task)",
+            "kind": "feature",
             "role_required": "coding",
             "depends_on": ["Add users module"],
             "owned_paths": ["src/app/users.py", "tests/test_users.py"],

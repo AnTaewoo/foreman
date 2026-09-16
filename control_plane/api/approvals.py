@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from control_plane.api.deps import AppState, publish
-from control_plane.events.schema import Event
+from control_plane.events.schema import Event, EventType
 from control_plane.orchestrator.runner import GoalRunner
 from control_plane.store import models as m
 from github_adapter.webhooks import (
@@ -74,12 +74,29 @@ class ApprovalService:
             goal_id, approved=cmd.command == "approve", by=cmd.author, reason=cmd.argument
         )
 
+    async def should_publish(self, event: Event) -> bool:
+        """2차 라이브 (e): PrOpener의 pr.opened 뒤 웹훅이 같은 PR을 또 내는 것을 막는다."""
+        if event.type is not EventType.PR_OPENED:
+            return True
+        task_id = event.payload.get("task_id")
+        number = event.payload.get("pr_number")
+        if not task_id or number is None:
+            return True
+        async with self._factory() as s:
+            task = await s.get(m.Task, str(task_id))
+        if task is not None and task.pr_number == int(number):
+            log.info("webhook.pr_opened_duplicate_skipped", task_id=task_id, pr_number=number)
+            return False
+        return True
+
 
 def build_webhook(state: AppState, runner: GoalRunner) -> APIRouter:
     """``POST /webhooks/github`` 라우터 — 서명 검증·이벤트 변환은 P2.4 ``WebhookHandler``."""
     service = ApprovalService(factory=state.factory, runner=runner)
 
     async def publish_one(event: Event) -> None:
+        if not await service.should_publish(event):
+            return
         await publish(state, event)
 
     handler = WebhookHandler(

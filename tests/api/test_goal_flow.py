@@ -570,7 +570,7 @@ async def test_api_reject_endpoint(
     }
 
 
-# 2차 라이브 관찰 (e): PrOpener가 pr.opened를 낸 뒤 GitHub 웹훅(pull_request.opened)이 같은 PR을 또 낸다 →
+# 2차 라이브 관찰 (e): PrOpener의 pr.opened 뒤 웹훅(pull_request.opened)이 같은 PR을 또 낸다 →
 # 웹훅 publish 전에 Task의 pr_number가 이미 같으면 건너뛴다 (projection은 멱등이지만 체인 오염)
 async def test_webhook_skips_pr_opened_already_recorded(
     factory: async_sessionmaker[AsyncSession], redis: Redis, pump: Pump, publish: Any
@@ -597,7 +597,13 @@ async def test_webhook_skips_pr_opened_already_recorded(
             actor=Actor(type="github", id="bot"),
             type=EventType.PR_OPENED,
             subject=Subject(entity="pr", id=str(number)),
-            payload={"task_id": "T1", "run_id": "R1", "pr_number": number, "head": "ai/x", "base": "main"},
+            payload={
+                "task_id": "T1",
+                "run_id": "R1",
+                "pr_number": number,
+                "head": "ai/x",
+                "base": "main",
+            },
             correlation_id=gid,
             causation_id=None,
         )

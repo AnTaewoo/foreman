@@ -47,6 +47,18 @@ DEPENDENCY_FILES = re.compile(
     r"(^|/)(pyproject\.toml|requirements[^/]*\.txt|uv\.lock|poetry\.lock|Pipfile(\.lock)?|"
     r"package\.json|[^/]*-lock\.(json|yaml|yml)|yarn\.lock|pnpm-lock\.yaml|go\.(mod|sum)|Cargo\.(toml|lock))$"
 )
+
+
+def annotate_test_output(exit_code: int, output: str) -> str:
+    """pytest exit 5(수집된 테스트 0)는 실패지만 모델이 원인을 알아야 한다 (2차 라이브 (f))."""
+    if exit_code == 5:
+        return (
+            f"{output}\n\n[no tests ran — pytest exit code 5: this task must add tests in its "
+            "owned tests/ path (see owned_paths); write them, then implement]"
+        )
+    return output
+
+
 SYSTEM_PROMPT = load_prompt(
     "system", test_command="{test_command}"
 )  # X.2: agents/prompts/system.md
@@ -331,7 +343,9 @@ class CodingAgent(BaseAgent):
             if state.get("error") == "edit plan invalid":
                 return {"tests_passed": False, "error": None}
             result: ShellResult = await shell.run(self._test_command, timeout=self._shell_timeout)
-            output = (result.stdout + "\n" + result.stderr).strip()
+            output = annotate_test_output(
+                result.exit_code, (result.stdout + "\n" + result.stderr).strip()
+            )
             return {"tests_passed": result.exit_code == 0, "test_output": output}
 
         def route_after_tests(state: CodingState) -> str:

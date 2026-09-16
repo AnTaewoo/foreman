@@ -46,6 +46,11 @@ def _is_url(repo: str) -> bool:
     return repo.startswith(("http://", "https://", "git@", "ssh://"))
 
 
+def _strip_credentials(url: str) -> str:
+    """https://user:token@host/... → https://host/... (git@/ssh는 그대로)."""
+    return re.sub(r"^(https?://)[^@/]+@", r"\1", url)
+
+
 class RepoCache:
     def __init__(
         self,
@@ -105,10 +110,12 @@ class RepoCache:
                     self.url_for(repo),
                     "+refs/heads/*:refs/remotes/origin/*",
                 )
+                self._advance_default_branch(target, repo)
             except subprocess.CalledProcessError as exc:  # 오프라인이면 기존 clone으로 계속
                 log.warning(
                     "repo_cache.fetch_failed", repo=repo, error=mask_token(exc.stderr[-300:])
                 )
+            self._sanitize_origin(target, repo)
             self.last_action = "fetch"
             return target.resolve()
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -118,9 +125,55 @@ class RepoCache:
             detail = mask_token(str(getattr(exc, "stderr", "") or exc))
             log.error("repo_cache.clone_failed", repo=repo, error=detail[-300:])
             raise RepoUnavailable(repo, f"clone failed: {detail.strip()[-200:]}") from exc
+        self._sanitize_origin(target, repo)
         self.last_action = "clone"
         log.info("repo_cache.cloned", repo=repo, path=str(target))
         return target.resolve()
+
+    # P9 버그 #9: fetch가 refs/remotes/origin/* 만 갱신해 로컬 main이 첫 커밋에 머물렀고,
+    # 워커는 이 경로를 clone 해 옛 base에서 분기 → 후속 PR 전부 충돌. fetch 뒤 기본 브랜치를 맞춘다.
+    def _default_branch(self, target: Path) -> str | None:
+        try:
+            ref = self._git(
+                target, "symbolic-ref", "-q", "--short", "refs/remotes/origin/HEAD"
+            ).strip()
+            if ref.startswith("origin/"):
+                return ref[len("origin/") :]
+        except subprocess.CalledProcessError:
+            pass
+        for name in ("main", "master"):
+            try:
+                self._git(target, "rev-parse", "-q", "--verify", f"refs/remotes/origin/{name}")
+                return name
+            except subprocess.CalledProcessError:
+                continue
+        return None
+
+    def _advance_default_branch(self, target: Path, repo: str) -> None:
+        branch = self._default_branch(target)
+        if branch is None:
+            return
+        try:
+            self._git(target, "checkout", "-q", "-B", branch, f"origin/{branch}")
+        except subprocess.CalledProcessError as exc:
+            log.warning(
+                "repo_cache.advance_failed", repo=repo, branch=branch, error=exc.stderr[-300:]
+            )
+
+    # P9 버그 #10 (보안): clone URL(토큰 포함)이 origin에 남고 그 디렉토리가 워커에 마운트된다.
+    # origin은 항상 토큰 없는 공개 URL로 두고, fetch/push는 URL을 명시해서 쓴다 (P7.2와 같은 원칙).
+    def public_url(self, repo: str) -> str:
+        if _is_url(repo):
+            return _strip_credentials(repo)
+        return f"https://github.com/{repo}.git"
+
+    def _sanitize_origin(self, target: Path, repo: str) -> None:
+        try:
+            self._git(target, "remote", "set-url", "origin", self.public_url(repo))
+        except subprocess.CalledProcessError as exc:
+            log.warning(
+                "repo_cache.sanitize_failed", repo=repo, error=mask_token(exc.stderr[-300:])
+            )
 
     def _git(self, cwd: Path, *args: str) -> str:
         return subprocess.run(
