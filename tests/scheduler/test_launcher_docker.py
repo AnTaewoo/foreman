@@ -1,4 +1,4 @@
-"""P8.2 — DockerCliLauncher argv (F-5a, F-5b, D-43): repo 개별 마운트, 호스트 uid, HOME/workdir. docker 없이."""
+"""P8.2 — DockerCliLauncher argv (F-5a, F-5b, D-43): repo 개별 마운트, 호스트 uid, HOME/workdir."""
 
 from __future__ import annotations
 
@@ -66,8 +66,8 @@ async def test_runs_as_host_uid_by_default(recorded: list[list[str]]) -> None:
 
 
 def test_launcher_settings_default_user() -> None:
-    from control_plane.runtime import build_launcher
     from control_plane.config import Settings
+    from control_plane.runtime import build_launcher
 
     class R:  # redis 자리
         pass

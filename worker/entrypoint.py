@@ -88,11 +88,27 @@ def _git(cwd: Path, *args: str, env: Mapping[str, str]) -> str:
         cwd=cwd,
         capture_output=True,
         text=True,
-        env={**GIT_ENV, "PATH": env.get("PATH", "/usr/bin:/bin"), "HOME": env.get("HOME", "/tmp")},
+        env=git_env(env),
     )
     if res.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)}: {res.stderr.strip()}")
     return res.stdout.strip()
+
+
+def git_env(env: Mapping[str, str]) -> dict[str, str]:
+    """git 서브프로세스 env (P8.2): HOME 없이도, 마운트된 repo 소유자가 달라도 동작.
+
+    ``GIT_CONFIG_NOSYSTEM``·``safe.directory=*``(GIT_CONFIG_COUNT 방식)로 dubious-ownership 방지.
+    """
+    return {
+        **GIT_ENV,
+        "PATH": env.get("PATH", "/usr/bin:/bin"),
+        "HOME": env.get("HOME", "/tmp"),
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "safe.directory",
+        "GIT_CONFIG_VALUE_0": "*",
+    }
 
 
 def prepare_worktree(repo_url: str, branch: str, workdir: Path, env: Mapping[str, str]) -> Path:
@@ -167,7 +183,8 @@ async def _run(
     input = input.model_copy(
         update={"budget": input.budget.model_copy(update={"max_seconds": int(timeout_s)})}
     )
-    workdir = Path(args.workdir) if args.workdir else Path("/work") / input.run_id
+    base = Path(args.workdir) if args.workdir else Path(env.get("WORKER_WORKDIR") or "/work")
+    workdir = base if args.workdir else base / input.run_id
     repo = prepare_worktree(env["WORKER_REPO_URL"], env["WORKER_BRANCH"], workdir, env)
 
     redis: Redis | None = None

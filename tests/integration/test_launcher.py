@@ -53,8 +53,7 @@ async def test_docker_launcher_starts_worker(tmp_path: Path) -> None:
         ["git", "push", "-q", "origin", "main"],
     ):
         subprocess.run(cmd, cwd=seed, check=True, capture_output=True, env=genv)
-    for path in [remote, *remote.rglob("*")]:  # 컨테이너 uid(10001)가 objects/에 쓸 수 있어야 한다
-        path.chmod(0o777 if path.is_dir() else 0o666)
+    # P8.2 (D-43): chmod 없이 — 컨테이너가 호스트 uid로 돌아 기본 권한(755/644)으로 push 한다
     subprocess.run(
         ["docker", "build", "-q", "-t", "foreman-worker:test", "-f", "worker/Dockerfile", "."],
         cwd=ROOT,

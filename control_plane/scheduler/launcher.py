@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -12,6 +13,7 @@ from typing import Any, Protocol
 import structlog
 
 log = structlog.get_logger(__name__)
+HOST_USER = f"{os.getuid()}:{os.getgid()}"  # D-43
 
 
 class LaunchError(Exception):
@@ -84,6 +86,7 @@ class DockerCliLauncher:
         docker_bin: str = "docker",
         extra_args: tuple[str, ...] = ("--add-host", "host.docker.internal:host-gateway"),
         mounts: Sequence[tuple[str, str]] = (),
+        user: str | None = HOST_USER,
     ) -> None:
         self.image = image
         self.redis_url = redis_url
@@ -91,6 +94,8 @@ class DockerCliLauncher:
         self._docker = docker_bin
         self._extra = extra_args
         self.mounts = tuple(mounts)
+        # D-43 (F-5b): 마운트된 repo에 push 하려면 호스트 uid로 돈다. None이면 이미지 기본 uid
+        self.user = user
 
     async def _run(self, *args: str) -> str:
         proc = await asyncio.create_subprocess_exec(
@@ -106,8 +111,19 @@ class DockerCliLauncher:
         for k, v in spec.env(redis_url=self.redis_url, extra=self._worker_env).items():
             env_args += ["-e", f"{k}={v}"]
         mount_args: list[str] = []
-        for src, dst in self.mounts:
+        mounts = list(self.mounts)
+        repo = spec.repo_url
+        if repo.startswith("/") and not any(  # F-5a: REPO_ROOT 밖 로컬 경로 프로젝트도 보이게
+            repo == src or repo.startswith(src.rstrip("/") + "/") for src, _ in mounts
+        ):
+            mounts.append((repo, repo))
+        for src, dst in mounts:
             mount_args += ["-v", f"{src}:{dst}"]
+        user_args: list[str] = []
+        if self.user:
+            user_args = ["--user", self.user]
+            # 호스트 uid에는 /home/worker·/work 쓰기 권한이 없다 → HOME과 clone 위치를 /tmp로
+            env_args += ["-e", "HOME=/tmp/worker-home", "-e", "WORKER_WORKDIR=/tmp/work"]
         container = await self._run(
             "run",
             "-d",
@@ -115,6 +131,7 @@ class DockerCliLauncher:
             "--name",
             f"foreman-worker-{spec.run_id.lower()}",
             *self._extra,
+            *user_args,
             *mount_args,
             *env_args,
             self.image,
