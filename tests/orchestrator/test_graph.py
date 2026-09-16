@@ -176,8 +176,8 @@ async def test_runs_to_interrupt() -> None:
     assert "Add users endpoint" in provider.calls[0].messages[0].content
 
 
-# P9 발견: Discussion 제목이 "Plan #<rev>: <goal title>"뿐이라 같은 제목의 Goal(심사자들이 같은 예시 버튼)이
-# 이전 Goal의 Discussion을 재사용했다(멱등 = 제목). 제목에 Goal 짧은 id를 넣어 Goal마다 유일하게 한다
+# P9 발견: 제목이 "Plan #<rev>: <goal title>"뿐이라 같은 제목의 Goal(같은 예시 버튼)이
+# 이전 Goal의 Discussion을 재사용했다(멱등 키 = 제목). Goal 짧은 id를 제목에 넣는다
 async def test_plan_discussion_title_is_unique_per_goal() -> None:
     deps1, sink1, _, _ = make([PLAN_JSON])
     shared = deps1.discussions

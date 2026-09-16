@@ -151,7 +151,8 @@ def build_graph(
         markdown = plan.to_markdown(
             goal_title=state["goal_title"], goal_number=state["goal_id"][-6:]
         )
-        title = f"Plan #{revision}: {state['goal_title']}"
+        # 제목이 멱등 키라 Goal마다 유일해야 한다 (같은 제목 Goal의 Discussion 재사용, P9)
+        title = f"Plan #{revision} (Goal #{state['goal_id'][-6:]}): {state['goal_title']}"
         discussion = await deps.discussions.create_discussion(
             state["repo_full_name"], PLAN_CATEGORY, title, markdown
         )
