@@ -212,3 +212,4 @@
 | 2026-09-15T19:15 | PC-7 | 판정 | pass — docs/pc/PC-7.md, 사용자 서명·cleanup --apply 대기 | |
 | 2026-09-16T10:30 | P8.1 | Red | IntegrityError→retry, dry clone 금지, runtime 3건 | |
 | 2026-09-16T10:45 | P8.1 | Green+Gate | _PERMANENT 분류, RepoCache(dry_run=), make check pass (463) | 5f21ec0 |
+| 2026-09-16T11:10 | P8.2 | Green+Gate | 개별 마운트, --user 호스트 uid, WORKER_WORKDIR/git env; make check 467, test-integration 6 (chmod 없이 push) | fd4060d |
