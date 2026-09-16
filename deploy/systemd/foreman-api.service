@@ -1,0 +1,29 @@
+# Foreman API + Orchestrator (P9.4). nginx가 127.0.0.1:8000으로 프록시한다.
+# 설치: sudo cp deploy/systemd/*.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#       sudo systemctl enable --now foreman-api foreman-control-plane
+[Unit]
+Description=Foreman control plane API (FastAPI + GoalRunner)
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=simple
+User=lhjin0j
+Group=lhjin0j
+SupplementaryGroups=docker
+WorkingDirectory=/home/lhjin0j/foreman
+# .env(HITL_*)를 읽고, 실 GitHub + 데모 모드는 유닛에서만 켠다 (.env 기본은 dry-run, D-52)
+EnvironmentFile=/home/lhjin0j/foreman/.env
+Environment=HITL_DRY_RUN=false
+Environment=HITL_DEMO_MODE=true
+Environment=HITL_LOG_FORMAT=json
+Environment=PATH=/home/lhjin0j/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/lhjin0j/.local/bin/uv run --no-sync uvicorn control_plane.api.app:app --factory \
+    --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=always
+RestartSec=3
+# planning 중인 Goal은 재시작 시 끊긴다(awaiting만 복원, P6.2) — 심사 기간에는 재시작을 피한다
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

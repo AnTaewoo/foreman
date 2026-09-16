@@ -17,14 +17,21 @@ from control_plane.config import Settings
 from control_plane.store import session as sess
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-PG_URL = os.environ.get("HITL_DATABASE_URL", "postgresql+asyncpg://hitl:hitl@localhost:5432/hitl")
+# 통합 테스트는 대상 DB를 downgrade base → upgrade head 로 **비운다**.
+# 개발/데모 DB `hitl`을 절대 쓰지 않도록 기본은 전용 `hitl_test`(없으면 만든다).
+# 다른 DB를 쓰려면 FOREMAN_TEST_DATABASE_URL (P9.4)
+PG_URL = os.environ.get(
+    "FOREMAN_TEST_DATABASE_URL", "postgresql+asyncpg://hitl:hitl@localhost:5432/hitl_test"
+)
 
 pytestmark = pytest.mark.integration
 
 
 def _pg_available() -> bool:
-    async def probe() -> bool:
-        engine = sess.create_engine(Settings(_env_file=None, database_url=PG_URL))
+    """대상 DB에 접속되면 True. 없으면 만들어 본다 (compose의 hitl 사용자는 superuser)."""
+
+    async def probe(url: str) -> bool:
+        engine = sess.create_engine(Settings(_env_file=None, database_url=url))
         try:
             async with engine.connect() as conn:
                 await asyncio.wait_for(conn.execute(text("select 1")), timeout=3)
@@ -34,7 +41,25 @@ def _pg_available() -> bool:
         finally:
             await engine.dispose()
 
-    return asyncio.run(probe())
+    async def create_db() -> bool:
+        base, _, name = PG_URL.rpartition("/")
+        engine = sess.create_engine(Settings(_env_file=None, database_url=f"{base}/postgres"))
+        try:
+            async with engine.connect() as conn:
+                auto = await conn.execution_options(isolation_level="AUTOCOMMIT")
+                await auto.execute(text(f'CREATE DATABASE "{name}"'))
+            return True
+        except Exception:
+            return False
+        finally:
+            await engine.dispose()
+
+    async def run() -> bool:
+        if await probe(PG_URL):
+            return True
+        return await create_db() and await probe(PG_URL)
+
+    return asyncio.run(run())
 
 
 @pytest.fixture(scope="session")

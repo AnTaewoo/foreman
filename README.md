@@ -170,6 +170,11 @@ scripts/check_runbook.sh
 
 개발 절차는 `ROADMAP.md` §0(Task마다 Red → Green → Gate → `main` 커밋). 이 저장소 자체 개발에는 브랜치/PR을 쓰지 않습니다.
 
+## 공개 데모
+
+심사·시연용 웹 콘솔은 `GET /`(정적 1페이지, 설계 §11.0)에서 서빙됩니다. 인터넷에 노출할 때는 `HITL_DEMO_MODE=true`
+(관리 라우트 `X-Admin-Token`, Goal·IP 한도)로 띄우고, 절차는 `docs/deploy.md`(nginx → :8000, systemd)입니다.
+
 ## 문서
 
 - `docs/design.md` 설계 · `ROADMAP.md` 계획/보드/결정 D-01~ · `docs/runbook.md` 기동·`.env`·터널·흔한 에러

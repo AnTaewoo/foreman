@@ -1,0 +1,24 @@
+# Foreman 상주 control plane (P9.4): relay + projection + scheduler(docker 런처) + PrOpener + reaper.
+[Unit]
+Description=Foreman control plane (relay, projection, scheduler, PR opener)
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=simple
+User=lhjin0j
+Group=lhjin0j
+SupplementaryGroups=docker
+WorkingDirectory=/home/lhjin0j/foreman
+EnvironmentFile=/home/lhjin0j/foreman/.env
+Environment=HITL_DRY_RUN=false
+Environment=HITL_DEMO_MODE=true
+Environment=HITL_LOG_FORMAT=json
+Environment=PATH=/home/lhjin0j/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/lhjin0j/.local/bin/uv run --no-sync python -m control_plane
+Restart=always
+RestartSec=3
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

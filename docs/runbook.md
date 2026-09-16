@@ -143,6 +143,10 @@ git -C <출력의 remote=경로> diff main <ai/브랜치>
 cat /tmp/pc4-dump/101.jsonl | python -m json.tool   # Task 1의 프롬프트/응답
 ```
 
+## 3a. 공개 데모 배포
+
+`docs/deploy.md` — foreman.antaewoo.com(nginx → :8000), systemd 유닛(`deploy/systemd/`), 데모 모드 한도, 데모 준비 스크립트(P9).
+
 ## 3b. 실 GitHub 연결 전 점검 (X.1 / P7)
 
 `.env`에 App 값(`HITL_GITHUB_APP_ID`, `HITL_GITHUB_APP_PRIVATE_KEY`(개행은 `\n`), `HITL_GITHUB_INSTALLATION_ID`,
@@ -179,7 +183,8 @@ Discussion 코멘트로 들어온다(`issue_comment`는 개발용 우회).
 make lint
 ```
 
-전체 게이트는 `make check`(ruff + mypy + pytest, 진짜 Redis 필요), Docker 통합은 `make test-integration`.
+전체 게이트는 `make check`(ruff + mypy + pytest, 진짜 Redis 필요), Docker 통합은 `make test-integration`
+(전용 DB `hitl_test`를 비우고 다시 만든다 — 개발·데모 DB `hitl`은 건드리지 않음, `FOREMAN_TEST_DATABASE_URL`).
 
 ## 5. 흔한 에러
 
