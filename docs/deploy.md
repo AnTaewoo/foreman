@@ -1,14 +1,14 @@
 # 공개 데모 배포 — foreman.antaewoo.com (P9, D-52)
 
 원티드 AI 챔피언십 제출용. 심사자가 로그인·설치 없이 브라우저로 `https://foreman.antaewoo.com/`을 열어
-Goal → Plan 승인 → Issue → PR을 체험한다. 구성: 이 서버(nginx + Let's Encrypt) → `127.0.0.1:8000`(API, 데모 콘솔)
+Goal → Plan 승인 → Issue → PR을 체험한다. 구성: 이 서버(nginx + Let's Encrypt) → `192.168.0.17:8000`(API, 데모 콘솔, 0.0.0.0 바인드)
 + 상주 control plane(docker 워커) + Postgres/Redis(compose) + 로컬 Ollama. 실 GitHub 공개 repo `AnTaewoo/foreman_test`.
 
 ## 포트·프로세스
 
 | 무엇 | 어디 | 비고 |
 |---|---|---|
-| API + 데모 콘솔 + Orchestrator | `127.0.0.1:8000` (`foreman-api.service`) | nginx가 443 → 8000. WS `/projects/{id}/stream` 업그레이드 필요 |
+| API + 데모 콘솔 + Orchestrator | `0.0.0.0:8000` (`foreman-api.service`) | nginx가 443 → `192.168.0.17:8000`(LAN IP). `--forwarded-allow-ips 127.0.0.1,192.168.0.0/24`. WS 업그레이드 필요 |
 | control plane | 포트 없음 (`foreman-control-plane.service`) | relay·projection·scheduler(docker 런처)·PrOpener·reaper |
 | Postgres / Redis | compose `foreman-postgres-1`, `foreman-redis-1` (5432/6379) | `make docker-up` |
 | 워커 | `docker run … foreman-worker:dev` (호스트 uid) | `make worker-image` |
