@@ -340,6 +340,63 @@ async def test_merge_test_task_that_also_lists_impl_files() -> None:
     assert out.tasks[1].depends_on == ["Create calculator module"]
 
 
+# 3차 라이브 #1 (치명): Plan의 "Decisions Expected"가 "Install Flask via pip" Task(owned requirements.txt)로
+# 내려와 41초 만에 needs_decision → blocked → 직렬 의존 5개 전부 대기. 의존성 파일은 소유 경로에서 빼고
+# 설치/셋업 성격 Task는 버린다(의존은 그 Task의 의존으로 재배선). 워커 환경엔 flask·pytest가 이미 있다
+async def test_decompose_drops_dependency_files_and_install_tasks() -> None:
+    provider = FakeProvider(script=[
+        result(
+            src_task("Install Flask via pip", ["requirements.txt"], spec="pip install flask"),
+            src_task("Create calculator module", ["calculator.py", "tests/test_calculator.py"], ["Install Flask via pip"]),
+            src_task(
+                "Create Flask app",
+                ["app.py", "pyproject.toml", "tests/test_app.py"],
+                ["Create calculator module"],
+                spec="app.py imports from calculator",
+            ),
+        ),
+    ])  # fmt: skip
+    out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
+    titles = [t.title for t in out.tasks]
+    assert titles == ["Create calculator module", "Create Flask app"]
+    by = {t.title: t for t in out.tasks}
+    assert by["Create calculator module"].depends_on == []
+    assert by["Create Flask app"].owned_paths == ["app.py", "tests/test_app.py"]
+    assert by["Create Flask app"].depends_on == ["Create calculator module"]
+
+
+# 3차 라이브 #3: tests/test_calculator.py만 소유하고 depends_on이 3~4개인 테스트 Task는 병합 규칙(의존 1개)을
+# 비껴갔다 → 테스트 파일 이름(test_<stem>)과 맞는 모듈을 소유한 의존 Task로 합친다
+async def test_merge_multi_dependency_test_task_by_module_stem() -> None:
+    provider = FakeProvider(script=[
+        result(
+            src_task("Create calculator module", ["calculator.py"]),
+            src_task("Create Flask app", ["app.py", "tests/test_app.py"], ["Create calculator module"]),
+            src_task(
+                "Write unit tests for calculator",
+                ["tests/test_calculator.py"],
+                ["Create calculator module", "Create Flask app"],
+                kind="test",
+            ),
+        ),
+    ])  # fmt: skip
+    out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
+    by = {t.title: t for t in out.tasks}
+    assert "Write unit tests for calculator" not in by
+    assert by["Create calculator module"].owned_paths == ["calculator.py", "tests/test_calculator.py"]
+
+
+# 3차 라이브 #1 (환경 계약): 플래너가 "Flask 써도 되나요?"를 결정 항목으로 올린 건 아무도 환경을 안 알려줬기 때문.
+# plan/decompose 프롬프트에 워커 환경(설치된 패키지, 테스트 명령, 금지 사항)을 넣는다
+def test_prompts_include_environment_contract() -> None:
+    plan = render_prompt("plan", goal="G", repo_summary="R")
+    dec = render_prompt("decompose", goal="G", plan="P", repo_summary="R")
+    for text in (plan, dec):
+        assert "pytest" in text and "flask" in text.lower()
+        assert "Do not plan" in text and "install" in text.lower()
+        assert "pytest -q" in text
+
+
 # X.2: 프롬프트 세트 규칙 — 심볼 색인 재사용, 기대값·fresh state, 겹치지 않으면 의존 금지, T-n
 def test_prompt_set_rules_x2() -> None:
     analyze = (PROMPTS / "analyze.md").read_text(encoding="utf-8")

@@ -297,6 +297,36 @@ async def test_pr_opener_reports_failed_attempt(
     assert len(github.snapshot()["repos"][repo]["issues"][12]["comments"]) == 1
 
 
+# 3차 라이브 #2: "승인 필요" 코멘트가 워커의 Dry client에서 나가 GitHub에 안 올라갔다 → control plane이 대신 게시
+async def test_pr_opener_posts_needs_decision_comment(
+    factory: async_sessionmaker[AsyncSession], redis: Redis, tmp_path: Path
+) -> None:
+    from control_plane.pr_opener import PrOpener
+
+    repo = str(tmp_path)
+    await publish_all(
+        factory, redis, [*bootstrap("P1", "G1", repo), task_created("P1", "G1", "T1", ["a/**"], 12)]
+    )
+    await project_all(factory, redis, "P1")
+    github = DryRunGitHubClient()
+    opener = PrOpener(factory, EventBus(redis), github)
+    blocked = ev(
+        "P1",
+        EventType.TASK_BLOCKED,
+        "task",
+        "T1",
+        {"reason": "needs_decision", "files": ["requirements.txt"], "run_id": "R1"},
+        correlation_id="G1",
+        actor=AGENT,
+    )
+    await opener.handle(delivery(blocked))
+    comments = github.snapshot()["repos"][repo]["issues"][12]["comments"]
+    assert len(comments) == 1 and "requirements.txt" in comments[0]["body"]
+    assert "승인 필요" in comments[0]["body"] and "/approve" in comments[0]["body"]
+    await opener.handle(delivery(blocked))
+    assert len(github.snapshot()["repos"][repo]["issues"][12]["comments"]) == 1
+
+
 # (c) GitPusher: 로컬 clone → origin(bare) push — URL은 push 때만 쓰고 remote 설정에 안 남긴다
 def test_git_pusher_pushes_branch(tmp_path: Path) -> None:
     from control_plane.pr_opener import GitPusher
