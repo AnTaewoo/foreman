@@ -10,6 +10,7 @@ async def test_root_serves_demo_console(client: httpx.AsyncClient) -> None:
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/html")
     assert 'id="goals"' in r.text and "/static/demo.js" in r.text
+    assert 'id="project"' in r.text  # 프로젝트 선택 (repo가 둘 이상일 때, ?project=<id> 딥링크)
 
 
 async def test_static_assets(client: httpx.AsyncClient) -> None:
