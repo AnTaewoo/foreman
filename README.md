@@ -177,5 +177,5 @@ scripts/check_runbook.sh
 
 ## 문서
 
-- `docs/design.md` 설계 · `ROADMAP.md` 계획/보드/결정 D-01~ · `docs/runbook.md` 기동·`.env`·터널·흔한 에러
+- `docs/boundary.md` **지금 만들 수 있는 Goal의 수준**(등급 A/B/C, 실측 근거, 경계 조건) · `docs/design.md` 설계 · `ROADMAP.md` 계획/보드/결정 D-01~ · `docs/runbook.md` 기동·`.env`·터널·흔한 에러
 - `docs/pc/PC-*.md` 단계별 검증 · `docs/review/` 리뷰·외부 점검 · `docs/postmortem/` · `CLAUDE.md` 에이전트 규칙
