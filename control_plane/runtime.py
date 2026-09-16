@@ -112,7 +112,9 @@ class Runtime:
         if self.token_provider is None and not settings.dry_run:
             self.token_provider = make_token_provider(settings)
         token_getter = self.token_provider.token_nowait if self.token_provider else None
-        self.repo_cache = RepoCache(Path(settings.repo_root), token_getter=token_getter)  # D-38
+        self.repo_cache = RepoCache(
+            Path(settings.repo_root), token_getter=token_getter, dry_run=settings.dry_run
+        )  # D-38, D-48
         self.bus = EventBus(redis)
         self.relay = OutboxRelay(factory, redis)
         self.projection = Projection(factory, self.bus)

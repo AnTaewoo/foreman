@@ -82,6 +82,7 @@ def build_runner(settings: Settings, state: AppState) -> GoalRunner:
     repo_cache = RepoCache(
         Path(settings.repo_root),
         token_getter=token_provider.token_nowait if token_provider is not None else None,
+        dry_run=settings.dry_run,  # D-48
     )
     return GoalRunner(
         factory=state.factory,

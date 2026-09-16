@@ -54,8 +54,10 @@ class RepoCache:
         url_for: Callable[[str], str] | None = None,
         git_env: Mapping[str, str] | None = None,
         token_getter: Callable[[], str] | None = None,
+        dry_run: bool = False,
     ) -> None:
         self.root = Path(root)
+        self.dry_run = dry_run  # D-48: Dry 모드는 원격 clone을 하지 않는다 (F-1)
         self._url_for = url_for
         self._token_getter = token_getter  # D-41: 실 모드면 installation 토큰으로 clone/fetch
         self._env = dict(git_env or GIT_ENV_DEFAULT)
@@ -85,6 +87,12 @@ class RepoCache:
             return local.resolve()
         if not _is_url(repo) and (local.is_absolute() or repo.count("/") != 1):
             raise RepoUnavailable(repo, "local path does not exist (expected owner/name or URL)")
+        if self.dry_run:
+            raise RepoUnavailable(repo, "dry-run mode never clones remote repos — use a local path")
+        if self._token_getter is None and self._url_for is None:
+            raise RepoUnavailable(
+                repo, "no installation token — real mode needs GitHub App settings"
+            )
         target = self.target_for(repo)
         if (target / ".git").is_dir():
             try:

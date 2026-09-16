@@ -614,6 +614,6 @@ async def test_integrity_error_goes_to_retry_not_transient(
     await projection.handle(
         Delivery(event=signed, message_id="1-1", attempt=6, group="g", consumer="c", seq=1)
     )
-    async with factory() as s:
-        row = await s.get(m.Event, signed.id)
+    async with factory() as s:  # events PK는 seq — id로 조회
+        row = await s.scalar(select(m.Event).where(m.Event.id == signed.id))
     assert row is not None and row.projection_error and "gave up" in row.projection_error

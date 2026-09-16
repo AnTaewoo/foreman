@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 import structlog
 from redis.exceptions import RedisError
 from sqlalchemy import func, select, update
-from sqlalchemy.exc import DBAPIError, OperationalError
+from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from control_plane.events.bus import Delivery, EventBus, RetryExhausted
@@ -59,6 +59,8 @@ class ProjectionTransient(Exception):
 Handler = Callable[[AsyncSession, Event], Awaitable[None]]
 HANDLERS: dict[EventType, Handler] = {}
 _TRANSIENT = (OperationalError, DBAPIError, RedisError, OSError)
+# D-49 (F-3): 제약 위반(FK 등)은 재전달해도 못 고친다 → D-30 재시도 큐(5회 후 포기)
+_PERMANENT = (IntegrityError,)
 
 
 def on(*types: EventType) -> Callable[[Handler], Handler]:
@@ -424,6 +426,9 @@ class Projection:
         except (InvalidTransition, OrderingError) as exc:
             await self._schedule_or_give_up(event, attempt, str(exc))
             return False
+        except _PERMANENT as exc:
+            await self._schedule_or_give_up(event, attempt, f"integrity: {exc.orig}")
+            return False
         except UnhandledEvent as exc:
             await self._record_error(event, str(exc))
             return False
@@ -444,6 +449,8 @@ class Projection:
             await self._schedule_or_give_up(event, delivery.attempt, str(exc))
         except UnhandledEvent as exc:
             await self._record_error(event, str(exc))
+        except _PERMANENT as exc:  # D-49: 순서 역전으로 보고 유한 재시도
+            await self._schedule_or_give_up(event, delivery.attempt, f"integrity: {exc.orig}")
         except _TRANSIENT as exc:
             raise ProjectionTransient(f"{event.id}: {exc}") from exc
 
