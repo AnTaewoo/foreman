@@ -162,6 +162,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | D-48 | **Dry 모드는 원격 clone을 하지 않는다** (F-1) + **run-api 기본 no-reload** (F-4). `RepoCache`는 `dry_run`이거나 토큰이 없으면 로컬 경로가 아닌 repo에 `RepoUnavailable`(네트워크 0). `make run-api`는 `API_RELOAD=1`일 때만 `--reload --reload-dir control_plane`. `repos/`는 `.gitignore` | P8.1, P8.6 |
 | D-49 | **projection 오류 분류** (F-3/F-2). `IntegrityError`(FK 등)는 transient가 아니라 `OrderingError`로 → D-30 재시도 5회 후 포기(무한 XAUTOCLAIM 재전달 금지). 프로젝트 행이 없는 이벤트(`project.created` 제외)도 같은 경로. 재시도 큐는 재기동 간 영속(설계) — 상한 5회는 그대로 | P8.1 |
 | D-50 | **웹훅 시크릿은 fail-closed** (F-8). 비어 있으면 `WebhookHandler`가 503 `webhook secret not configured`를 돌려주고 `app()`이 경고 로그 | P8.4 |
+| D-51 | **Plan 승인은 API로도** (외부 점검 #6, 2026-09-16). `POST /projects/{id}/goals/{gid}/approve` · `/reject {reason}` — `X-User-Id`가 `project.members`의 owner|approver여야 하고(403), 대기 중이 아니면 409. 웹훅(`/approve` 코멘트)과 같은 `GoalRunner.resume` 경로. Dry·로컬에서는 터널 없이 이것으로 승인한다; 실 GitHub에서는 둘 다 가능. **`POST /projects`는 `repo`를 검증**: 존재하는 로컬 경로(절대·상대)·`owner/name`·git URL만(400) | P8.4 |
 
 ---
 
@@ -262,7 +263,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P8.1 | projection 오류 분류 + Dry 원격 clone 금지 (F-1, F-2, F-3) | PC-7 | done | 5f21ec0 |
 | P8.2 | Docker 런처: 프로젝트 repo 개별 마운트 + 호스트 uid (F-5a, F-5b) | P8.1 | done | fd4060d |
 | P8.3 | 죽은 워커 정리: task.failed 보장 + reaper (F-5c, F-5) | P8.2 | done | 1a4e5dc |
-| P8.4 | API: repo 유일 409, events 폴백, 시크릿 fail-closed (F-6, F-7, F-8) | P8.1 | todo | |
+| P8.4 | API: repo 유일 409, events 폴백, 시크릿 fail-closed (F-6, F-7, F-8) | P8.1 | done | 18416d6 |
 | P8.5 | ingest 중복 XADD 제거 (F-11), tool_calls 확인 (F-12) | P8.1 | todo | |
 | P8.6 | run-api no-reload, repos/ gitignore, 문서·환경 불일치 (F-4, F-10) | P8.3, P8.4, P8.5 | todo | |
 | **PC-8** | 외부 점검 절차 재실행: `docker` 런처로 REPO_ROOT 밖 로컬 repo 프로젝트 → Task done, 죽은 워커 복구, 스트림 중복 0 | P8.6 | pending | |
