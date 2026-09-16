@@ -189,19 +189,28 @@ class GoalRunner:
                         m.Event.type == "goal.created", m.Event.subject_id == goal_id
                     )
                 )
-            if project is None or created is None:
+                repo_full_name = project.repo_full_name if project is not None else None
+                if repo_full_name is None:  # D-46: projection 전이면 project.created (P9.6)
+                    pc = await s.scalar(
+                        select(m.Event).where(
+                            m.Event.type == "project.created", m.Event.subject_id == project_id
+                        )
+                    )
+                    if pc is not None:
+                        repo_full_name = str(pc.payload.get("repo", "")) or None
+            if repo_full_name is None or created is None:
                 raise RuntimeError(f"project {project_id} or goal.created {goal_id} not found")
             payload = created.payload
             if self.token_provider is not None:  # D-41: 동기 clone 전에 토큰을 신선하게 (PC-7 발견)
                 await self.token_provider.token()
-            repo_path = await asyncio.to_thread(self._repo_path_for, project.repo_full_name)
+            repo_path = await asyncio.to_thread(self._repo_path_for, repo_full_name)
             state = initial_state(
                 project_id=project_id,
                 goal_id=goal_id,
                 goal_title=str(payload.get("title", "")),
                 goal_description=str(payload.get("description", "")),
                 repo_path=str(repo_path),
-                repo_full_name=project.repo_full_name,
+                repo_full_name=repo_full_name,
                 model=self._model,
                 last_event_id=created.id,
             )
