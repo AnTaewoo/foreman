@@ -1,0 +1,27 @@
+"""P9.2 (D-52) — 데모 콘솔: `GET /`가 정적 1페이지, `/static/*` 서빙, 기존 라우트 그대로."""
+
+from __future__ import annotations
+
+import httpx
+
+
+async def test_root_serves_demo_console(client: httpx.AsyncClient) -> None:
+    r = await client.get("/")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    assert 'id="goals"' in r.text and "/static/demo.js" in r.text
+
+
+async def test_static_assets(client: httpx.AsyncClient) -> None:
+    js = await client.get("/static/demo.js")
+    assert js.status_code == 200 and "fetch(" in js.text
+    css = await client.get("/static/demo.css")
+    assert css.status_code == 200
+    assert (await client.get("/static/nope.js")).status_code == 404
+
+
+async def test_existing_routes_unchanged(client: httpx.AsyncClient) -> None:
+    assert (await client.get("/health")).json() == {"status": "ok"}
+    assert (await client.get("/docs")).status_code == 200
+    schema = (await client.get("/openapi.json")).json()
+    assert "/" not in schema["paths"]  # 콘솔은 API 문서에 안 나온다
