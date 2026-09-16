@@ -12,6 +12,7 @@ async def test_root_serves_demo_console(client: httpx.AsyncClient) -> None:
     assert 'id="goals"' in r.text and "/static/demo.js" in r.text
     assert 'id="project"' in r.text  # 프로젝트 선택 (repo가 둘 이상일 때, ?project=<id> 딥링크)
     assert 'id="connect-form"' in r.text and 'id="connect-check"' in r.text  # repo 연결 + 점검
+    assert 'id="delete-project"' in r.text  # 프로젝트 삭제(보관) (D-54)
 
 
 async def test_static_assets(client: httpx.AsyncClient) -> None:

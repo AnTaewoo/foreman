@@ -457,3 +457,39 @@ async def test_repo_check_real_mode_runs_app_check(
     body = r.json()
     assert body["dry_run"] is False and body["ok"] is False
     assert [(i["name"], i["ok"]) for i in body["items"]] == [("auth", True), ("discussions", False)]
+
+
+# P9 (D-54): DELETE /projects/{id} = 보관. 남은 Goal·Task 취소 → project.updated{archived} → 목록에서 제외,
+# 새 Goal 409, 같은 repo로 다시 연결 가능. 이벤트·GitHub 산출물은 그대로
+async def test_delete_project_archives_and_cancels(
+    client: httpx.AsyncClient, pump: Pump, publish: Publish, factory: async_sessionmaker[AsyncSession]
+) -> None:
+    pid = await make_project(client, pump)
+    gid = await make_goal(client, pump, pid)
+    await publish(*seed(pid, gid))
+    await pump()
+    r = await client.delete(f"/projects/{pid}", headers={"X-User-Id": "alice"})
+    assert r.status_code == 202, r.text
+    body = r.json()
+    assert body["id"] == pid and body["cancelled_goals"] == [gid]
+    cancelled = await events_of(factory, "goal.cancelled")
+    assert [e.subject_id for e in cancelled] == [gid]
+    assert cancelled[0].payload["by"] == "alice" and "archived" in cancelled[0].payload["reason"]
+    assert sorted(e.subject_id for e in await events_of(factory, "task.cancelled")) == ["T1", "T2"]
+    upd = await events_of(factory, "project.updated")
+    assert len(upd) == 1 and upd[0].payload == {"archived": True, "by": "alice"}
+    assert upd[0].subject_id == pid and upd[0].actor_id == "alice"
+    await pump()
+    assert [p["id"] for p in (await client.get("/projects")).json()["items"]] == []
+    listed = (await client.get("/projects", params={"include_archived": "true"})).json()["items"]
+    assert [p["id"] for p in listed] == [pid] and listed[0]["archived_at"] is not None
+    got = await client.get(f"/projects/{pid}")
+    assert got.status_code == 200 and got.json()["archived_at"] is not None
+    r = await client.post(f"/projects/{pid}/goals", json={"title": "again"})
+    assert r.status_code == 409 and "archived" in r.json()["detail"]
+    # D-45의 repo 유일성은 보관된 프로젝트를 세지 않는다
+    r = await client.post("/projects", json={"name": "demo2", "repo": REPO})
+    assert r.status_code == 201, r.text
+    # 두 번째 DELETE는 409 (이미 보관)
+    assert (await client.delete(f"/projects/{pid}")).status_code == 409
+    assert (await client.delete("/projects/01UNKNOWN00000000000000000")).status_code == 404

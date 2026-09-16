@@ -52,8 +52,8 @@ def test_revisions_in_chain(tmp_path: Path) -> None:
 
     script = ScriptDirectory.from_config(_cfg(tmp_path / "x.db"))
     revs = list(script.walk_revisions())
-    assert len(revs) == 3  # 0003: goals.plan_markdown (P9.1, D-53)
-    assert [r.revision for r in reversed(revs)] == ["0001", "0002", "0003"]
+    assert len(revs) == 4  # 0003 goals.plan_markdown (D-53), 0004 projects.archived_at (D-54)
+    assert [r.revision for r in reversed(revs)] == ["0001", "0002", "0003", "0004"]
 
 
 # (b) 모델과 마이그레이션이 일치

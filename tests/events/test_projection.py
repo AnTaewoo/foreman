@@ -444,6 +444,31 @@ async def test_plan_proposed_stores_markdown(
         assert goal is not None and goal.plan_markdown == "# Plan\n- a"
 
 
+# P9 (D-54): 프로젝트 "삭제" = project.updated{archived: true} → projects.archived_at (행·이벤트는 남는다)
+async def test_project_archived_via_project_updated(
+    factory: async_sessionmaker[AsyncSession], bus: EventBus, projection: Projection
+) -> None:
+    events = await publish_all(bus, factory, SEQUENCE[:1])
+    await projection.apply(events[0])
+    async with factory() as s:
+        p = await s.get(m.Project, "P1")
+        assert p is not None and p.archived_at is None
+    (upd,) = await publish_all(
+        bus, factory, [ev(E.PROJECT_UPDATED, ("project", "P1"), {"archived": True, "by": "alice"})]
+    )
+    await projection.apply(upd)
+    async with factory() as s:
+        p = await s.get(m.Project, "P1")
+        assert p is not None and p.archived_at is not None
+    (undo,) = await publish_all(
+        bus, factory, [ev(E.PROJECT_UPDATED, ("project", "P1"), {"archived": False, "by": "alice"})]
+    )
+    await projection.apply(undo)
+    async with factory() as s:
+        p = await s.get(m.Project, "P1")
+        assert p is not None and p.archived_at is None
+
+
 # (h)(i) 핸들러 등록
 def test_all_event_types_have_handlers_and_unused_are_noop() -> None:
     assert set(HANDLERS) == set(EventType)
