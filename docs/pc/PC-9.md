@@ -50,3 +50,5 @@ pass 조건: 자동 전부 + 사람 12개. 제출 전(09-20) 시크릿 창에서
   PR #10·#11 머지, (선택) systemd 전환·`OLLAMA_KEEP_ALIVE`.
 - 19:29 KST 초기화(§6 "P9 초기화"): GitHub Issue/PR/브랜치 정리, DB·Redis 초기화, 프로젝트만 시드. 같은 제목 Goal이
   옛 Discussion을 재사용하던 문제를 고쳐(제목에 Goal id) 심사자 여러 명이 같은 예시 버튼을 눌러도 각자 Discussion을 받는다.
+- 19:5x KST: 사용자 결정으로 `.env`의 P9 키 삭제, 데모 모드 꺼짐(선택), 기존 설정 + `HITL_DRY_RUN=false`로만 실행.
+  19:51:23에 DB `hitl`이 외부에서 DROP/CREATE 되어 재시작이 실패 → migrate + 프로젝트 재시드로 복구(§6 "P9 env 원복").
