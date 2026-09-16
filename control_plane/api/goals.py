@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from ulid import ULID
 
+from control_plane.api.demo_guard import AdminDep, goal_quota
 from control_plane.api.deps import StateDep, UserDep, find_project, gh_url, human, publish
 from control_plane.events.schema import Event, EventType, Subject
 from control_plane.store import models as m
@@ -96,6 +97,7 @@ async def create_goal(
 ) -> GoalAccepted:
     if await find_project(state, project_id) is None:  # D-46: projection 전이면 events
         raise HTTPException(404, "project not found")
+    await goal_quota(state, project_id)  # 데모 모드 한도 (P9.3)
     gid = str(ULID())
     await publish(
         state,
@@ -249,7 +251,7 @@ async def reject_goal(
     return await _decide(project_id, goal_id, state, user, approved=False, reason=body.reason)
 
 
-@router.post("/{goal_id}/cancel", status_code=202)
+@router.post("/{goal_id}/cancel", status_code=202, dependencies=[AdminDep])
 async def cancel_goal(
     project_id: str, goal_id: str, body: CancelIn, state: StateDep, user: UserDep
 ) -> CancelOut:

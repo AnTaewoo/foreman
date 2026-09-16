@@ -54,6 +54,15 @@ class Settings(BaseSettings):
         "./repos"  # D-38: owner/name → repo_root/<owner>/<name> clone (docker 런처는 마운트)
     )
 
+    # --- 공개 데모 (P9.3, D-52) ---
+    # True면 POST /projects·cancel·task patch는 X-Admin-Token, Goal 생성은 프로젝트·시간·IP 한도
+    demo_mode: bool = False
+    admin_token: SecretStr = SecretStr("")  # 비어 있으면 데모 모드의 관리 라우트는 항상 401
+    demo_user_id: str = "judge"  # 콘솔이 보내는 X-User-Id (데모 프로젝트 members의 approver)
+    demo_max_running_goals: int = 1  # 프로젝트당 진행 중(draft|planning|active) Goal
+    demo_goals_per_hour: int = 6  # 프로젝트당 시간당 생성
+    demo_post_per_ip_per_min: int = 10  # IP당 쓰기 요청/분
+
     # --- 로깅 ---
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "console"

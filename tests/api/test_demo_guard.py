@@ -1,4 +1,4 @@
-"""P9.3 (D-52) — 데모 모드 가드: 관리 토큰(401), 프로젝트별 실행 Goal 1개·시간당 N(429), IP별 POST/분(429).
+"""P9.3 (D-52) — 데모 모드 가드: 관리 토큰(401), Goal 한도(429), IP별 쓰기 요청 한도(429).
 
 `demo_mode=False`면 전부 기존 동작. 레이트리밋 IP는 scope["client"](uvicorn --proxy-headers가 채움).
 """
@@ -105,7 +105,9 @@ async def test_goal_quota(demo: httpx.AsyncClient, pump: Pump, publish: Any) -> 
     assert r.status_code == 429 and "already running" in r.json()["detail"]
     # awaiting_plan_approval은 실행 중으로 세지 않는다 (사람 대기)
     await publish(
-        _goal_event(pid, g1, EventType.GOAL_PLAN_PROPOSED, {"plan_discussion_number": 1, "revision": 1})
+        _goal_event(
+            pid, g1, EventType.GOAL_PLAN_PROPOSED, {"plan_discussion_number": 1, "revision": 1}
+        )
     )
     await pump()
     r = await demo.post(f"/projects/{pid}/goals", json={"title": "g2"})
@@ -168,5 +170,7 @@ async def test_empty_admin_token_fails_closed(
 ) -> None:
     app = make_app(factory, redis, admin_token="")
     async with client_for(app) as c:
-        r = await c.post("/projects", json={"name": "d", "repo": REPO}, headers={"X-Admin-Token": ""})
+        r = await c.post(
+            "/projects", json={"name": "d", "repo": REPO}, headers={"X-Admin-Token": ""}
+        )
         assert r.status_code == 401

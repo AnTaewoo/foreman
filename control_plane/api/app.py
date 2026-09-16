@@ -15,6 +15,7 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from control_plane.api import approvals, events, goals, projects, stream, tasks
+from control_plane.api.demo_guard import RateLimitMiddleware
 from control_plane.api.deps import AppState, build_state
 from control_plane.api.idempotency import IdempotencyMiddleware
 from control_plane.config import Settings, get_settings
@@ -61,10 +62,24 @@ def create_app(
     application.state.settings = settings
     application.state.ctx = state
     application.add_middleware(IdempotencyMiddleware)
+    if settings.demo_mode:  # P9.3 (D-52)
+        application.add_middleware(
+            RateLimitMiddleware, per_minute=settings.demo_post_per_ip_per_min
+        )
 
     @application.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @application.get("/demo")
+    async def demo_info() -> dict[str, object]:
+        """콘솔이 읽는 데모 설정 (토큰은 절대 포함하지 않는다)."""
+        return {
+            "demo_mode": settings.demo_mode,
+            "user_id": settings.demo_user_id,
+            "max_running_goals": settings.demo_max_running_goals,
+            "goals_per_hour": settings.demo_goals_per_hour,
+        }
 
     for r in (projects.router, goals.router, tasks.router, events.router, stream.router):
         application.include_router(r)

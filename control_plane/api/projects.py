@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from ulid import ULID
 
+from control_plane.api.demo_guard import AdminDep
 from control_plane.api.deps import (
     StateDep,
     UserDep,
@@ -70,7 +71,7 @@ async def list_projects(state: StateDep) -> ProjectList:
     )
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, dependencies=[AdminDep])  # 데모 모드면 X-Admin-Token (P9.3)
 async def create_project(body: ProjectIn, state: StateDep, user: UserDep) -> ProjectOut:
     if (problem := validate_repo(body.repo)) is not None:
         raise HTTPException(400, problem)

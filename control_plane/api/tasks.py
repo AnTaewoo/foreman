@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from control_plane.api.demo_guard import AdminDep
 from control_plane.api.deps import StateDep, UserDep, find_project, gh_url, human, publish
 from control_plane.events.schema import Event, EventType, Subject
 from control_plane.store import models as m
@@ -91,7 +92,7 @@ async def list_tasks(
     return TaskList(items=[_out(t, repo) for t in rows])
 
 
-@router.patch("/{task_id}", status_code=202)
+@router.patch("/{task_id}", status_code=202, dependencies=[AdminDep])
 async def patch_task(
     project_id: str, task_id: str, body: TaskPatch, state: StateDep, user: UserDep
 ) -> TaskPatched:
