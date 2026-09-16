@@ -182,7 +182,7 @@ def test_settings_and_launcher_selection(redis: Redis) -> None:
     # 컨테이너에서 호스트 Redis: localhost → host.docker.internal
     assert docker.redis_url == "redis://host.docker.internal:6379/3"
     inproc = build_launcher(
-        Settings(_env_file=None, worker_launcher="inprocess", llm_provider="fake"), redis
+        Settings(_env_file=None, worker_launcher="inprocess", llm_provider="openai_compat"), redis
     )
     assert type(inproc).__name__ == "InProcessLauncher"
     with pytest.raises(ValueError):
@@ -291,12 +291,12 @@ async def test_main_runs_until_stop(
 def test_worker_env_carries_prices() -> None:
     from control_plane.runtime import worker_llm_env
 
-    s = Settings(_env_file=None, llm_provider="fake")
+    s = Settings(_env_file=None, llm_provider="openai_compat")
     assert s.llm_price_in_per_mtok == 0.0 and s.llm_price_out_per_mtok == 0.0
     env = worker_llm_env(
         Settings(
             _env_file=None,
-            llm_provider="fake",
+            llm_provider="openai_compat",
             llm_price_in_per_mtok=3.0,
             llm_price_out_per_mtok=15.0,
         )

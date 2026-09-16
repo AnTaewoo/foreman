@@ -465,8 +465,14 @@ def test_build_runner_real_mode_uses_token(monkeypatch: pytest.MonkeyPatch) -> N
             return "ghs_x"
 
     monkeypatch.setattr(app_mod, "make_token_provider", lambda settings: Provider())
-    settings = Settings(_env_file=None, dry_run=False, llm_provider="fake", github_app_id="1",
-                        github_app_private_key="pem", github_installation_id=1)  # fmt: skip
+    settings = Settings(
+        _env_file=None,
+        dry_run=False,
+        llm_provider="openai_compat",
+        github_app_id="1",
+        github_app_private_key="pem",
+        github_installation_id=1,
+    )
     monkeypatch.setattr(app_mod, "get_github_client", lambda s: DryRunGitHubClient())
     monkeypatch.setattr(app_mod, "get_discussions_client", lambda s: DryRunDiscussionsClient())
     runner = app_mod.build_runner(settings, build_state(settings))

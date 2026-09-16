@@ -1,4 +1,4 @@
-.PHONY: install lint typecheck test test-integration check run-api run-control-plane run-worker run-webhook-tunnel migrate docker-up docker-down
+.PHONY: install lint typecheck test test-integration check run-api run-control-plane run-worker run-webhook-tunnel worker-image migrate docker-up docker-down
 
 UV ?= uv
 COMPOSE ?= docker compose
@@ -23,7 +23,10 @@ test-integration:
 check: lint typecheck test
 
 run-api:
-	$(UV) run uvicorn control_plane.api.app:app --factory --host 0.0.0.0 --port $${API_PORT:-8000} --reload
+	$(UV) run uvicorn control_plane.api.app:app --factory --host 0.0.0.0 --port $${API_PORT:-8000} $(if $(API_RELOAD),--reload --reload-dir control_plane,)
+
+worker-image:
+	docker build -f worker/Dockerfile -t $${HITL_WORKER_IMAGE:-foreman-worker:dev} .
 
 run-control-plane:
 	$(UV) run python -m control_plane

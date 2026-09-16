@@ -21,13 +21,13 @@ class ProviderSettings(Protocol):
 
 
 def get_provider(settings: ProviderSettings, *, fake: bool = False) -> ModelProvider:
-    """``fake=True`` 또는 ``llm_provider="fake"``면 FakeProvider.
+    """``fake=True``면 FakeProvider(테스트 주입 전용; 설정값이 아니다).
 
     ``llm_provider``(기본 anthropic): anthropic → 키 필수(없으면 ProviderConfigError);
     openai_compat → ``llm_base_url``/``llm_model``/``llm_api_key``로 OllamaCompatProvider (D-33).
     """
     kind = str(getattr(settings, "llm_provider", "anthropic") or "anthropic")
-    if fake or kind == "fake":
+    if fake:
         return FakeProvider(script=[])
     if kind == "openai_compat":
         api_key = getattr(settings, "llm_api_key", None)
@@ -37,7 +37,7 @@ def get_provider(settings: ProviderSettings, *, fake: bool = False) -> ModelProv
             api_key=api_key.get_secret_value() if api_key is not None else "ollama",
         )
     if kind != "anthropic":
-        raise ProviderConfigError(f"unknown llm_provider {kind!r} (anthropic|openai_compat|fake)")
+        raise ProviderConfigError(f"unknown llm_provider {kind!r} (anthropic|openai_compat)")
     key = settings.anthropic_api_key.get_secret_value()
     if not key:
         raise ProviderConfigError(

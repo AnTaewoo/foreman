@@ -16,6 +16,7 @@ class Settings(BaseSettings):
         env_prefix="HITL_",
         env_file=".env",
         env_file_encoding="utf-8",
+        env_ignore_empty=True,  # P8.6: `cp .env.example .env`의 빈 값은 기본값 (외부 점검 #1)
         extra="ignore",
     )
 
@@ -27,8 +28,8 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # --- LLM (D-33: provider 선택) ---
-    # anthropic = 최종 판정(PC-5) / openai_compat = 로컬 Ollama 등 OpenAI 호환 / fake = 테스트
-    llm_provider: Literal["anthropic", "openai_compat", "fake"] = "anthropic"
+    # anthropic / openai_compat(로컬 Ollama 등 OpenAI 호환). 테스트 더블은 코드에서 주입한다(P8.6)
+    llm_provider: Literal["anthropic", "openai_compat"] = "anthropic"
     llm_base_url: str = "http://localhost:11434/v1"  # openai_compat일 때
     llm_model: str = "qwen2.5-coder:7b"  # openai_compat일 때
     llm_api_key: SecretStr = SecretStr("ollama")  # Ollama는 아무 값이나 받는다
@@ -43,12 +44,6 @@ class Settings(BaseSettings):
     github_app_private_key: SecretStr = SecretStr("")
     github_installation_id: int | None = None
     github_webhook_secret: SecretStr = SecretStr("")
-
-    # --- 로그/아티팩트 저장소 (MinIO, S3 호환) ---
-    minio_endpoint: str = "http://localhost:9000"
-    minio_access_key: str = "minioadmin"
-    minio_secret_key: SecretStr = SecretStr("minioadmin")
-    minio_bucket: str = "hitl-runs"
 
     # --- 상주 control plane (P6.1) ---
     # docker = DockerCliLauncher(D-15) / inprocess = 이 프로세스 안에서 CodingAgent(개발용)

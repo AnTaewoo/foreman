@@ -139,7 +139,7 @@ def test_env_example_empty_values_fall_back_to_defaults(
     assert Settings(_env_file=str(env_file)).scheduler_max_workers == 4
 
 
-# P8.6: 사용자 설정에서 mock 값 제거 — llm_provider에 "fake" 없음, MinIO 설정 없음(compose는 profile)
+# P8.6: 사용자 설정에서 mock 값 제거 — llm_provider에 "fake" 없음, MinIO 설정 없음(profile)
 def test_no_mock_settings() -> None:
     from control_plane.config import Settings
 

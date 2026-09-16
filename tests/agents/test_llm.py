@@ -317,7 +317,9 @@ class _Cfg2:
 
 def test_get_provider_selects_by_llm_provider() -> None:
     assert isinstance(get_provider(_Cfg2("openai_compat")), OllamaCompatProvider)
-    assert isinstance(get_provider(_Cfg2("fake")), FakeProvider)
+    assert isinstance(get_provider(_Cfg2("openai_compat"), fake=True), FakeProvider)  # 주입 전용
+    with pytest.raises(ProviderConfigError, match="unknown llm_provider"):
+        get_provider(_Cfg2("fake"))  # P8.6: 설정값 "fake"는 더 이상 없다
     assert isinstance(get_provider(_Cfg2("anthropic", "sk-x")), AnthropicProvider)
     with pytest.raises(ProviderConfigError, match="anthropic"):
         get_provider(_Cfg2("anthropic"))

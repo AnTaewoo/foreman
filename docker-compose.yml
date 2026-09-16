@@ -1,5 +1,5 @@
 # 로컬 개발 스택. 호스트 포트가 점유돼 있으면 *_HOST_PORT 환경변수로 덮어쓴다.
-# 예: MINIO_HOST_PORT=9100 MINIO_CONSOLE_HOST_PORT=9101 make docker-up
+# 예: POSTGRES_HOST_PORT=15432 REDIS_HOST_PORT=16379 make docker-up (MinIO는 profile storage, 기본 미기동)
 
 services:
   postgres:
@@ -31,7 +31,8 @@ services:
       timeout: 3s
       retries: 10
 
-  minio:
+  minio:  # 미사용(설계 §14 예약). 필요할 때만: docker compose --profile storage up
+    profiles: ["storage"]
     image: minio/minio:latest
     command: ["server", "/data", "--console-address", ":9001"]
     environment:

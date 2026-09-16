@@ -17,6 +17,7 @@ dist/
 id_rsa*
 
 # local data
+repos/
 *.db
 *.sqlite
 tmp/
