@@ -347,6 +347,8 @@ class CodingAgent(BaseAgent):
                 await git.push(branch)
             except Exception as exc:  # WIP 보존은 최선 노력
                 log.warning("coding.wip_push_failed", error=str(exc))
+            # P9 버그 #4: attempt는 이 run의 번호(Scheduler 기준), 편집 반복 횟수는 edit_rounds
+            # P9 버그 #5: 마지막 테스트 출력 꼬리와 WIP 브랜치를 남긴다 (콘솔·Issue 코멘트·push)
             await emit(
                 EventType.TASK_FAILED,
                 "task",
@@ -354,12 +356,15 @@ class CodingAgent(BaseAgent):
                 {
                     "run_id": input.run_id,
                     "reason": "tests_failed",
-                    "attempt": int(state.get("attempt", 0)),
+                    "attempt": input.task.attempt,
+                    "edit_rounds": int(state.get("attempt", 0)),
+                    "branch": branch,
+                    "test_output": str(state.get("test_output") or "")[-2000:],
                 },
             )
             return {
                 "outcome": "failed",
-                "error": f"tests failed after {state.get('attempt')} attempts",
+                "error": f"tests failed after {state.get('attempt')} edit rounds",
             }
 
         async def push(state: CodingState) -> dict[str, Any]:

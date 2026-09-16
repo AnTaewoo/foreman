@@ -253,7 +253,7 @@ async def test_pr_opener_pushes_before_opening(
     assert all("ghs_SECRET" not in str(x) for x in failing.push_failed)
 
 
-# P9 버그 #5: 실패한 시도의 WIP 브랜치와 테스트 출력 꼬리를 GitHub에 남긴다 — push(실 모드) + Issue 코멘트, PR 없음
+# P9 버그 #5: 실패한 시도의 WIP 브랜치와 테스트 출력 꼬리를 GitHub에 남긴다 (push + 코멘트, PR 없음)
 async def test_pr_opener_reports_failed_attempt(
     factory: async_sessionmaker[AsyncSession], redis: Redis, tmp_path: Path
 ) -> None:
@@ -266,7 +266,9 @@ async def test_pr_opener_reports_failed_attempt(
     await project_all(factory, redis, "P1")
     pusher = FakePusher()
     github = DryRunGitHubClient()
-    opener = PrOpener(factory, EventBus(redis), github, pusher=pusher, repo_path_for=lambda r: Path(r))
+    opener = PrOpener(
+        factory, EventBus(redis), github, pusher=pusher, repo_path_for=lambda r: Path(r)
+    )
     failed = ev(
         "P1",
         EventType.TASK_FAILED,
@@ -278,7 +280,8 @@ async def test_pr_opener_reports_failed_attempt(
             "attempt": 1,
             "edit_rounds": 3,
             "branch": "ai/e/12-t",
-            "test_output": "FAILED tests/test_calc.py::test_add - ModuleNotFoundError: No module named 'calculator'",
+            "test_output": "FAILED tests/test_calc.py::test_add - ModuleNotFoundError: "
+            "No module named 'calculator'",
         },
         correlation_id="G1",
         actor=AGENT,
@@ -288,7 +291,7 @@ async def test_pr_opener_reports_failed_attempt(
     issues = github.snapshot()["repos"][repo]["issues"]
     comments = [c for c in issues[12]["comments"]]
     assert len(comments) == 1 and "ModuleNotFoundError" in comments[0]["body"]
-    assert "attempt 1" in comments[0]["body"] and "ai/e/12-t" in comments[0]["body"]
+    assert "attempt 1" in comments[0]["body"].lower() and "ai/e/12-t" in comments[0]["body"]
     assert github.snapshot()["repos"][repo].get("pulls", {}) == {}
     await opener.handle(delivery(failed))  # 같은 run은 한 번만
     assert len(github.snapshot()["repos"][repo]["issues"][12]["comments"]) == 1

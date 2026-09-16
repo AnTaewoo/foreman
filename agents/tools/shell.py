@@ -10,7 +10,16 @@ from dataclasses import dataclass
 from agents.tools.base import ToolContext, ToolDenied, ToolTimeout, guarded
 
 ALLOWED_PREFIXES: frozenset[str] = frozenset(
-    {"pytest", "ruff", "mypy", "npm test", "npm run test", "make", "uv run pytest"}
+    {
+        "pytest",
+        "python -m pytest",  # P9 버그 #3: 현재 디렉토리를 sys.path에 넣는 형태
+        "ruff",
+        "mypy",
+        "npm test",
+        "npm run test",
+        "make",
+        "uv run pytest",
+    }
 )
 FORBIDDEN_CHARS = (";", "&", "|", "$(", "`", ">", "<", "\n")
 DEFAULT_TIMEOUT = 600.0
@@ -48,6 +57,9 @@ class ShellTool:
             argv = _check(cmd)
             env = {k: v for k, v in os.environ.items() if k in SAFE_ENV_KEYS}
             env["PYTHONDONTWRITEBYTECODE"] = "1"  # __pycache__가 커밋되지 않게 (PC-4 기록)
+            # P9 bug #3: no pyproject/conftest → still import root modules (worktree first)
+            prior = env.get("PYTHONPATH", "")
+            env["PYTHONPATH"] = str(self._ctx.worktree) + (os.pathsep + prior if prior else "")
             proc = await asyncio.create_subprocess_exec(
                 *argv,
                 cwd=self._ctx.worktree,

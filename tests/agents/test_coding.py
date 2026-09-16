@@ -141,7 +141,7 @@ async def test_fail_then_pass(worktree: Path, remote: Path, spy: Spy) -> None:
     assert agent.last_state is not None and agent.last_state["attempt"] == 2
 
 
-# (c) 편집→테스트 3회 실패 → failed, task.failed(attempt = 이 run의 attempt, P9 버그 #4), WIP push, PR 없음
+# (c) 편집→테스트 3회 실패 → failed, task.failed(attempt = run 번호, P9 버그 #4), WIP push, PR 없음
 # P9 버그 #5: 마지막 테스트 출력 꼬리와 WIP 브랜치를 payload에 남긴다 (진단·control plane push용)
 async def test_three_failures(worktree: Path, remote: Path, spy: Spy) -> None:
     github = DryRunGitHubClient()

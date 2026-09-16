@@ -43,15 +43,15 @@
 | 대상 언어 | 심볼 색인은 **Python(.py)만** — 최상위 class/def + Flask 라우트 | `control_plane/orchestrator/context.py` | 다른 언어 repo는 Plan이 파일 트리만 보고 쓴다(사실상 C) |
 | repo 크기 | 트리 depth ≤ 2, 설정 파일 4,000자, `docs/**.md` 4,000자, 심볼 ≤ 60 파일 × 40개 | 같은 파일 | 수십 파일 규모까지. 그 이상은 요약이 잘려 Plan이 repo를 모른다 |
 | 모델 컨텍스트 | Ollama 기본 **4,096 토큰**(provider가 num_ctx를 안 정함) | `agents/llm/ollama.py`, `ollama ps` | 요약+프롬프트가 길면 조용히 잘린다. Anthropic이면 해당 없음 |
-| 실행 가능한 명령 | `pytest`, `ruff`, `mypy`, `npm test`, `npm run test`, `make`, `uv run pytest`만. 파이프·리다이렉트 금지, 600초 | `agents/tools/shell.py` | 테스트가 이 명령 하나로 돌아야 한다 |
+| 실행 가능한 명령 | `pytest`, `python -m pytest`, `ruff`, `mypy`, `npm test`, `npm run test`, `make`, `uv run pytest`만. 파이프·리다이렉트 금지, 600초. `PYTHONPATH`=repo 루트 | `agents/tools/shell.py` | 테스트가 이 명령 하나로 돌아야 한다. pyproject 없는 repo도 루트 모듈 import 가능 |
 | 워커 실행 환경 | foreman 자체 venv(`uv sync --all-groups`; `fixtures` 그룹 = flask). **대상 repo 의존성은 설치하지 않는다** | `worker/Dockerfile` | stdlib + pytest + flask(+foreman 의존성)로 돌아가는 코드만 |
 | 의존성 변경 | `pyproject.toml`/`requirements*`/`package.json`/락 파일을 건드리면 `needs_decision` → Issue 코멘트 + `task.blocked` | `agents/coding.py` | **MVP 1엔 재개 경로가 없다**(`task.retried` 미발행) → 그 Task와 후속은 멈춤 (C) |
 | 쓰기 범위 | Task의 `owned_paths` 밖 쓰기는 툴이 거부 → `scope_violation` 실패 | `agents/tools/fs.py` | 모델이 분해 때 경로를 빠뜨리면 3회 실패 → blocked. PC-8·showcase의 주 실패 원인 |
-| 재시도·시간 | Task당 최대 3회, 워커 타임아웃 45분(+5분 정리), Goal당 Task ≥ 3 | `store/models.py`, `scheduler.py`, `runner.py` | 3회 뒤 blocked. 후속 Task는 **영원히 대기**(데드락 감지는 MVP 2) |
+| 재시도·시간 | run 최대 3회 × run 안의 편집→테스트 반복 3회, 워커 타임아웃 45분(+5분 정리), Goal당 Task ≥ 3 | `store/models.py`, `scheduler.py`, `agents/coding.py` | 3 run 뒤 blocked. 후속 Task는 **영원히 대기**(데드락 감지는 MVP 2). 실패마다 Issue 코멘트에 테스트 출력 꼬리 |
 | 병렬 | owned_paths가 겹치면 직렬, 동시 워커 = `HITL_SCHEDULER_MAX_WORKERS`(GPU 1개면 2가 현실적) | `scheduler.py` | 라우트가 `main.py` 한 파일이면 전 Task 직렬 → 첫 실패가 전부를 막는다 |
 | 사람 개입 지점 | (1) Plan 승인 — 콘솔 또는 Discussion `/approve` (2) **Task마다 PR 머지** — GitHub에서, 웹훅이 서버에 닿아야 done | 설계 §8, D-51 | 6-Task Goal = 머지 6번. 머지가 안 오면 의존 Task는 안 열린다 |
 | 에이전트 종류 | Coding Agent 하나. Review/Research/Security 없음, PR은 draft, CI 결과 안 봄 | `agents/` | 코드 품질 검토는 사람 몫 |
-| GitHub 전제 | App 설치, Discussions 켜짐 + 카테고리 `Plans`, 기본 브랜치(기본 main). 콘솔 "점검"이 8항목 확인 | `github_adapter/app_check.py` | 하나라도 빠지면 Plan 게시나 push에서 실패 |
+| GitHub 전제 | App 설치, Discussions 켜짐 + 카테고리 `Plans`, 기본 브랜치에 **커밋 ≥ 1**(빈 repo 불가). 콘솔 "점검"이 9항목 확인 | `github_adapter/app_check.py` | 하나라도 빠지면 Plan 게시·clone·pytest에서 실패 |
 | 보안 경계 | 워커는 secrets·토큰 없음, `.env` 읽기 거부, `main` push 거부, 임의 명령 거부 | `agents/tools/*` | Goal이 이 밖을 요구하면 실패가 정상 동작 |
 
 ## 3. 관찰된 실패 패턴 (빈도순)

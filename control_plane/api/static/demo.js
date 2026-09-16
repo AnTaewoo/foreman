@@ -130,6 +130,7 @@
     $("goal-title-view").textContent = goal.title;
     $("goal-status").outerHTML = badge(goal.status).replace("<span", '<span id="goal-status"');
     $("approve-box").hidden = goal.status !== "awaiting_plan_approval";
+    $("cancel-goal").hidden = ["done", "cancelled"].includes(goal.status);
     const dl = $("discussion-link");
     if (goal.plan_discussion_url) { dl.href = goal.plan_discussion_url; dl.hidden = false; } else dl.hidden = true;
     const plan = $("plan");
@@ -154,8 +155,11 @@
     const ul = $("events");
     const li = document.createElement("li");
     const p = e.payload || {};
-    const extra = p.reason || p.branch || p.pr_number || p.title || p.summary || "";
-    li.innerHTML = `<span class="ts">${ts(e.ts)}</span><code>${esc(e.type)}</code> <span class="muted">${esc(e.subject.entity)}:${esc(String(e.subject.id).slice(-6))}</span> ${esc(String(extra).slice(0, 120))}`;
+    // task.failed면 사유 + 테스트 출력 꼬리(P9 버그 #5), 그 외는 대표 필드 하나
+    const extra = e.type === "task.failed"
+      ? `${p.reason || ""}${p.attempt != null ? ` (run ${p.attempt}${p.edit_rounds ? `, ${p.edit_rounds} edits` : ""})` : ""}${p.test_output ? ` — ${String(p.test_output).trim().split("\n").slice(-3).join(" | ")}` : ""}`
+      : (p.reason || p.branch || p.pr_number || p.title || p.summary || "");
+    li.innerHTML = `<span class="ts">${ts(e.ts)}</span><code>${esc(e.type)}</code> <span class="muted">${esc(e.subject.entity)}:${esc(String(e.subject.id).slice(-6))}</span> ${esc(String(extra).slice(0, 300))}`;
     ul.prepend(li);
     while (ul.children.length > 200) ul.removeChild(ul.lastChild);
     refreshSoon();
@@ -193,6 +197,13 @@
   $("approve").onclick = async () => {
     try { await api(`/projects/${state.project.id}/goals/${state.goalId}/approve`, { method: "POST" }); toast("승인했습니다. Task → Issue → 워커 순으로 진행됩니다."); refreshSoon(); }
     catch (e) { toast(e.message); }
+  };
+  $("cancel-goal").onclick = async () => {
+    if (!state.goalId || !confirm("이 Goal과 남은 Task를 취소할까요? (GitHub Issue/PR은 그대로 남습니다)")) return;
+    try {
+      await api(`/projects/${state.project.id}/goals/${state.goalId}/cancel`, { method: "POST", body: { reason: "cancelled from console" } });
+      toast("취소했습니다."); refreshSoon();
+    } catch (e) { toast(e.message); }
   };
   $("reject").onclick = async () => {
     try { await api(`/projects/${state.project.id}/goals/${state.goalId}/reject`, { method: "POST", body: { reason: $("reject-reason").value } }); toast("거절했습니다."); refreshSoon(); }

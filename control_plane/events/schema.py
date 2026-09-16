@@ -287,8 +287,11 @@ class RunArtifactProducedPayload(TypedDict):
 class TaskFailedPayload(TypedDict):
     run_id: str | None  # 기동 실패도 run_id가 있다(Scheduler 발급). 없을 때만 None
     reason: str  # launch_failed | scope_violation | tests_failed | timeout | ...
-    attempt: int
+    attempt: int  # 이 run의 번호 (Scheduler 기준)
     files: NotRequired[list[str]]
+    edit_rounds: NotRequired[int]  # P9: run 안의 편집→테스트 반복 횟수 (additive)
+    branch: NotRequired[str]  # P9: WIP 브랜치 (control plane이 GitHub에 push, additive)
+    test_output: NotRequired[str]  # P9: 마지막 테스트 출력 꼬리 ≤ 2000자 (additive)
 
 
 class RunStartedPayload(TypedDict):

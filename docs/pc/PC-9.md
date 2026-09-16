@@ -54,3 +54,5 @@ pass 조건: 자동 전부 + 사람 12개. 제출 전(09-20) 시크릿 창에서
   19:51:23에 DB `hitl`이 외부에서 DROP/CREATE 되어 재시작이 실패 → migrate + 프로젝트 재시드로 복구(§6 "P9 env 원복").
 - 20:4x KST: 콘솔 "GitHub repo 연결" 폼 + `GET /projects/check`(discussions 항목 포함). `foreman_test`는 사용자가 삭제,
   새 repo `foreman_demo` 점검 8/8 ok(웹훅 URL 갱신 확인). DB 비움 → 사용자가 콘솔에서 직접 연결해 시험(§6 "P9 repo 연결").
+- 21:5x KST: 다른 세션의 foreman_demo 라이브 테스트(Goal #2 분해 즉사, Goal #3 Task 1회 만에 blocked) 리포트 8건 중 7건 수정
+  (§6 "P9 버그 #2~#8"). 대상 repo `foreman_demo`는 커밋 0개였다 — 점검에 `content` 항목 추가. 재시험 전 repo에 커밋이 필요.

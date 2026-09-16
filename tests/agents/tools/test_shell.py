@@ -32,17 +32,24 @@ def test_allowed_prefixes() -> None:
     )
 
 
-# P9 버그 #3 (foreman_demo): pyproject/conftest가 없는 repo에서 `pytest -q`가 루트 모듈을 import 못 해
-# (ModuleNotFoundError) 3회 실패 → 워커는 pyproject를 못 만든다(needs_decision). 툴이 PYTHONPATH=worktree를 준다
+# P9 버그 #3 (foreman_demo): pyproject/conftest 없는 repo에서 `pytest -q`가 루트 모듈 import 실패
+# (ModuleNotFoundError) 3회 실패 → 워커는 pyproject를 못 만든다. 툴이 PYTHONPATH=worktree를 준다
 async def test_pytest_imports_repo_root_modules_without_config(tmp_path: Path, spy: Spy) -> None:
     from agents.tools.base import ToolContext
 
     wt = tmp_path / "empty-repo"
     (wt / "tests").mkdir(parents=True)
     (wt / "calculator.py").write_text("def add(a, b):\n    return a + b\n")
-    (wt / "tests" / "test_calc.py").write_text("from calculator import add\n\n\ndef test_add():\n    assert add(1, 2) == 3\n")
+    (wt / "tests" / "test_calc.py").write_text(
+        "from calculator import add\n\n\ndef test_add():\n    assert add(1, 2) == 3\n"
+    )
     ctx = ToolContext(
-        worktree=wt, owned_paths=["**"], run_id="01RUN", task_id="01TASK", project_id="P1", goal_id="G1",
+        worktree=wt,
+        owned_paths=["**"],
+        run_id="01RUN",
+        task_id="01TASK",
+        project_id="P1",
+        goal_id="G1",
         publish=spy.publish, default_branch="main", agent_id="coding-1", last_event_id="EV0",
     )  # fmt: skip
     result = await ShellTool(ctx).run("pytest -q", timeout=120)

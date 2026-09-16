@@ -179,6 +179,22 @@ async def run_check(settings: Any, http: httpx.AsyncClient, *, repo: str) -> Che
             if ok
             else f"{repo} not accessible (installation has {names}, GET /repos → {r2.status_code})",
         )
+        # 6a) 기본 브랜치에 커밋이 있는가 (P9 버그 #1): 빈 repo는 clone·pytest가 무의미하다
+        if ok:
+            default_branch = str(r2.json().get("default_branch") or "main")
+            r3 = await http.get(f"/repos/{repo}/branches/{default_branch}", headers=inst_headers)
+            if r3.status_code == 200:
+                report.add("content", True, f"branch {default_branch} has commits")
+            else:
+                report.add(
+                    "content",
+                    False,
+                    f"empty repository — branch {default_branch!r} not found "
+                    f"(HTTP {r3.status_code}); "
+                    "push at least one commit (README, pyproject) before connecting",
+                )
+        else:
+            report.add("content", False, "skipped (repo not accessible)")
         # 6b) Discussions 켜짐 + 카테고리 Plans (P9): 없으면 Plan Discussion 생성이 실패한다
         if ok:
             owner, name = repo.split("/", 1)
@@ -209,6 +225,7 @@ async def run_check(settings: Any, http: httpx.AsyncClient, *, repo: str) -> Che
             report.add("discussions", False, "skipped (repo not accessible)")
     else:
         report.add("repo", False, f"{repo}: skipped (no token)")
+        report.add("content", False, "skipped (no token)")
         report.add("discussions", False, "skipped (no token)")
 
     # 7) webhook config

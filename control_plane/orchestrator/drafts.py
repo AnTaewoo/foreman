@@ -129,8 +129,18 @@ class TaskDraft(BaseModel):
 _REF_RE = re.compile(r"^(T-\d+)\s*:?\s*$")
 
 
+_NUM_PREFIX_RE = re.compile(r"^t-\d+\s*[:.)-]?\s*")
+
+
+def _norm_title(text: str) -> str:
+    """비교용 정규화: 소문자, "T-n" 접두 제거, 영숫자·공백만, 공백 압축 (P9 버그 #2)."""
+    t = _NUM_PREFIX_RE.sub("", text.strip().lower())
+    t = re.sub(r"[^0-9a-z가-힣\s]+", " ", t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
 def _resolve_ref(dep: str, titles: list[str]) -> str:
-    """depends_on 정규화: 제목이면 그대로, "T-1"·"T-1:" 번호면 그 번호로 시작하는 제목."""
+    """depends_on 정규화: 제목 그대로 → "T-1" 번호 → 정규화 동치 → 유일한 접두/포함 (P9 #2)."""
     dep = dep.strip()
     if dep in titles:
         return dep
@@ -140,6 +150,20 @@ def _resolve_ref(dep: str, titles: list[str]) -> str:
         hits = [t for t in titles if re.match(rf"^{re.escape(num)}\b", t)]
         if len(hits) == 1:
             return hits[0]
+    nd = _norm_title(dep)
+    if nd:
+        exact = [t for t in titles if _norm_title(t) == nd]
+        if len(exact) == 1:
+            return exact[0]
+        partial = [
+            t
+            for t in titles
+            if _norm_title(t).startswith(nd)
+            or nd.startswith(_norm_title(t))
+            or nd in _norm_title(t)
+        ]
+        if len(partial) == 1:
+            return partial[0]
     return dep
 
 
@@ -261,6 +285,7 @@ def merge_test_only_tasks(result: DecomposeResult) -> tuple[DecomposeResult, lis
         merged_into[t.title] = target.title
         tasks.remove(t)
         notes.append(f"merged test-only task '{t.title}' into '{target.title}'")
+    epics = list(result.epics)
     if merged_into:
         for t in tasks:
             deps: list[str] = []
@@ -269,7 +294,13 @@ def merge_test_only_tasks(result: DecomposeResult) -> tuple[DecomposeResult, lis
                 if d2 != t.title and d2 not in deps:
                     deps.append(d2)
             t.depends_on = deps
-    return DecomposeResult(epics=result.epics, tasks=tasks), notes
+        used = {t.epic for t in tasks if t.epic}
+        if used:  # P9 버그 #6: Task가 0개 남은 Epic은 버린다 (빈 마일스톤 방지)
+            dropped = [e.title for e in epics if e.title not in used]
+            epics = [e for e in epics if e.title in used]
+            if dropped:
+                notes.append(f"dropped empty epics {dropped}")
+    return DecomposeResult(epics=epics, tasks=tasks), notes
 
 
 def augment_test_paths(result: DecomposeResult) -> tuple[DecomposeResult, list[str]]:
@@ -311,11 +342,13 @@ async def decompose_with_retry(
         )
     ]
     last_error = ""
+    last_raw = ""
     for attempt in range(attempts):
         completion = await provider.complete(
             messages, system=system_prompt(), schema=DecomposeResult, model=model
         )
         parsed = completion.parsed
+        last_raw = completion.text or ""
         if parsed is None:
             try:
                 parsed = DecomposeResult.model_validate_json(completion.text)
@@ -356,7 +389,10 @@ async def decompose_with_retry(
                 ),
             ),
         ]
-    raise DecomposeError(f"decompose failed after {attempts} attempts: {last_error}")
+    log.error("decompose.failed", error=last_error, raw=(last_raw or "")[:4000])
+    raise DecomposeError(
+        f"decompose failed after {attempts} attempts: {last_error}\nraw: {(last_raw or '')[-1500:]}"
+    )
 
 
 def _short_error(exc: Exception) -> str:

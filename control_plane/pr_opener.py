@@ -88,9 +88,13 @@ class PrOpener:
         self.opened: list[tuple[str, str]] = []
         self.push_failed: list[tuple[str, str]] = []
         self._seen: set[tuple[str, str]] = set()
+        self._failed_seen: set[tuple[str, str, str]] = set()  # (project, task, run) P9 버그 #5
 
     async def handle(self, delivery: Delivery) -> None:
         event = delivery.event
+        if event.type is EventType.TASK_FAILED:
+            await self._handle_failed(event)
+            return
         if event.type is not EventType.TASK_COMPLETED:
             return
         branch = event.payload.get("branch")
@@ -160,3 +164,46 @@ class PrOpener:
             await self._bus.publish(s, opened)
         self.opened.append(key)
         log.info("pr_opener.opened", task_id=task.id, pr_number=pr.number, head=branch)
+
+    async def _handle_failed(self, event: Event) -> None:
+        """P9 bug #5: push the failed attempt WIP branch and comment the test tail (no PR)."""
+        payload = event.payload
+        if payload.get("reason") != "tests_failed" or not payload.get("branch"):
+            return
+        run_id = str(payload.get("run_id") or "")
+        key = (event.project_id, event.subject.id, run_id)
+        if key in self._failed_seen:
+            return
+        async with self._factory() as s:
+            task = await s.get(m.Task, event.subject.id)
+            project = await s.get(m.Project, event.project_id)
+        if task is None or project is None:
+            return
+        self._failed_seen.add(key)
+        branch = str(payload["branch"])
+        pushed = "pushed"
+        if self.pusher is not None and self._repo_path_for is not None:
+            try:
+                await asyncio.to_thread(
+                    self.pusher.push,
+                    self._repo_path_for(project.repo_full_name),
+                    project.repo_full_name,
+                    branch,
+                )
+            except Exception as exc:
+                log.error(
+                    "pr_opener.wip_push_failed", task_id=task.id, error=mask_token(str(exc))[-300:]
+                )
+                pushed = "not pushed"
+        if task.issue_number is None:
+            return
+        tail = str(payload.get("test_output") or "").strip()[-2000:]
+        rounds = payload.get("edit_rounds")
+        body = (
+            f"Attempt {payload.get('attempt')} failed ({rounds} edit rounds). "
+            f"WIP branch `{branch}` ({pushed}).\n\nLast test output:\n```\n{tail}\n```"
+        )
+        await self._github.comment(
+            project.repo_full_name, task.issue_number, body, key=f"failure:{run_id}"
+        )
+        log.info("pr_opener.failure_reported", task_id=task.id, run_id=run_id, branch=branch)

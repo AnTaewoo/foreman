@@ -224,12 +224,15 @@ async def test_decompose_merges_test_only_tasks_into_implementation() -> None:
     assert len(provider.calls) == 1
 
 
-# P9 버그 #2 (foreman_demo Goal #2): depends_on 문자열이 자기 Task 제목과 글자 단위로 안 맞아 Goal 즉사.
+# P9 버그 #2 (foreman_demo Goal #2): depends_on 문자열이 Task 제목과 글자 단위로 안 맞아 Goal 즉사.
 # 정규화 매칭: 대소문자·구두점·공백 무시 동치 → "T-n" 접두 유무 → 유일한 접두/포함
 def test_depends_on_normalized_matching() -> None:
     out = DecomposeResult.model_validate(
         result(
-            src_task("T-1: Create calculator.py with add/minus", ["calculator.py", "tests/test_calculator.py"]),
+            src_task(
+                "T-1: Create calculator.py with add/minus",
+                ["calculator.py", "tests/test_calculator.py"],
+            ),
             src_task(
                 "T-2: Create app.py to set up Flask and handle /calc endpoints",
                 ["app.py", "tests/test_app.py"],
@@ -243,10 +246,15 @@ def test_depends_on_normalized_matching() -> None:
         )
     )
     assert out.tasks[1].depends_on == ["T-1: Create calculator.py with add/minus"]
-    assert out.tasks[2].depends_on == ["T-2: Create app.py to set up Flask and handle /calc endpoints"]
+    assert out.tasks[2].depends_on == [
+        "T-2: Create app.py to set up Flask and handle /calc endpoints"
+    ]
     with pytest.raises(ValidationError, match="unknown task"):
         DecomposeResult.model_validate(
-            result(src_task("A", ["a.py", "tests/test_a.py"]), src_task("B", ["b.py"], ["Nothing like it"]))
+            result(
+                src_task("A", ["a.py", "tests/test_a.py"]),
+                src_task("B", ["b.py"], ["Nothing like it"]),
+            )
         )
 
 
@@ -262,7 +270,13 @@ async def test_merge_drops_empty_epics() -> None:
     provider = FakeProvider(script=[
         result(
             src_task("Create maths module", ["src/maths.py"], epic="Impl"),
-            src_task("Write tests for maths", ["tests/test_maths.py"], ["Create maths module"], kind="test", epic="Tests"),
+            src_task(
+                "Write tests for maths",
+                ["tests/test_maths.py"],
+                ["Create maths module"],
+                kind="test",
+                epic="Tests",
+            ),
             epics=["Impl", "Tests"],
         ),
     ])  # fmt: skip
