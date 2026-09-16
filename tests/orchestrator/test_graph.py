@@ -40,24 +40,25 @@ PLAN_JSON: dict[str, Any] = {
 DECOMPOSE_JSON: dict[str, Any] = {
     "epics": [{"title": "Users API", "order": 1, "summary": "CRUD"}],
     "tasks": [
+        # P9: 코드 Task는 테스트 파일을 같이 소유한다 (테스트만 있는 Task는 구현 Task로 합쳐진다)
         {
             "title": "Add users route",
             "spec": "s",
             "kind": "feature",
             "role_required": "coding",
             "depends_on": [],
-            "owned_paths": ["src/app/users.py"],
+            "owned_paths": ["src/app/users.py", "tests/test_users.py"],
             "estimated_tier": "T1",
             "epic": "Users API",
         },
         {
-            "title": "Test users route",
+            "title": "Add users validation",
             "spec": "s",
-            "kind": "test",
+            "kind": "feature",
             "role_required": "coding",
             "depends_on": ["Add users route"],
-            "owned_paths": ["tests/test_users.py"],
-            "estimated_tier": "T0",
+            "owned_paths": ["src/app/validation.py", "tests/test_validation.py"],
+            "estimated_tier": "T1",
             "epic": "Users API",
         },
     ],
@@ -229,7 +230,7 @@ async def test_resume_approved() -> None:
     for prev, cur in zip(sink.events, sink.events[1:], strict=False):
         assert cur.causation_id == prev.id
     assert sink.events[1].payload == {"by": "alice"}
-    assert [t["title"] for t in out["tasks"]] == ["Add users route", "Test users route"]
+    assert [t["title"] for t in out["tasks"]] == ["Add users route", "Add users validation"]
     assert out["epics"][0]["title"] == "Users API"
     assert out["issues"] == [
         {"task_id": "T1", "issue_number": 1},

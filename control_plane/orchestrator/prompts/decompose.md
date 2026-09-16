@@ -56,4 +56,5 @@ Rules:
   says so in its spec.
 - Only Tasks that serve the Acceptance Criteria. No "optional", "refactor" or "nice to have" Tasks.
 - Tests live in the same Task as the code they verify. Never make separate "write tests for X"
-  Tasks.
+  Tasks. Every Task that writes code MUST list the test file it writes in "owned_paths"
+  (e.g. "tests/test_calculator.py") — a Task cannot write files outside its owned_paths.

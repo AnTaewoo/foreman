@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
+import structlog
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from agents.llm.base import Message, ModelProvider
@@ -33,6 +34,9 @@ TaskKindValue = Literal[
 ]  # fmt: skip
 RoleValue = Literal["coding", "architect", "research", "test", "review"]
 TierValue = Literal["T0", "T1", "T2", "T3"]
+
+
+log = structlog.get_logger(__name__)
 
 
 class DecomposeError(Exception):
@@ -184,6 +188,108 @@ def system_prompt() -> str:
 # --------------------------------------------------------------------------- decompose
 
 
+# --------------------------------------------------------------------------- P9: 테스트 경로 정규화
+# foreman_demo 1차 Goal(2026-09-16): 분해가 소스만 owned_paths로 주고 모델은 tests/를 쓰려 해
+# 9/9회 scope_violation. 프롬프트 문구가 아니라 코드가 (1) 검증→재요청 (2) 마지막엔 보강한다.
+_TEST_DIRS = ("tests", "test")
+_GENERIC_DIRS = frozenset({"src", "app", "lib", "pkg", "core", "server", "api"} - {"server", "api"})
+_CODE_KINDS = frozenset({"feature", "bugfix", "fix_from_review", "fix_from_test", "test"})
+
+
+def is_test_path(path: str) -> bool:
+    parts = [p for p in path.replace("\\", "/").split("/") if p]
+    if not parts:
+        return False
+    if parts[0] in _TEST_DIRS:
+        return True
+    name = parts[-1]
+    return name.startswith("test_") or name.endswith("_test.py")
+
+
+def _is_code_task(t: TaskDraft) -> bool:
+    return t.role_required == "coding" and t.kind in _CODE_KINDS
+
+
+def missing_test_paths(result: DecomposeResult) -> list[str]:
+    """테스트 경로를 하나도 소유하지 않은 코드 Task 제목들."""
+    return [
+        t.title
+        for t in result.tasks
+        if _is_code_task(t) and not any(is_test_path(p) for p in t.owned_paths)
+    ]
+
+
+def suggested_test_paths(owned: list[str]) -> list[str]:
+    """소유 소스 경로에서 테스트 파일 후보: 파일 stem + 디렉토리 이름 (모델이 고르는 이름)."""
+    out: list[str] = []
+
+    def add(stem: str) -> None:
+        cand = f"tests/test_{stem}.py"
+        if stem and cand not in out:
+            out.append(cand)
+
+    for raw in owned:
+        parts = [p for p in raw.replace("\\", "/").split("/") if p and "*" not in p]
+        if not parts or is_test_path(raw):
+            continue
+        name = parts[-1]
+        if name.endswith(".py") and name != "__init__.py":
+            add(name[:-3])
+        for d in parts[:-1] if name.endswith(".py") or "." in name else parts:
+            if d not in _GENERIC_DIRS and not d.startswith("."):
+                add(d)
+    return out
+
+
+def merge_test_only_tasks(result: DecomposeResult) -> tuple[DecomposeResult, list[str]]:
+    """테스트만 소유하고 구현 Task 하나에 의존하는 Task는 그 구현 Task에 합친다 (패턴 2)."""
+    notes: list[str] = []
+    tasks = list(result.tasks)
+    by_title = {t.title: t for t in tasks}
+    merged_into: dict[str, str] = {}
+    for t in list(tasks):
+        only_tests = bool(t.owned_paths) and all(is_test_path(p) for p in t.owned_paths)
+        if not only_tests or len(t.depends_on) != 1:
+            continue
+        target = by_title.get(t.depends_on[0])
+        if target is None or target is t or all(is_test_path(p) for p in target.owned_paths):
+            continue
+        for p in t.owned_paths:
+            if p not in target.owned_paths:
+                target.owned_paths.append(p)
+        target.spec = f"{target.spec}\n\nAlso (merged Task '{t.title}'): {t.spec}"
+        merged_into[t.title] = target.title
+        tasks.remove(t)
+        notes.append(f"merged test-only task '{t.title}' into '{target.title}'")
+    if merged_into:
+        for t in tasks:
+            deps: list[str] = []
+            for d in t.depends_on:
+                d2 = merged_into.get(d, d)
+                if d2 != t.title and d2 not in deps:
+                    deps.append(d2)
+            t.depends_on = deps
+    return DecomposeResult(epics=result.epics, tasks=tasks), notes
+
+
+def augment_test_paths(result: DecomposeResult) -> tuple[DecomposeResult, list[str]]:
+    """테스트 경로가 없는 코드 Task에 후보 경로를 보강한다(패턴 1: owned_paths 밖 테스트 쓰기)."""
+    notes: list[str] = []
+    for t in result.tasks:
+        if _is_code_task(t) and not any(is_test_path(p) for p in t.owned_paths):
+            extra = suggested_test_paths(t.owned_paths)
+            t.owned_paths.extend(extra)
+            notes.append(f"added test paths to '{t.title}': {extra}")
+    return result, notes
+
+
+def normalize_tasks(result: DecomposeResult) -> tuple[DecomposeResult, list[str]]:
+    """merge_test_only_tasks → augment_test_paths (스크립트·테스트용 한 번에)."""
+    merged, n1 = merge_test_only_tasks(result)
+    out, n2 = augment_test_paths(merged)
+    return out, [*n1, *n2]
+
+
 async def decompose_with_retry(
     provider: ModelProvider,
     *,
@@ -205,7 +311,7 @@ async def decompose_with_retry(
         )
     ]
     last_error = ""
-    for _ in range(attempts):
+    for attempt in range(attempts):
         completion = await provider.complete(
             messages, system=system_prompt(), schema=DecomposeResult, model=model
         )
@@ -223,7 +329,22 @@ async def decompose_with_retry(
             )
             parsed = None
         if isinstance(parsed, DecomposeResult):
-            return parsed
+            parsed, merge_notes = merge_test_only_tasks(
+                parsed
+            )  # 합치면 테스트 경로가 채워질 수 있다
+            missing = missing_test_paths(parsed)
+            if missing and attempt < attempts - 1:
+                last_error = (
+                    "these Tasks own no test file — tests live in the same Task as the code, "
+                    "so add the test file each Task writes (e.g. tests/test_<module>.py) "
+                    "to its owned_paths: " + ", ".join(repr(m) for m in missing)
+                )
+                parsed = None
+        if isinstance(parsed, DecomposeResult):
+            normalized, notes = augment_test_paths(parsed)
+            if merge_notes or notes:
+                log.warning("decompose.normalized", changes=[*merge_notes, *notes])
+            return normalized
         messages = [
             *messages,
             Message(role="assistant", content=completion.text or "(empty)"),

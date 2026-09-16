@@ -156,7 +156,7 @@ async def test_approve_resumes_and_creates_tasks(
     activated = await events_of(factory, "goal.activated")
     assert len(activated) == 1 and activated[0].payload["by"] == "alice"
     created = await events_of(factory, "task.created")
-    assert [e.payload["title"] for e in created] == ["Add users route", "Test users route"]
+    assert [e.payload["title"] for e in created] == ["Add users route", "Add users validation"]
     assert created[1].payload["depends_on"] == [created[0].subject_id]
     tasks = (await client.get(f"/projects/{pid}/tasks")).json()["items"]
     assert all(t["issue_number"] for t in tasks)  # dry-run이어도 번호는 준다

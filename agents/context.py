@@ -81,8 +81,10 @@ def assemble_context(
         log.warning("context.missing_context_md", repo=pc.repo, task_id=input.task.id)
     task_text = f"# Task: {input.task.title}\n{input.task.spec}"
     if input.task.owned_paths:
-        task_text += "\n\nowned_paths (you may modify only these):\n" + "\n".join(
-            f"- {p}" for p in input.task.owned_paths
+        task_text += (
+            "\n\nowned_paths (you may modify only these; put tests ONLY in the tests/ paths "
+            "listed here, never create other test files):\n"
+            + "\n".join(f"- {p}" for p in input.task.owned_paths)
         )
     sections = [
         Section("system", system),

@@ -153,9 +153,11 @@ async def test_decompose_min_tasks_retry() -> None:
     assert "at least 3" in provider.calls[1].messages[-1].content
 
 
-# P9 (foreman_demo 1차 Goal, 2026-09-16): 분해가 소스 파일만 owned_paths로 주고 모델은 tests/test_*.py를 쓰려 해
-# 9/9회 scope_violation → 전부 blocked. 코드가 검증한다: 코드 Task는 테스트 경로를 하나 이상 소유해야 한다
-def src_task(title: str, paths: list[str], deps: list[str] | None = None, **kw: object) -> dict[str, object]:
+# P9 (foreman_demo 1차 Goal, 2026-09-16): 분해가 소스만 owned_paths로 주고 모델은 tests/를 쓰려 해
+# 9/9회 scope_violation → 전부 blocked. 코드 Task는 테스트 경로를 하나 이상 소유해야 한다
+def src_task(
+    title: str, paths: list[str], deps: list[str] | None = None, **kw: object
+) -> dict[str, object]:
     t = task(title, deps)
     t["owned_paths"] = paths
     t.update(kw)
@@ -164,7 +166,7 @@ def src_task(title: str, paths: list[str], deps: list[str] | None = None, **kw: 
 
 async def test_decompose_requires_test_paths_then_retry() -> None:
     provider = FakeProvider(script=[
-        result(src_task("Setup server", ["main.py", "server/__init__.py"])),  # 테스트 경로 없음 → 거부
+        result(src_task("Setup server", ["main.py", "server/__init__.py"])),  # 테스트 없음 → 거부
         result(src_task("Setup server", ["main.py", "server/__init__.py", "tests/test_server.py"])),
     ])  # fmt: skip
     out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
@@ -175,7 +177,7 @@ async def test_decompose_requires_test_paths_then_retry() -> None:
 
 
 async def test_decompose_augments_test_paths_on_final_attempt() -> None:
-    # 재요청해도 안 고치면(작은 모델) 실패시키지 않고 결정적으로 보강한다: 파일 stem + 디렉토리 이름 기반
+    # 재요청해도 안 고치면(작은 모델) 실패시키지 않고 보강한다: 파일 stem + 디렉토리 이름 기반
     provider = FakeProvider(script=[
         result(
             src_task("Setup server", ["main.py", "server/__init__.py"]),
@@ -201,8 +203,15 @@ async def test_decompose_merges_test_only_tasks_into_implementation() -> None:
     provider = FakeProvider(script=[
         result(
             src_task("Create maths module", ["src/maths.py"]),
-            src_task("Write tests for maths", ["tests/test_maths.py"], ["Create maths module"], kind="test"),
-            src_task("Use maths in app", ["src/app.py", "tests/test_app.py"], ["Write tests for maths"]),
+            src_task(
+                "Write tests for maths",
+                ["tests/test_maths.py"],
+                ["Create maths module"],
+                kind="test",
+            ),
+            src_task(
+                "Use maths in app", ["src/app.py", "tests/test_app.py"], ["Write tests for maths"]
+            ),
         ),
     ])  # fmt: skip
     out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
