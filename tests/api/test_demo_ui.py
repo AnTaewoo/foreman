@@ -18,6 +18,9 @@ async def test_root_serves_demo_console(client: httpx.AsyncClient) -> None:
 async def test_static_assets(client: httpx.AsyncClient) -> None:
     js = await client.get("/static/demo.js")
     assert js.status_code == 200 and "fetch(" in js.text
+    # 사용자 보고: 새 버튼이 HTML엔 보이는데 눌리지 않음 = 옛 demo.js 캐시. 항상 재검증하게 한다
+    assert "no-cache" in js.headers.get("cache-control", "")
+    assert "no-cache" in (await client.get("/")).headers.get("cache-control", "")
     css = await client.get("/static/demo.css")
     assert css.status_code == 200
     assert (await client.get("/static/nope.js")).status_code == 404
