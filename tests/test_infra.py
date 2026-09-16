@@ -50,7 +50,7 @@ def _compose() -> dict[str, object]:
     return yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
 
 
-@pytest.mark.parametrize("service", ["postgres", "redis", "minio"])
+@pytest.mark.parametrize("service", ["postgres", "redis"])
 def test_compose_service_has_healthcheck_and_named_volume(service: str) -> None:
     compose = _compose()
     services = compose["services"]  # type: ignore[index]
@@ -120,3 +120,31 @@ def test_configure_logging_sets_stdlib_level(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setenv("HITL_LOG_LEVEL", "WARNING")
     configure_logging(Settings(_env_file=None))
     assert logging.getLogger().level == logging.WARNING
+
+
+# P8.6 (외부 점검 #1): `cp .env.example .env` 그대로(빈 값)여도 Settings가 기본값으로 뜬다
+def test_env_example_empty_values_fall_back_to_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from control_plane.config import Settings
+
+    env_file = tmp_path / ".env"
+    env_file.write_text((ROOT / ".env.example").read_text(encoding="utf-8"), encoding="utf-8")
+    for key in _env_example_keys():
+        monkeypatch.delenv(key, raising=False)
+    s = Settings(_env_file=str(env_file))
+    assert s.dry_run is True and s.llm_provider == "anthropic" and s.repo_root == "./repos"
+    assert s.scheduler_max_workers == 4 and s.llm_price_in_per_mtok == 0.0
+    monkeypatch.setenv("HITL_SCHEDULER_MAX_WORKERS", "")  # 빈 환경변수도 기본값
+    assert Settings(_env_file=str(env_file)).scheduler_max_workers == 4
+
+
+# P8.6: 사용자 설정에서 mock 값 제거 — llm_provider에 "fake" 없음, MinIO 설정 없음(compose는 profile)
+def test_no_mock_settings() -> None:
+    from control_plane.config import Settings
+
+    assert "fake" not in str(Settings.model_fields["llm_provider"].annotation)
+    assert not any(name.startswith("minio_") for name in Settings.model_fields)
+    compose = _compose()
+    services = compose["services"]  # type: ignore[index]
+    assert "profiles" in services["minio"] and "minio" not in ("postgres", "redis")  # type: ignore[index]
