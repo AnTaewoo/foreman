@@ -706,6 +706,10 @@ Goal → Plan(승인) → Task Graph
 
 ## 11. 관측성 · 비용 관리
 
+### 11.0 데모 콘솔 (MVP 1 임시, Mission Control 아님)
+
+MVP 1 제출·시연용으로 API 서버가 `GET /`에서 정적 1페이지를 서빙한다(Goal 생성, Plan 본문·승인/거절, Task·Issue·PR 링크, 이벤트 스트림). §11.1 Mission Control(MVP 5)이 생기면 제거한다. 승인은 §13의 `/approve`·`/reject` 경로를 그대로 쓴다. 데모 모드(`HITL_DEMO_MODE`)에서는 프로젝트 생성·취소를 관리 토큰으로 제한하고 요청 빈도를 제한한다(ROADMAP D-52).
+
 ### 11.1 Mission Control 화면 구성
 
 | 화면 | 내용 |
@@ -747,6 +751,7 @@ Goal → Plan(승인) → Task Graph
 | 코드 실행 | 샌드박스 컨테이너, 네트워크 허용 목록, 시간/메모리 제한 |
 | Supply chain | 새 dependency는 T2 + Security 스캔(라이선스, 알려진 취약점) 통과 필수 |
 | 감사 | 이벤트 해시 체인, 모든 Decision에 응답자 ID·시각·코멘트 |
+| 공개 데모 | 데모 모드에서 쓰기 API는 관리 토큰(`X-Admin-Token`) 또는 데모 프로젝트 한정 + IP·프로젝트별 레이트리밋. 인증 없는 공개 노출은 데모 모드에서만 (ROADMAP D-52) |
 | 데이터 | repo 코드는 워커 임시 저장만. LLM provider로 전송되는 컨텍스트 범위를 policy로 제한 가능 (`context_exclude` glob) |
 
 ---
@@ -754,13 +759,16 @@ Goal → Plan(승인) → Task Graph
 ## 13. API 설계 (요약)
 
 ```
+GET    /                               # 데모 콘솔 정적 페이지 (§11.0, MVP 1 임시)
 POST   /projects                       # repo 연결 (installation_id)
 GET    /projects/{id}
 PATCH  /projects/{id}/policy           # → Decision(T3) 생성
 POST   /projects/{id}/pause | /resume | /emergency-stop
 
 POST   /projects/{id}/goals            # Goal 생성 → planning 시작
-GET    /projects/{id}/goals/{gid}      # 진행률, Epic, Task 요약
+GET    /projects/{id}/goals            # 목록 (데모 콘솔용)
+GET    /projects/{id}/goals/{gid}      # 진행률, Epic, Task 요약, plan_markdown (D-53)
+POST   /projects/{id}/goals/{gid}/approve | /reject   # Plan 승인 (D-51, 웹훅과 동일 경로)
 POST   /projects/{id}/goals/{gid}/cancel
 
 GET    /projects/{id}/tasks?status=&epic=

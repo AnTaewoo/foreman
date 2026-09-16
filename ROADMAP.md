@@ -163,6 +163,8 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | D-49 | **projection 오류 분류** (F-3/F-2). `IntegrityError`(FK 등)는 transient가 아니라 `OrderingError`로 → D-30 재시도 5회 후 포기(무한 XAUTOCLAIM 재전달 금지). 프로젝트 행이 없는 이벤트(`project.created` 제외)도 같은 경로. 재시도 큐는 재기동 간 영속(설계) — 상한 5회는 그대로 | P8.1 |
 | D-50 | **웹훅 시크릿은 fail-closed** (F-8). 비어 있으면 `WebhookHandler`가 503 `webhook secret not configured`를 돌려주고 `app()`이 경고 로그 | P8.4 |
 | D-51 | **Plan 승인은 API로도** (외부 점검 #6, 2026-09-16). `POST /projects/{id}/goals/{gid}/approve` · `/reject {reason}` — `X-User-Id`가 `project.members`의 owner|approver여야 하고(403), 대기 중이 아니면 409. 웹훅(`/approve` 코멘트)과 같은 `GoalRunner.resume` 경로. Dry·로컬에서는 터널 없이 이것으로 승인한다; 실 GitHub에서는 둘 다 가능. **`POST /projects`는 `repo`를 검증**: 존재하는 로컬 경로(절대·상대)·`owner/name`·git URL만(400) | P8.4 |
+| D-52 | **데모 콘솔 + 데모 모드** (원티드 챔피언십 제출 규정 2026-09-16: 심사자가 설치·API 키 없이 브라우저로 핵심 기능 체험). `GET /`의 정적 1페이지(`control_plane/api/static/`)는 Mission Control(§11.1, MVP 5)이 **아니라** MVP 1 데모 전용이며 승인은 D-51 API 경로 그대로. `HITL_DEMO_MODE=true`면 익명 방문자는 Goal 생성·승인·거절만, `POST /projects`·cancel은 `X-Admin-Token`(401). 레이트리밋: IP별 POST/분, 프로젝트별 동시 실행 Goal 1, 시간당 N. 호스팅은 사용자 서버 `foreman.antaewoo.com`(nginx → 127.0.0.1:8000, systemd), 실 GitHub 공개 repo `AnTaewoo/foreman_test`, LLM 로컬 Ollama. 기각: Next.js Mission Control 선행(기간 내 불가, MVP 순서 위반) | P9 |
+| D-53 | **Plan 본문을 이벤트에** — `goal.plan_proposed.payload.plan_markdown: NotRequired[str]`(additive, D-27/D-51 패턴) → projection → `goals.plan_markdown`(alembic 0003) → `GET …/goals/{gid}.plan_markdown`. 기각: LangGraph 체크포인터 읽기(API 프로세스 내부 상태, "읽기는 projection" 원칙 위반, 거절·완료 후 조회 불안정). 해시 체인이 Plan 본문까지 감사한다(수 KB, 수용) | P9.1 |
 
 ---
 
@@ -267,6 +269,18 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P8.5 | ingest 중복 XADD 제거 (F-11), tool_calls 확인 (F-12) | P8.1 | done | 1897264 |
 | P8.6 | run-api no-reload, repos/ gitignore, 문서·환경 불일치 + 온보딩 점검 (F-4, F-10, 온보딩 #1~#8) | P8.3, P8.4, P8.5 | done | 06d97a7 |
 | **PC-8** | 외부 점검 절차 재실행: `docker` 런처로 REPO_ROOT 밖 로컬 repo 프로젝트 → Task done, 죽은 워커 복구, 스트림 중복 0 | P8.6 | pass (자동 5/5, 사용자 서명 대기) | docs/pc/PC-8.md |
+
+### P9 — 공개 데모 호스팅 (제출 규정 2026-09-16, §7 P9)
+
+| ID | 제목 | depends_on | status | commit |
+|---|---|---|---|---|
+| P9.1 | Plan 본문·Goal 목록·Task 링크 API (D-53) | PC-8 | todo | |
+| P9.2 | 데모 콘솔 정적 1페이지 `GET /` (D-52) | P9.1 | todo | |
+| P9.3 | 데모 모드 가드 + 레이트리밋 (D-52) | P9.1 | todo | |
+| P9.4 | 배포 파일(systemd) + docs/deploy.md | P9.3 | todo | |
+| P9.5 | 데모 LLM 선정 (gemma4:12b vs qwen2.5-coder:14b, e2e) | PC-8 | todo | |
+| P9.6 | 데모 콘텐츠: demo_seed + showcase Goal | P9.3, P9.5 | todo | |
+| **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending | |
 
 ---
 
@@ -781,6 +795,62 @@ discussion_comment, pull_request, pull_request_review; `check_suite`는 선택),
 - 자동(외부 점검과 같은 환경: 기본 DB `hitl`·Redis 0·**docker 런처**, `make run-control-plane` + `make run-api`): (1) 기동 직후 `bus.handler_failed`·`ProjectionTransient` 무한 재전달 0 (2) `HITL_REPO_ROOT` **밖** 로컬 경로 repo로 프로젝트 → Goal → `/approve` → 워커 컨테이너가 push 성공 → PR(dry) → done (3) 같은 repo로 두 번째 프로젝트 409 (4) 스트림 distinct id == entry 수 (5) 컨테이너를 `docker kill` 하면 5분 안에 `task.failed{worker_died}` → 재배정
 - 사람: 리포트의 확인 절차 6개 항목별 통과 표, `docs/pc/PC-8.md`
 - pass: 자동 전부
+
+---
+
+### P9 — 공개 데모 호스팅 (2026-09-16 추가, ## 7의 하위)
+
+근거: 원티드 AI 챔피언십 제출 규정(심사자가 로그인·설치·API 키 없이 웹에서 핵심 기능 체험, 심사 기간 내 접속 보장). 사용자 결정: 이 서버 `foreman.antaewoo.com`(nginx·인증서·DNS는 사용자), 로컬 Ollama(gemma4:12b 후보), 실 GitHub 공개 repo, PR 머지는 소유자가 GitHub에서. 결정 D-52, D-53.
+
+### P9.1 Plan 본문·Goal 목록·Task 링크 API (0.5d)
+- depends_on: PC-8
+- owned_paths: `control_plane/events/schema.py`(추가만), `control_plane/events/projection.py`, `control_plane/store/models.py`, `alembic/versions/0003_goal_plan_markdown.py`, `control_plane/orchestrator/graph.py`, `control_plane/api/{goals,tasks,projects,deps}.py`, `tests/events/test_projection.py`, `tests/api/test_api.py`, `tests/orchestrator/test_graph.py`
+- red: (a) `goal.plan_proposed{plan_markdown:"# Plan"}` projection → `Goal.plan_markdown == "# Plan"`, 키 없으면 None(구 이벤트 호환) (b) `draft_plan`(graph.py:158-164)이 낸 payload에 `plan_markdown == markdown` (c) `GET /projects/{id}/goals` → `{items:[…]}` created_at desc: id/title/status/plan_revision/plan_discussion_number/created_at/total/done (d) `GET …/goals/{gid}`에 `plan_markdown`, `plan_discussion_url`(repo가 `owner/name`이면 `https://github.com/{repo}/discussions/{n}`, 아니면 None) (e) `TaskOut`에 `spec`, `issue_url`, `pr_url` (f) `ProjectOut`에 `repo_url`
+- green: `GoalPlanProposedPayload.plan_markdown: NotRequired[str]`; `_goal_plan_proposed`(projection.py:126)에 `plan_markdown` 저장; `Goal.plan_markdown` Text nullable + 0003; `deps.gh_url(repo, kind, n)` 도우미 하나를 세 라우터가 공유; `list_goals` 라우트. Task summary는 컬럼 없이 UI가 `task.completed` 이벤트에서 읽는다.
+- gate: `make check && make migrate`
+
+### P9.2 데모 콘솔 — 정적 1페이지 (0.75d)
+- depends_on: P9.1
+- owned_paths: `control_plane/api/static/{index.html,demo.js,demo.css}`, `control_plane/api/app.py`, `tests/api/test_demo_ui.py`
+- red: (a) `GET /` 200 `text/html`, 본문에 `id="goals"` (b) `GET /static/demo.js` 200 (c) `/health`·`/docs` 그대로
+- green: `app.py`에 `StaticFiles` 마운트 + `GET /`(`include_in_schema=False`) → `FileResponse`. 빌드·CDN 없음, 같은 origin이라 CORS 불필요. 화면: 헤더(repo 링크, "PR 머지는 repo 소유자가 GitHub에서" 안내, 작동 원리 3줄) / 프로젝트: `GET /projects` 첫 항목 고정 / Goal 목록 + 생성 폼(예시 Goal 버튼 3개, X-2와 같은 문장) / Goal 상세: 상태 배지, Plan(`<pre>`), Discussion 링크, `awaiting_plan_approval`일 때만 Approve/Reject(reason) → `X-User-Id: judge` 고정 / Task 표(title·status·attempt·Issue·PR 링크·spec 접기) / 이벤트 로그: WS `/projects/{id}/stream?since=<last seq>`(`wss:` 자동, 끊기면 3s 후 재접속), 이벤트 도착 시 500ms 디바운스로 goal·tasks 재조회, WS 실패 시에만 5s 폴링. 429/403/409 응답 본문은 토스트로 그대로. `[Showcase]` 접두 Goal은 목록 맨 위 고정.
+- gate: `make check` + 브라우저 수동(스크린샷 `docs/pc/PC-9-*.png`)
+- notes: D-52. ≤ 400줄.
+
+### P9.3 데모 모드 가드 + 레이트리밋 (0.5d, P9.2와 병렬 가능)
+- depends_on: P9.1
+- owned_paths: `control_plane/config.py`, `control_plane/api/demo_guard.py`(신규), `control_plane/api/{deps,app,projects,goals,tasks}.py`, `tests/api/test_demo_guard.py`, `.env.example`
+- red (Settings `demo_mode=True, admin_token="t", demo_max_running_goals=1, demo_goals_per_hour=6, demo_post_per_ip_per_min=10`): (a) `POST /projects` 토큰 없음 401, `X-Admin-Token: t` 201 (b) `…/cancel`, `PATCH …/tasks/{tid}` 토큰 없음 401 (c) 프로젝트에 status ∈ {planning, active} Goal이 있으면 `POST goals` 429 `demo: a goal is already running`(awaiting은 미포함) (d) 1시간 내 6개면 429 (e) 같은 IP(`X-Forwarded-For` 첫 값) POST 11번째 429 (f) `demo_mode=False`면 전부 기존 동작
+- green: `demo_guard.py` — `require_admin` 의존성(demo_mode일 때만 검사, `SecretStr`, 로그 금지), `RateLimit` 순수 ASGI 미들웨어(IdempotencyMiddleware 패턴, 메모리 토큰버킷, POST/PATCH만), `goal_quota(state, project_id)`를 `create_goal` 앞에서(DB `goals` count). uvicorn `--proxy-headers --forwarded-allow-ips 127.0.0.1`.
+- stretch(시간 남으면): awaiting 30분 방치 Goal 자동 거절(`by:"system:demo"`, lifespan 60s 루프).
+- gate: `make check`
+- notes: D-52. `/docs`는 켜둔다(관리 라우트는 401이라 무해).
+
+### P9.4 배포 파일 + docs/deploy.md (0.25d) — nginx는 사용자 담당
+- depends_on: P9.3
+- owned_paths: `deploy/systemd/foreman-{control-plane,api}.service`, `deploy/nginx/foreman.antaewoo.com.conf`(참고용 사본), `docs/deploy.md`, `docs/runbook.md`(링크 1줄)
+- 포트: **API 8000**(nginx가 `127.0.0.1:8000`으로 프록시, WS 업그레이드 필요). control plane은 포트 없음.
+- green: systemd **system unit** 2개: `User=lhjin0j`, `SupplementaryGroups=docker`, `WorkingDirectory=/home/lhjin0j/foreman`, `EnvironmentFile=…/.env`, `Environment=HITL_DRY_RUN=false HITL_DEMO_MODE=true`, `Restart=always`, `After=network-online.target docker.service`; api `ExecStart=/home/lhjin0j/.local/bin/uv run uvicorn control_plane.api.app:app --factory --host 127.0.0.1 --port 8000 --proxy-headers --forwarded-allow-ips 127.0.0.1`, control-plane `… uv run python -m control_plane`. `docs/deploy.md` = 사용자 명령 순서 + 롤백 + `journalctl -u foreman-api -f`.
+- gate: `scripts/check_runbook.sh`.
+
+### P9.5 LLM 선정 (0.25d + 실행 대기, P9.1과 병렬로 백그라운드)
+- depends_on: PC-8
+- owned_paths: `docs/pc/X-2.md`, `.env.example`(주석)
+- 절차: `ollama pull gemma4:12b`. 후보 `qwen2.5-coder:14b`(현행), `gemma4:12b`, `gemma4:e4b`(속도 기준선). 각 모델 `HITL_LLM_PROVIDER=openai_compat HITL_LLM_MODEL=<m> uv run python scripts/e2e_dry_run.py tests/fixtures/sample_repo "Add a /users CRUD endpoint with tests" --dump docs/pc/x2-<m>` × 2회(X-2 표와 같은 조건, `setsid nohup`, 다른 GPU 작업 없을 때). 기록: Task 수 / done / 브랜치 / Plan JSON 1회 통과 / 호출당 초 / 토큰. 판정: Plan JSON 첫 시도 유효 ∧ done ≥ 현행 ∧ 호출당 ≤ 60s. 동률이면 현행 14b. 26b는 "VRAM 초과, 제외" 한 줄.
+- 데모 `.env`(사용자): `HITL_LLM_PROVIDER=openai_compat`, `HITL_LLM_MODEL=<선정>`, `HITL_SCHEDULER_MAX_WORKERS=2`(GPU 1개, Ollama가 직렬화). 권장: ollama 서비스 `OLLAMA_KEEP_ALIVE=-1`, 심사 기간에 다른 Ollama 워크로드(27GB 모델) 중지.
+- gate: X-2.md 결론 문단.
+
+### P9.6 데모 콘텐츠 + repo 정리 (0.25d)
+- depends_on: P9.3, P9.5, 배포 완료
+- owned_paths: `scripts/demo_seed.py`(신규), `docs/deploy.md`(§데모 준비)
+- green: `demo_seed.py` — (1) `scripts/cleanup_repo.py AnTaewoo/foreman_test --apply` (2) DB `hitl` drop → `make migrate`, Redis 0 FLUSHDB 안내(PC-8 절차) (3) `POST /projects {name:"foreman demo", repo:"AnTaewoo/foreman_test", members:[{AnTaewoo,owner},{judge,approver}]}`(admin token) (4) `[Showcase]` Goal 생성 → 사용자 approve → 사용자 PR 머지 → done.
+- 정리 정책: 심사 기간(09-20 ~ +7일)에는 cleanup을 돌리지 않는다(DB↔repo 불일치 방지). 종료 후 cleanup + DB 초기화. Discussions는 누적 허용(D-42).
+- gate: 콘솔에서 showcase Goal done + merged PR 링크.
+
+### PC-9 심사자 워크스루 (0.5d, 09-19)
+- 자동: `make check`, `scripts/check_runbook.sh`, `curl -I https://foreman.antaewoo.com/` 200, `/health`, WS 연결
+- 사람(시크릿 창, 가능하면 다른 네트워크): (1) `/` 로드, showcase의 Plan·Issue·merged PR 링크 → GitHub (2) 예시 Goal 생성 → draft→planning→awaiting ≤ 3분 (3) Plan 본문 = Discussion (4) Approve → Issue 링크 (5) 워커 → draft PR 링크 (6) 소유자 GitHub 머지 → 웹훅 → Task done이 새로고침 없이 갱신 (7) 두 번째 Goal 즉시 → 429 (8) POST 11회 → 429 (9) `curl -X POST /projects` 401 (10) `systemctl restart` 뒤 awaiting Goal 복원·Approve 202 (11) App "Redeliver ping" 200 (12) `journalctl`에 토큰·키 0
+- pass: 자동 전부 + 사람 12개. 기록 `docs/pc/PC-9.md`.
 
 ---
 
