@@ -27,15 +27,9 @@ Goal → Plan 승인 → Issue → PR을 체험한다. 구성: 이 서버(nginx 
      -d video.antaewoo.com -d vite-localhost.antaewoo.com -d foreman.antaewoo.com
    ```
    → 443 블록 활성 → `sudo nginx -t && sudo systemctl reload nginx`
-4. **`.env`** (`HITL_DRY_RUN`은 유닛이 false로 켠다, `.env`는 그대로):
-   ```
-   HITL_DEMO_MODE=true
-   HITL_ADMIN_TOKEN=<openssl rand -hex 24>
-   HITL_LLM_PROVIDER=openai_compat
-   HITL_LLM_MODEL=<docs/pc/X-2.md 선정 모델>
-   HITL_SCHEDULER_MAX_WORKERS=2
-   HITL_GITHUB_APP_ID / HITL_GITHUB_APP_PRIVATE_KEY / HITL_GITHUB_INSTALLATION_ID / HITL_GITHUB_WEBHOOK_SECRET
-   ```
+4. **`.env`**: 기존 값 그대로 쓴다(사용자 결정 2026-09-16). `HITL_DRY_RUN=false`는 `.env`에 넣지 않고 유닛/`demo_up.sh`가
+   환경변수로 켠다. 데모 모드(관리 토큰·한도)는 **선택**이며 기본 꺼짐 — 공개 심사 직전에 켜려면 `.env`에
+   `HITL_DEMO_MODE=true`, `HITL_ADMIN_TOKEN=<openssl rand -hex 24>`를 넣고 API를 재시작한다.
 5. **이전 프로세스 종료**: 8000 포트의 수동 uvicorn·`python -m control_plane`·smee(PC-7 잔여)를 내린다.
    `ps -eo pid,args | grep -F -e "uvicorn control_plane" -e "python -m control_plane" -e smee-client | grep -v grep`
 6. **DB·Redis 초기화** (데모 시작 전 한 번, 기존 점검 데이터 제거):
@@ -62,9 +56,8 @@ Goal → Plan 승인 → Issue → PR을 체험한다. 구성: 이 서버(nginx 
 ## 데모 준비 (P9.6)
 
 ```
-export HITL_ADMIN_TOKEN=<.env 값>
 uv run python scripts/cleanup_repo.py AnTaewoo/foreman_test --apply       # 이전 Issue/PR/ai-* 정리 (Discussions는 남는다)
-uv run python scripts/demo_seed.py --repo AnTaewoo/foreman_test --owner AnTaewoo
+uv run python scripts/demo_seed.py --repo AnTaewoo/foreman_test --owner AnTaewoo   # 데모 모드면 --admin-token
 ```
 → 콘솔 `https://foreman.antaewoo.com/`에서 `[Showcase] …` Goal의 Plan을 **Approve** → Issue·PR이 생기면 소유자가
 GitHub에서 PR을 **머지** → Task done. 심사자는 이 showcase로 결과를 바로 보고, 예시 Goal을 직접 만들어 본다.
@@ -78,11 +71,11 @@ GitHub에서 PR을 **머지** → Task done. 심사자는 이 showcase로 결과
 2. 점검(읽기 전용): `uv run python scripts/github_app_check.py --repo AnTaewoo/<repo>` — 전부 `[ok]`.
 3. 비어 있는 repo면 샘플 앱 push: `uv run python scripts/seed_test_repo.py AnTaewoo/<repo>` (Flask + pytest 소형 앱.
    자기 코드가 있으면 생략. Orchestrator는 파일이 있어야 Plan을 쓴다).
-4. 프로젝트 등록(관리 토큰):
+4. 프로젝트 등록(데모 모드가 꺼져 있으면 토큰 없이):
    ```
-   export $(grep ^HITL_ADMIN_TOKEN= .env)
    uv run python scripts/demo_seed.py --repo AnTaewoo/<repo> --owner AnTaewoo --no-showcase
    ```
+   (데모 모드가 켜져 있으면 `--admin-token $HITL_ADMIN_TOKEN`)
    → 콘솔 상단 "프로젝트" 선택 상자(둘 이상일 때) 또는 `https://foreman.antaewoo.com/?project=<id>`.
 5. Goal 생성 → Plan 승인 → Issue → PR. PR 머지 → Task done은 **App 웹훅 URL**이 이 서버를 가리켜야 들어온다.
 
@@ -92,8 +85,8 @@ GitHub에서 PR을 **머지** → Task done. 심사자는 이 showcase로 결과
 - 재시작: `sudo systemctl restart foreman-api` — `awaiting_plan_approval` Goal은 복원되지만 **planning 중인 Goal은
   끊긴다**(P6.2). 심사 기간에는 피한다. control plane 재시작은 안전(재기동 시 `recover_orphans`).
 - 롤백: `sudo systemctl stop foreman-api foreman-control-plane`, nginx 사이트 링크 제거 후 reload.
-- 한도(429): 프로젝트당 진행 중 Goal 1개, 시간당 6개, IP당 쓰기 10회/분(`HITL_DEMO_*`). 관리 라우트
-  (`POST /projects`, cancel, task patch)는 `X-Admin-Token`.
+- 데모 모드를 켰을 때만: 한도(429) 프로젝트당 진행 중 Goal 1개, 시간당 6개, IP당 쓰기 10회/분(`HITL_DEMO_*`),
+  관리 라우트(`POST /projects`, cancel, task patch)는 `X-Admin-Token`. 꺼져 있으면 제한 없음.
 - 개발 중 테스트: `make check`는 sqlite. **통합 테스트(`make test-integration`)는 `hitl_test` DB를 비우고 다시 만든다** —
   데모 DB `hitl`은 건드리지 않는다(`FOREMAN_TEST_DATABASE_URL`로 변경 가능). `-o addopts=""`로 전체를 돌리지 말 것.
 - 접속 확인은 시크릿 창에서: `/`, `/health`, `/docs`, Goal 생성 → 429/승인 흐름 (`docs/pc/PC-9.md`).

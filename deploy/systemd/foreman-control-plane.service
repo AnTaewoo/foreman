@@ -12,8 +12,6 @@ SupplementaryGroups=docker
 WorkingDirectory=/home/lhjin0j/foreman
 EnvironmentFile=/home/lhjin0j/foreman/.env
 Environment=HITL_DRY_RUN=false
-Environment=HITL_DEMO_MODE=true
-Environment=HITL_LOG_FORMAT=json
 Environment=PATH=/home/lhjin0j/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/home/lhjin0j/.local/bin/uv run --no-sync python -m control_plane
 Restart=always

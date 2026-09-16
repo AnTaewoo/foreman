@@ -12,11 +12,9 @@ User=lhjin0j
 Group=lhjin0j
 SupplementaryGroups=docker
 WorkingDirectory=/home/lhjin0j/foreman
-# .env(HITL_*)를 읽고, 실 GitHub + 데모 모드는 유닛에서만 켠다 (.env 기본은 dry-run, D-52)
+# .env(HITL_*)를 읽고, 실 GitHub만 유닛에서 켠다 (.env 기본은 dry-run). 데모 모드는 .env의 HITL_DEMO_MODE로 선택
 EnvironmentFile=/home/lhjin0j/foreman/.env
 Environment=HITL_DRY_RUN=false
-Environment=HITL_DEMO_MODE=true
-Environment=HITL_LOG_FORMAT=json
 Environment=PATH=/home/lhjin0j/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/home/lhjin0j/.local/bin/uv run --no-sync uvicorn control_plane.api.app:app --factory \
     --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips "127.0.0.1,192.168.0.0/24"

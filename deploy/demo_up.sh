@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # systemd 유닛과 같은 환경으로 API + control plane을 detached로 띄운다 (sudo 없이 쓰는 임시 실행, P9.4).
+# 환경은 .env + HITL_DRY_RUN=false 뿐이다.
 # 정식은 deploy/systemd/*.service. 내리려면 deploy/demo_down.sh. 로그: $LOG_DIR/foreman-{api,cp}.log
 set -euo pipefail
 cd "$(dirname "$0")/.."
 LOG_DIR="${LOG_DIR:-$HOME/.foreman-logs}"; mkdir -p "$LOG_DIR"
-export HITL_DRY_RUN=false HITL_DEMO_MODE=true HITL_LOG_FORMAT=json
+# .env는 그대로(기본 dry-run). 실 GitHub는 PC-7 때부터 환경변수로만 켠다. 데모 모드는 .env에 HITL_DEMO_MODE=true를 넣을 때만
+export HITL_DRY_RUN=false
 if ss -ltn | grep -q ":8000 "; then echo "port 8000 is already in use — deploy/demo_down.sh 먼저" >&2; exit 1; fi
 setsid nohup uv run --no-sync python -m control_plane > "$LOG_DIR/foreman-cp.log" 2>&1 < /dev/null &
 setsid nohup uv run --no-sync uvicorn control_plane.api.app:app --factory \

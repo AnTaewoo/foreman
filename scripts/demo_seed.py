@@ -1,4 +1,4 @@
-"""공개 데모 준비 (P9.6, D-52): 데모 프로젝트 + showcase Goal을 API로 만든다. 관리 토큰 필요.
+"""데모 프로젝트 + showcase Goal을 API로 만든다 (P9.6). 데모 모드가 켜져 있을 때만 관리 토큰 필요.
 
 uv run python scripts/demo_seed.py --repo AnTaewoo/foreman_test --owner AnTaewoo
     --api http://127.0.0.1:8000 (기본)
@@ -35,16 +35,16 @@ async def main() -> int:
     ap.add_argument("--no-showcase", action="store_true")
     ap.add_argument("--cleanup", action="store_true")
     args = ap.parse_args()
-    if not args.admin_token:
-        print("admin token이 없다: --admin-token 또는 HITL_ADMIN_TOKEN", file=sys.stderr)
-        return 64
+    # 데모 모드가 꺼져 있으면 토큰이 필요 없다 — 있을 때만 헤더로 보낸다
 
     if args.cleanup:
         cmd = [sys.executable, "scripts/cleanup_repo.py", args.repo, "--apply"]
         print("==", " ".join(cmd))
         subprocess.run(cmd, check=True)
 
-    admin = {"X-Admin-Token": args.admin_token, "X-User-Id": args.owner}
+    admin = {"X-User-Id": args.owner}
+    if args.admin_token:
+        admin["X-Admin-Token"] = args.admin_token
     async with httpx.AsyncClient(base_url=args.api, timeout=30) as c:
         r = await c.post(
             "/projects",
