@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from ulid import ULID
 
-from control_plane.api.deps import StateDep, UserDep, human, publish
+from control_plane.api.deps import StateDep, UserDep, find_project, human, publish
 from control_plane.events.schema import Event, EventType, Subject
 from control_plane.store import models as m
 from control_plane.store.enums import TaskStatus
@@ -73,9 +73,8 @@ async def _goal(state: StateDep, project_id: str, goal_id: str) -> m.Goal:
 async def create_goal(
     project_id: str, body: GoalIn, state: StateDep, user: UserDep
 ) -> GoalAccepted:
-    async with state.factory() as s:
-        if await s.get(m.Project, project_id) is None:
-            raise HTTPException(404, "project not found")
+    if await find_project(state, project_id) is None:  # D-46: projection 전이면 events
+        raise HTTPException(404, "project not found")
     gid = str(ULID())
     await publish(
         state,
@@ -136,6 +135,49 @@ async def get_goal(project_id: str, goal_id: str, state: StateDep) -> GoalProgre
             for e in epics
         ],
     )
+
+
+class DecisionIn(BaseModel):
+    reason: str = ""
+
+
+class DecisionOut(BaseModel):
+    id: str
+    decision: str
+    by: str
+
+
+async def _decide(
+    project_id: str, goal_id: str, state: StateDep, user: str, *, approved: bool, reason: str
+) -> DecisionOut:
+    """D-51: Plan 승인/거절을 API로 (웹훅·터널 없이). 권한은 project.members의 owner|approver."""
+    project = await find_project(state, project_id)
+    if project is None:
+        raise HTTPException(404, "project not found")
+    role = next(
+        (str(mem.get("role")) for mem in project.members if mem.get("user_id") == user), None
+    )
+    if role not in ("owner", "approver"):
+        raise HTTPException(403, f"{user} is not an owner/approver of this project")
+    runner = state.runner
+    if runner is None or not runner.is_waiting(goal_id):
+        raise HTTPException(409, "goal is not awaiting plan approval")
+    await runner.resume(goal_id, approved=approved, by=user, reason=reason)
+    return DecisionOut(id=goal_id, decision="approve" if approved else "reject", by=user)
+
+
+@router.post("/{goal_id}/approve", status_code=202)
+async def approve_goal(
+    project_id: str, goal_id: str, state: StateDep, user: UserDep
+) -> DecisionOut:
+    return await _decide(project_id, goal_id, state, user, approved=True, reason="")
+
+
+@router.post("/{goal_id}/reject", status_code=202)
+async def reject_goal(
+    project_id: str, goal_id: str, body: DecisionIn, state: StateDep, user: UserDep
+) -> DecisionOut:
+    return await _decide(project_id, goal_id, state, user, approved=False, reason=body.reason)
 
 
 @router.post("/{goal_id}/cancel", status_code=202)

@@ -476,7 +476,7 @@ def test_build_runner_real_mode_uses_token(monkeypatch: pytest.MonkeyPatch) -> N
     )
 
 
-# ------------------------------------ P8.4 (D-51): API로 Plan 승인/거절 — 웹훅·터널 없이 (F-6 리포트 항목)
+# ------------------------ P8.4 (D-51): API로 Plan 승인/거절 — 웹훅·터널 없이 (리포트 #6)
 async def test_api_approve_endpoint(
     client: httpx.AsyncClient,
     pump: Pump,

@@ -111,7 +111,8 @@ async def test_create_and_get_project(
     assert e.subject_id == pid and e.correlation_id == pid and e.causation_id is None
     assert e.actor_type == "human" and e.actor_id == "alice"
     assert e.payload["repo"] == REPO and e.payload["default_branch"] == "main"
-    assert (await client.get(f"/projects/{pid}")).status_code == 404  # projection 전
+    # D-46 (P8.4): projection 전에도 events 폴백으로 200 — 이전엔 404
+    assert (await client.get(f"/projects/{pid}")).status_code == 200
     await pump()
     got = await client.get(f"/projects/{pid}")
     assert got.status_code == 200
@@ -206,7 +207,12 @@ async def test_events_cursor(client: httpx.AsyncClient, pump: Pump, publish: Pub
     two = (await client.get(f"/projects/{pid}/events", params={"limit": 2})).json()
     assert len(two["items"]) == 2 and two["next_since"] == seqs[1]
     # 다른 project의 이벤트는 안 보인다
-    other = await make_project(client, pump)
+    r = await client.post(
+        "/projects", json={"name": "other", "repo": "org/other"}
+    )  # D-45: repo는 유일
+    assert r.status_code == 201
+    other = str(r.json()["id"])
+    await pump()
     assert all(
         e["subject"]["id"] != other
         for e in (await client.get(f"/projects/{pid}/events")).json()["items"]
@@ -226,7 +232,9 @@ async def test_idempotency_key(
     assert len(await events_of(factory, "project.created")) == 1
     r3 = await client.post("/projects", json={"name": "other", "repo": REPO}, headers=h)
     assert r3.status_code == 422
-    r4 = await client.post("/projects", json=body)  # 키 없으면 새 자원
+    r4 = await client.post(
+        "/projects", json={**body, "repo": "org/second"}
+    )  # 키 없으면 새 자원 (D-45: repo 유일)
     assert r4.status_code == 201 and r4.json()["id"] != r1.json()["id"]
     assert len(await events_of(factory, "project.created")) == 2
 

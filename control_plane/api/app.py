@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import structlog
 from fastapi import FastAPI
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -20,6 +21,8 @@ from control_plane.config import Settings, get_settings
 from control_plane.logging import configure_logging
 from control_plane.orchestrator.runner import GoalRunner
 from github_adapter import get_discussions_client, get_github_client, make_token_provider
+
+log = structlog.get_logger(__name__)
 
 
 def create_app(
@@ -40,6 +43,10 @@ def create_app(
     if runner is not None:
         state.runner = runner
         state.on_goal_created = runner.start
+        if not settings.github_webhook_secret.get_secret_value():
+            log.warning(
+                "webhook.secret_missing", hint="POST /webhooks/github will answer 503 (D-50)"
+            )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:

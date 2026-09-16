@@ -135,6 +135,8 @@ class WebhookHandler:
         self._bot_login = bot_login
 
     async def handle(self, request: Request) -> Response:
+        if not self._secret:  # D-50 (F-8): 시크릿 없이는 어떤 서명도 믿지 않는다
+            return JSONResponse({"detail": "webhook secret not configured"}, status_code=503)
         body = await request.body()
         if not verify_signature(self._secret, body, request.headers.get("X-Hub-Signature-256")):
             return JSONResponse({"detail": "invalid signature"}, status_code=401)

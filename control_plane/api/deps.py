@@ -5,17 +5,22 @@ API는 이벤트를 **발행만** 한다 — DB 갱신은 projection(§0 코딩 
 
 from __future__ import annotations
 
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends, Header, Request
 from redis.asyncio import Redis
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from control_plane.config import Settings
 from control_plane.events.bus import EventBus
 from control_plane.events.schema import Actor, Event
+from control_plane.store import models as m
 from control_plane.store import session as sess
 
 if TYPE_CHECKING:
@@ -75,6 +80,76 @@ UserDep = Annotated[str, Depends(current_user)]
 
 def human(user_id: str) -> Actor:
     return Actor(type="human", id=user_id)
+
+
+@dataclass(frozen=True)
+class ProjectView:
+    """projection 행 또는(반영 전이면) ``project.created`` 이벤트로 만든 읽기 뷰 (D-46, F-7)."""
+
+    id: str
+    name: str
+    repo: str
+    default_branch: str
+    members: list[dict[str, str]]
+    created_at: datetime
+    projected: bool
+
+
+async def find_project(state: AppState, project_id: str) -> ProjectView | None:
+    async with state.factory() as s:
+        row = await s.get(m.Project, project_id)
+        if row is not None:
+            return ProjectView(
+                row.id,
+                row.name,
+                row.repo_full_name,
+                row.default_branch,
+                [dict(x) for x in row.members],
+                row.created_at,
+                True,
+            )
+        ev = await s.scalar(
+            select(m.Event).where(
+                m.Event.type == "project.created", m.Event.subject_id == project_id
+            )
+        )
+    if ev is None:
+        return None
+    p = ev.payload
+    return ProjectView(
+        project_id,
+        str(p.get("name", "")),
+        str(p.get("repo", "")),
+        str(p.get("default_branch", "main")),
+        [dict(x) for x in p.get("members", [])],
+        ev.ts,
+        False,
+    )
+
+
+async def repo_taken(state: AppState, repo: str) -> bool:
+    """같은 repo의 프로젝트가 이미 있나 (D-45, F-6) — projection과 events 둘 다 본다."""
+    async with state.factory() as s:
+        if await s.scalar(select(m.Project.id).where(m.Project.repo_full_name == repo)):
+            return True
+        rows = await s.execute(select(m.Event.payload).where(m.Event.type == "project.created"))
+        return any(str(p.get("repo")) == repo for (p,) in rows.all())
+
+
+_OWNER_NAME = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+
+def validate_repo(repo: str) -> str | None:
+    """오류 메시지 또는 None (리포트 #8). 존재하는 로컬 경로(절대·상대) / owner/name / git URL만."""
+    if repo.startswith(("http://", "https://", "git@", "ssh://")):
+        return None
+    if Path(repo).is_dir():
+        return None
+    if _OWNER_NAME.match(repo):
+        return None
+    if "/" in repo or repo.startswith("."):
+        return f"local path {repo!r} does not exist"
+    return f"repo {repo!r} must be an existing local path, owner/name, or a git URL"
 
 
 async def publish(state: AppState, *events: Event) -> list[Event]:

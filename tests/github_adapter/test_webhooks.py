@@ -311,7 +311,7 @@ def test_ping_returns_pong(app: TestClient, spy: Spy) -> None:
     )
 
 
-# ---------------------------------------- P8.4 (D-50, F-8): 시크릿이 비면 서명이 맞아도 503 (fail-closed)
+# ------------------------------ P8.4 (D-50, F-8): 시크릿이 비면 서명이 맞아도 503 (fail-closed)
 def test_empty_secret_is_fail_closed(spy: Spy) -> None:
     handler = WebhookHandler(
         secret="",
