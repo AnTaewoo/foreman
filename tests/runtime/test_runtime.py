@@ -189,6 +189,19 @@ def test_settings_and_launcher_selection(redis: Redis) -> None:
         Settings(_env_file=None, worker_launcher="bogus")  # type: ignore[arg-type]
 
 
+# (c') docker 런처는 repo_root를 미리 만든다 — 없는 경로를 `-v`로 넘기면 Docker가 root 소유로 만들어
+# 이후 API 프로세스의 owner/name clone이 permission denied (PC-8에서 발견)
+def test_docker_launcher_creates_repo_root(redis: Redis, tmp_path: Path) -> None:
+    from control_plane.runtime import build_launcher
+
+    root = tmp_path / "repos"
+    assert not root.exists()
+    launcher = build_launcher(Settings(_env_file=None, repo_root=str(root)), redis)
+    assert isinstance(launcher, DockerCliLauncher)
+    assert root.is_dir()
+    assert launcher.mounts == ((str(root.resolve()), str(root.resolve())),)
+
+
 # (d) InProcessLauncher: 이 프로세스 안에서 CodingAgent 실행 → 브랜치 push + run.finished XADD
 async def test_inprocess_launcher_runs_coding_agent(
     factory: async_sessionmaker[AsyncSession], redis: Redis, tmp_path: Path
