@@ -426,6 +426,38 @@ async def test_repo_unavailable_blocks_goal(
     assert not runner.is_waiting(gid) and await events_of(factory, "goal.plan_proposed") == []
 
 
+# P9.6 발견: 예상 못한 실행 오류도 Goal을 draft에 남기지 않고 취소한다 (데모 한도가 영원히 막히지 않게)
+async def test_runner_error_cancels_goal(
+    factory: async_sessionmaker[AsyncSession], redis: Redis, pump: Pump
+) -> None:
+    def boom(repo: str) -> Path:
+        raise FileNotFoundError(repo)
+
+    runner = GoalRunner(
+        factory=factory,
+        bus=EventBus(redis),
+        provider=FakeProvider(script=[PLAN_JSON, DECOMPOSE_JSON]),
+        github=DryRunGitHubClient(),
+        discussions=DryRunDiscussionsClient(),
+        checkpointer=MemorySaver(),
+        repo_path_for=boom,
+        min_tasks=1,
+    )
+    app1 = create_app(
+        Settings(_env_file=None, github_webhook_secret=SECRET),
+        factory=factory,
+        redis=redis,
+        runner=runner,
+    )
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://t") as c:
+        pid, gid = await start_goal(c, pump, runner)
+        g = (await c.get(f"/projects/{pid}/goals/{gid}")).json()
+    assert g["status"] == "cancelled"
+    ev = (await events_of(factory, "goal.cancelled"))[-1]
+    assert ev.payload["reason"].startswith("runner_error: FileNotFoundError")
+    assert ev.payload["by"] == "system" and gid in runner.errors
+
+
 # ------------------------------------ PC-7 발견: API의 GoalRunner도 토큰으로 clone 해야 한다 (D-41)
 async def test_runner_warms_token_before_repo_clone(
     factory: async_sessionmaker[AsyncSession], redis: Redis, pump: Pump

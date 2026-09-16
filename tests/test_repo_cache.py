@@ -77,6 +77,19 @@ def test_clone_then_fetch(tmp_path: Path, remote: Path) -> None:
     assert "second" in git(path, "log", "--format=%s", "origin/main", "-n", "1")
 
 
+# P9.6 발견: 상대 경로 root("./repos")면 clone이 cwd 기준으로 엉뚱한 곳(root/<owner>/repos/…)에 생겼다
+def test_relative_root_clones_under_root(
+    tmp_path: Path, remote: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from control_plane.repo_cache import RepoCache
+
+    monkeypatch.chdir(tmp_path)
+    cache = RepoCache(Path("relroot"), url_for=lambda repo: str(remote), git_env=GENV)
+    path = cache.ensure("org/demo")
+    assert path == (tmp_path / "relroot" / "org" / "demo").resolve()
+    assert (path / ".git").is_dir() and not (tmp_path / "relroot" / "org" / "relroot").exists()
+
+
 # (b-2) 기본 url_for = https://github.com/<owner>/<name>.git
 def test_default_url() -> None:
     from control_plane.repo_cache import RepoCache
