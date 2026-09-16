@@ -210,3 +210,5 @@
 | 2026-09-14T20:37 | PC-7 | 대기 | 사용자 입력(App 자격 증명·테스트 repo·터널) 필요 | |
 | 2026-09-15T19:00 | PC-7 | 자동 | Discussion #2 → /approve → Issue #3–#6 → PR #7 → 사람 머지 → done → PR #8. verify_chain True | 2b0b107 |
 | 2026-09-15T19:15 | PC-7 | 판정 | pass — docs/pc/PC-7.md, 사용자 서명·cleanup --apply 대기 | |
+| 2026-09-16T10:30 | P8.1 | Red | IntegrityError→retry, dry clone 금지, runtime 3건 | |
+| 2026-09-16T10:45 | P8.1 | Green+Gate | _PERMANENT 분류, RepoCache(dry_run=), make check pass (463) | 5f21ec0 |

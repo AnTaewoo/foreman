@@ -259,7 +259,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 
 | ID | 제목 | depends_on | status | commit |
 |---|---|---|---|---|
-| P8.1 | projection 오류 분류 + Dry 원격 clone 금지 (F-1, F-2, F-3) | PC-7 | todo | |
+| P8.1 | projection 오류 분류 + Dry 원격 clone 금지 (F-1, F-2, F-3) | PC-7 | done | 5f21ec0 |
 | P8.2 | Docker 런처: 프로젝트 repo 개별 마운트 + 호스트 uid (F-5a, F-5b) | P8.1 | todo | |
 | P8.3 | 죽은 워커 정리: task.failed 보장 + reaper (F-5c, F-5) | P8.2 | todo | |
 | P8.4 | API: repo 유일 409, events 폴백, 시크릿 fail-closed (F-6, F-7, F-8) | P8.1 | todo | |
