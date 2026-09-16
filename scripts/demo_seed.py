@@ -59,8 +59,19 @@ async def main() -> int:
             },
         )
         if r.status_code == 409:
-            items = (await c.get("/projects")).json()["items"]
-            pid = next(p["id"] for p in items if p["repo"] == args.repo)
+            pid = ""
+            for _ in range(20):  # 읽기는 projection 반영 후 (control plane이 떠 있어야 한다)
+                items = (await c.get("/projects")).json()["items"]
+                pid = next((p["id"] for p in items if p["repo"] == args.repo), "")
+                if pid:
+                    break
+                await asyncio.sleep(0.5)
+            if not pid:
+                print(
+                    "project exists but is not projected yet — is the control plane running?",
+                    file=sys.stderr,
+                )
+                return 1
             print(f"project exists: {pid}")
         elif r.status_code == 201:
             pid = r.json()["id"]
