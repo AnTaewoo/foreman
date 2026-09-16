@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from control_plane.api.deps import StateDep, UserDep, human, publish
+from control_plane.api.deps import StateDep, UserDep, find_project, gh_url, human, publish
 from control_plane.events.schema import Event, EventType, Subject
 from control_plane.store import models as m
 from control_plane.store.enums import TaskStatus
@@ -31,6 +31,9 @@ class TaskOut(BaseModel):
     attempt_count: int
     owned_paths: list[str]
     depends_on: list[str]
+    spec: str = ""  # P9.1 데모 콘솔
+    issue_url: str | None = None
+    pr_url: str | None = None
 
 
 class TaskList(BaseModel):
@@ -47,7 +50,7 @@ class TaskPatched(BaseModel):
     action: str
 
 
-def _out(t: m.Task) -> TaskOut:
+def _out(t: m.Task, repo: str = "") -> TaskOut:
     return TaskOut(
         id=t.id,
         epic_id=t.epic_id,
@@ -63,6 +66,9 @@ def _out(t: m.Task) -> TaskOut:
         attempt_count=t.attempt_count,
         owned_paths=[str(p) for p in t.owned_paths],
         depends_on=[str(d) for d in t.depends_on],
+        spec=t.spec or "",
+        issue_url=gh_url(repo, "issues", t.issue_number) if repo else None,
+        pr_url=gh_url(repo, "pull", t.pr_number) if repo else None,
     )
 
 
@@ -80,7 +86,9 @@ async def list_tasks(
         stmt = stmt.where(m.Task.epic_id == epic)
     async with state.factory() as s:
         rows = (await s.execute(stmt.order_by(m.Task.created_at, m.Task.id))).scalars().all()
-    return TaskList(items=[_out(t) for t in rows])
+    project = await find_project(state, project_id)
+    repo = project.repo if project is not None else ""
+    return TaskList(items=[_out(t, repo) for t in rows])
 
 
 @router.patch("/{task_id}", status_code=202)

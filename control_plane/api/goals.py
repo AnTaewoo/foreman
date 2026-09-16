@@ -5,12 +5,14 @@ P5.2가 `AppState.on_goal_created` 훅으로 Orchestrator 실행을 붙인다.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from ulid import ULID
 
-from control_plane.api.deps import StateDep, UserDep, find_project, human, publish
+from control_plane.api.deps import StateDep, UserDep, find_project, gh_url, human, publish
 from control_plane.events.schema import Event, EventType, Subject
 from control_plane.store import models as m
 from control_plane.store.enums import TaskStatus
@@ -46,10 +48,29 @@ class GoalProgress(BaseModel):
     status: str
     plan_revision: int
     plan_discussion_number: int | None
+    plan_discussion_url: str | None = None  # P9.1 (owner/name repo일 때)
+    plan_markdown: str | None = None  # D-53
     tasks: dict[str, int]  # status → count
     total: int
     done: int
     epics: list[EpicOut]
+
+
+class GoalSummary(BaseModel):
+    """`GET /projects/{id}/goals` 항목 (P9.1 데모 콘솔용) — created_at desc."""
+
+    id: str
+    title: str
+    status: str
+    plan_revision: int
+    plan_discussion_number: int | None
+    created_at: datetime
+    total: int
+    done: int
+
+
+class GoalList(BaseModel):
+    items: list[GoalSummary]
 
 
 class CancelIn(BaseModel):
@@ -93,9 +114,55 @@ async def create_goal(
     return GoalAccepted(id=gid, project_id=project_id)
 
 
+@router.get("")
+async def list_goals(project_id: str, state: StateDep) -> GoalList:
+    async with state.factory() as s:
+        goals = (
+            (
+                await s.execute(
+                    select(m.Goal)
+                    .where(m.Goal.project_id == project_id)
+                    .order_by(m.Goal.created_at.desc(), m.Goal.id.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+        counts = (
+            await s.execute(
+                select(m.Task.goal_id, m.Task.status, func.count())
+                .where(m.Task.project_id == project_id)
+                .group_by(m.Task.goal_id, m.Task.status)
+            )
+        ).all()
+    total: dict[str, int] = {}
+    done: dict[str, int] = {}
+    for gid, status, n in counts:
+        total[gid] = total.get(gid, 0) + int(n)
+        if status is TaskStatus.DONE:
+            done[gid] = done.get(gid, 0) + int(n)
+    return GoalList(
+        items=[
+            GoalSummary(
+                id=g.id,
+                title=g.title,
+                status=g.status.value,
+                plan_revision=g.plan_revision,
+                plan_discussion_number=g.plan_discussion_id,
+                created_at=g.created_at,
+                total=total.get(g.id, 0),
+                done=done.get(g.id, 0),
+            )
+            for g in goals
+        ]
+    )
+
+
 @router.get("/{goal_id}")
 async def get_goal(project_id: str, goal_id: str, state: StateDep) -> GoalProgress:
     goal = await _goal(state, project_id, goal_id)
+    project = await find_project(state, project_id)
+    repo = project.repo if project is not None else ""
     async with state.factory() as s:
         counts = (
             await s.execute(
@@ -121,6 +188,8 @@ async def get_goal(project_id: str, goal_id: str, state: StateDep) -> GoalProgre
         status=goal.status.value,
         plan_revision=goal.plan_revision,
         plan_discussion_number=goal.plan_discussion_id,
+        plan_discussion_url=gh_url(repo, "discussions", goal.plan_discussion_id) if repo else None,
+        plan_markdown=goal.plan_markdown,
         tasks=tasks,
         total=sum(tasks.values()),
         done=tasks.get(TaskStatus.DONE.value, 0),

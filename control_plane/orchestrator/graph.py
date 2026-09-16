@@ -159,7 +159,11 @@ def build_graph(
             _event(
                 state,
                 EventType.GOAL_PLAN_PROPOSED,
-                {"plan_discussion_number": discussion.number, "revision": revision},
+                {
+                    "plan_discussion_number": discussion.number,
+                    "revision": revision,
+                    "plan_markdown": markdown,  # D-53: API가 Plan 본문을 보여준다
+                },
             )
         )
         return {

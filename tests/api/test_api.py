@@ -349,7 +349,9 @@ async def test_goal_list_plan_markdown_and_links(
     assert r.status_code == 201
     pid = r.json()["id"]
     await pump()
-    assert (await client.get(f"/projects/{pid}")).json()["repo_url"] == "https://github.com/acme/demo"
+    assert (await client.get(f"/projects/{pid}")).json()[
+        "repo_url"
+    ] == "https://github.com/acme/demo"
     assert (await client.get("/projects")).json()["items"][0]["repo_url"] == (
         "https://github.com/acme/demo"
     )
@@ -383,7 +385,13 @@ async def test_goal_list_plan_markdown_and_links(
             actor=Actor(type="system", id="pr-opener"),
             type=E.PR_OPENED,
             subject=Subject(entity="pr", id="7"),
-            payload={"task_id": "T1", "run_id": "R1", "pr_number": 7, "head": "ai/x", "base": "main"},
+            payload={
+                "task_id": "T1",
+                "run_id": "R1",
+                "pr_number": 7,
+                "head": "ai/x",
+                "base": "main",
+            },
             correlation_id=gid,
             causation_id=None,
         )
@@ -398,4 +406,6 @@ async def test_goal_list_plan_markdown_and_links(
     r = await client.post("/projects", json={"name": "local", "repo": REPO})
     assert r.status_code == 201
     assert r.json()["repo_url"] is None
-    assert (await client.get(f"/projects/{pid}/goals/00000000000000000000000000")).status_code == 404
+    assert (
+        await client.get(f"/projects/{pid}/goals/00000000000000000000000000")
+    ).status_code == 404

@@ -139,6 +139,21 @@ async def repo_taken(state: AppState, repo: str) -> bool:
 _OWNER_NAME = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 
+def gh_url(repo: str, kind: str = "", number: int | None = None) -> str | None:
+    """`owner/name`이면 GitHub 링크, 로컬 경로·URL이면 None (P9.1 데모 콘솔용).
+
+    kind: "" | "issues" | "pull" | "discussions"
+    """
+    if not _OWNER_NAME.match(repo):
+        return None
+    base = f"https://github.com/{repo}"
+    if not kind:
+        return base
+    if number is None:
+        return None
+    return f"{base}/{kind}/{number}"
+
+
 def validate_repo(repo: str) -> str | None:
     """오류 메시지 또는 None (리포트 #8). 존재하는 로컬 경로(절대·상대) / owner/name / git URL만."""
     if repo.startswith(("http://", "https://", "git@", "ssh://")):

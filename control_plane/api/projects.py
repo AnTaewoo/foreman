@@ -14,6 +14,7 @@ from control_plane.api.deps import (
     StateDep,
     UserDep,
     find_project,
+    gh_url,
     human,
     publish,
     repo_taken,
@@ -41,6 +42,7 @@ class ProjectOut(BaseModel):
     id: str
     name: str
     repo: str
+    repo_url: str | None = None  # owner/name이면 GitHub 링크 (P9.1)
     default_branch: str
     created_at: datetime
 
@@ -59,6 +61,7 @@ async def list_projects(state: StateDep) -> ProjectList:
                 id=r.id,
                 name=r.name,
                 repo=r.repo_full_name,
+                repo_url=gh_url(r.repo_full_name),
                 default_branch=r.default_branch,
                 created_at=r.created_at,
             )
@@ -96,6 +99,7 @@ async def create_project(body: ProjectIn, state: StateDep, user: UserDep) -> Pro
         id=pid,
         name=body.name,
         repo=body.repo,
+        repo_url=gh_url(body.repo),
         default_branch=body.default_branch,
         created_at=event.ts,
     )
@@ -110,6 +114,7 @@ async def get_project(project_id: str, state: StateDep) -> ProjectOut:
         id=view.id,
         name=view.name,
         repo=view.repo,
+        repo_url=gh_url(view.repo),
         default_branch=view.default_branch,
         created_at=view.created_at,
     )
