@@ -568,3 +568,42 @@ async def test_api_reject_endpoint(
         "by": "alice",
         "reason": "no",
     }
+
+
+# 2차 라이브 관찰 (e): PrOpener가 pr.opened를 낸 뒤 GitHub 웹훅(pull_request.opened)이 같은 PR을 또 낸다 →
+# 웹훅 publish 전에 Task의 pr_number가 이미 같으면 건너뛴다 (projection은 멱등이지만 체인 오염)
+async def test_webhook_skips_pr_opened_already_recorded(
+    factory: async_sessionmaker[AsyncSession], redis: Redis, pump: Pump, publish: Any
+) -> None:
+    from control_plane.api.approvals import ApprovalService
+    from control_plane.events.schema import Actor, Event, EventType, Subject
+    from tests.api.test_api import seed
+
+    service = ApprovalService(factory=factory, runner=None)
+    app1 = create_app(Settings(_env_file=None), factory=factory, redis=redis)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://t") as c:
+        r = await c.post("/projects", json={"name": "d", "repo": "org/demo"})
+        pid = r.json()["id"]
+        await pump()
+        r = await c.post(f"/projects/{pid}/goals", json={"title": "g"})
+        gid = r.json()["id"]
+        await pump()
+    await publish(*seed(pid, gid))
+    await pump()
+
+    def opened(number: int) -> Event:
+        return Event(
+            project_id=pid,
+            actor=Actor(type="github", id="bot"),
+            type=EventType.PR_OPENED,
+            subject=Subject(entity="pr", id=str(number)),
+            payload={"task_id": "T1", "run_id": "R1", "pr_number": number, "head": "ai/x", "base": "main"},
+            correlation_id=gid,
+            causation_id=None,
+        )
+
+    assert await service.should_publish(opened(7)) is True  # 아직 기록 안 됨
+    await publish(opened(7))
+    await pump()
+    assert await service.should_publish(opened(7)) is False  # tasks.pr_number == 7
+    assert await service.should_publish(opened(8)) is True

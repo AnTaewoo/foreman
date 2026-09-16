@@ -285,6 +285,59 @@ async def test_merge_drops_empty_epics() -> None:
     assert [e.title for e in out.epics] == ["Impl"]
 
 
+# 2차 라이브 관찰 (a): 자리표시자 owned_paths("<path-to-config-files>")가 검증을 통과해 Task가 3 run 뒤 blocked
+async def test_decompose_rejects_placeholder_paths_then_drops() -> None:
+    provider = FakeProvider(script=[
+        result(src_task("Config", ["<path-to-config-files>", "config.py", "tests/test_config.py"])),
+        result(src_task("Config", ["<path-to-config-files>", "config.py", "tests/test_config.py"])),
+    ])  # fmt: skip
+    out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
+    assert out.tasks[0].owned_paths == ["config.py", "tests/test_config.py"]  # 마지막엔 버린다
+    assert len(provider.calls) == 2 and "placeholder" in provider.calls[1].messages[-1].content
+
+
+# 2차 라이브 관찰 (b): app Task가 import 하는 calculator Task에 의존을 안 걸어 병렬 실행 → 충돌.
+# spec/제목이 다른 Task의 소유 모듈(파일명 또는 import 문)을 언급하면 의존을 추가한다 (역방향 의존이 없을 때)
+async def test_decompose_infers_dependency_from_module_mentions() -> None:
+    provider = FakeProvider(script=[
+        result(
+            src_task("Create calculator module", ["calculator.py", "tests/test_calculator.py"]),
+            src_task(
+                "Create Flask app",
+                ["app.py", "tests/test_app.py"],
+                spec="app.py imports `from calculator import Calculator` and exposes GET /calc",
+            ),
+            src_task("Add README", ["README.md"], kind="docs", role_required="coding"),
+        ),
+    ])  # fmt: skip
+    out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
+    by = {t.title: t for t in out.tasks}
+    assert by["Create Flask app"].depends_on == ["Create calculator module"]
+    assert by["Create calculator module"].depends_on == []
+    assert by["Add README"].depends_on == []
+
+
+# 2차 라이브 관찰 (c): "Write tests for X" Task가 구현 파일도 같이 나열해 합치기 규칙을 빠져나갔다 → kind test 또는
+# 제목이 테스트 작성이면 소유 경로에 구현 파일이 있어도 의존 대상 구현 Task로 합친다
+async def test_merge_test_task_that_also_lists_impl_files() -> None:
+    provider = FakeProvider(script=[
+        result(
+            src_task("Create calculator module", ["calculator.py", "tests/test_calculator.py"]),
+            src_task(
+                "Write tests for calculator",
+                ["calculator.py", "tests/test_calculator.py"],
+                ["Create calculator module"],
+                kind="test",
+            ),
+            src_task("Create Flask app", ["app.py", "tests/test_app.py"], ["Write tests for calculator"]),
+        ),
+    ])  # fmt: skip
+    out = await decompose_with_retry(provider, repo_summary="R", plan="P", goal="G")
+    titles = [t.title for t in out.tasks]
+    assert titles == ["Create calculator module", "Create Flask app"]
+    assert out.tasks[1].depends_on == ["Create calculator module"]
+
+
 # X.2: 프롬프트 세트 규칙 — 심볼 색인 재사용, 기대값·fresh state, 겹치지 않으면 의존 금지, T-n
 def test_prompt_set_rules_x2() -> None:
     analyze = (PROMPTS / "analyze.md").read_text(encoding="utf-8")

@@ -340,3 +340,13 @@ async def test_retry_prompt_asks_for_diagnosis(worktree: Path, remote: Path, spy
     assert "Previous attempt 1 failed" in retry
     flat = " ".join(retry.split())  # 프롬프트 파일의 줄바꿈 무시
     assert "test you wrote" in flat and "same object the code uses" in flat  # 진단 1(a)
+
+
+# 2차 라이브 관찰 (f): pytest exit 5(수집된 테스트 0)는 실패로 세되, 재시도 프롬프트가 원인을 알게 한다
+def test_annotate_test_output_explains_no_tests() -> None:
+    from agents.coding import annotate_test_output
+
+    assert annotate_test_output(0, "3 passed") == "3 passed"
+    assert annotate_test_output(1, "1 failed") == "1 failed"
+    out = annotate_test_output(5, "no tests ran in 0.01s")
+    assert "no tests ran" in out and "exit code 5" in out and "owned tests/" in out
