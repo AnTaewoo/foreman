@@ -22,6 +22,7 @@ from agents.base import (
 from agents.context import assemble_context
 from agents.llm.base import estimate_tokens
 from agents.llm.fake import FakeProvider
+from control_plane.events.schema import EventType
 from tests.agents.conftest import Spy
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -212,7 +213,7 @@ async def test_run_exception_becomes_failed(spy: Spy) -> None:
     assert out.outcome == "failed" and "boom" in (out.error or "")
     p = spy.events[-1].payload
     assert (p["outcome"], p["agent_outcome"]) == ("failed", "failed") and "boom" in p["error"]
-    assert spy.types() == ["task.started", "run.started", "run.finished"]
+    assert spy.types() == ["task.started", "run.started", "task.failed", "run.finished"]  # D-44
 
 
 # (e) agents/에 control_plane.config import 없음
@@ -256,7 +257,7 @@ async def test_run_finished_cost_from_prices(spy: Spy) -> None:
     assert spy.events[-1].payload["cost_usd"] == 0.01  # execute가 준 값 우선
 
 
-# P8.3 (D-44, F-5c): execute 예외 / task.failed 없는 failed → BaseAgent가 task.failed를 run.finished 앞에 보장
+# P8.3 (D-44, F-5c): execute 예외 / task.failed 없는 failed → BaseAgent가 task.failed를 앞에 보장
 class FailNoEventAgent(BaseAgent):
     async def execute(self, input: AgentInput) -> AgentOutput:
         return AgentOutput(

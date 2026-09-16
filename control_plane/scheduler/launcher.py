@@ -48,6 +48,10 @@ class WorkerLauncher(Protocol):
         """워커 식별자(컨테이너 id 등) 반환. 실패면 LaunchError."""
         ...
 
+    async def is_alive(self, worker_id: str) -> bool:
+        """워커가 아직 실행 중인가 (P8.3 reaper, D-44). 모르면 True(보수적)."""
+        ...
+
 
 OnLaunch = Callable[[LaunchSpec], Awaitable[None]]
 
@@ -60,6 +64,7 @@ class FakeLauncher:
     on_launch: OnLaunch | None = None
     specs: list[LaunchSpec] = field(default_factory=list)
     order: list[tuple[str, str]] = field(default_factory=list)
+    dead: set[str] = field(default_factory=set)  # worker_id를 넣으면 is_alive False (P8.3)
 
     async def launch(self, spec: LaunchSpec) -> str:
         self.order.append(("launch", spec.task_id))
@@ -69,6 +74,9 @@ class FakeLauncher:
         if self.on_launch is not None:
             await self.on_launch(spec)
         return f"fake-{spec.run_id}"
+
+    async def is_alive(self, worker_id: str) -> bool:
+        return worker_id not in self.dead
 
 
 class DockerCliLauncher:
@@ -143,6 +151,14 @@ class DockerCliLauncher:
         log.info("launcher.started", container=container[:12], task_id=spec.task_id)
         return container
 
+    async def is_alive(self, worker_id: str) -> bool:
+        """``docker inspect``로 Running 확인. 컨테이너가 없으면(--rm 뒤) False."""
+        try:
+            state = json.loads(await self._run("inspect", "--format", "{{json .State}}", worker_id))
+        except LaunchError:
+            return False
+        return bool(state.get("Running"))
+
 
 class InProcessLauncher:
     """control plane 프로세스 안에서 CodingAgent를 asyncio Task로 실행 (P6.1, Docker 없는 개발용).
@@ -215,3 +231,8 @@ class InProcessLauncher:
     async def wait_idle(self) -> None:
         while self._tasks:
             await asyncio.gather(*list(self._tasks.values()), return_exceptions=True)
+
+    async def is_alive(self, worker_id: str) -> bool:
+        run_id = worker_id.removeprefix("inprocess-")
+        task = self._tasks.get(run_id)
+        return task is not None and not task.done()

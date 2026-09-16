@@ -11,7 +11,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import select
@@ -25,7 +26,7 @@ from control_plane.events.schema import UNCHAINED, Actor, EntityType, Event, Eve
 from control_plane.scheduler.launcher import LaunchError, LaunchSpec, WorkerLauncher
 from control_plane.scheduler.queue import Candidate, load_project_tasks, pick_ready
 from control_plane.store import models as m
-from control_plane.store.enums import EpicStatus
+from control_plane.store.enums import EpicStatus, TaskStatus
 
 log = structlog.get_logger(__name__)
 
@@ -59,6 +60,21 @@ def _slugify(text: str) -> str:
     return slug[:40].strip("-") or "task"
 
 
+REAP_GRACE_MIN = 5
+
+
+@dataclass
+class InFlight:
+    project_id: str
+    goal_id: str
+    task_id: str
+    run_id: str
+    worker_id: str
+    started_at: datetime
+    timeout_min: int
+    attempt: int
+
+
 class Scheduler:
     def __init__(
         self,
@@ -85,6 +101,7 @@ class Scheduler:
         self._timeout_min = timeout_min
         self._agent_id = agent_id
         self._new_run_id = run_id_factory
+        self.in_flight_runs: dict[str, InFlight] = {}  # task_id → 실행 중 run (P8.3 reaper)
         self._repo_resolver = (
             repo_resolver  # D-38: project.repo → 로컬 경로(RepoCache). None이면 그대로
         )
@@ -138,6 +155,7 @@ class Scheduler:
             return
         self._task_run.pop(task_id, None)
         self.in_flight.discard(task_id)
+        self.in_flight_runs.pop(task_id, None)
 
     # ------------------------------------------------------------------ 배정
     async def tick(self, project_id: str) -> list[str]:
@@ -204,7 +222,17 @@ class Scheduler:
                         spec = replace(spec, repo_url=self._repo_resolver(repo_name))
                     except Exception as exc:
                         raise LaunchError(f"repo unavailable: {exc}") from exc
-                await self._launcher.launch(spec)
+                worker_id = await self._launcher.launch(spec)
+                self.in_flight_runs[cand.id] = InFlight(
+                    project_id=project_id,
+                    goal_id=cand.goal_id,
+                    task_id=cand.id,
+                    run_id=run_id,
+                    worker_id=worker_id,
+                    started_at=datetime.now(UTC),
+                    timeout_min=spec.timeout_min,
+                    attempt=cand.attempt_count + 1,
+                )
             except LaunchError as exc:
                 log.error("scheduler.launch_failed", task_id=cand.id, error=str(exc))
                 self.in_flight.discard(cand.id)
@@ -299,6 +327,127 @@ class Scheduler:
             subject=Subject(entity=entity, id=id_),
             payload=payload,
             correlation_id=cand.goal_id,
+            causation_id=causation,
+        )
+        async with self._factory() as session:
+            out = await self._bus.publish(session, event)
+            await session.commit()
+        return out.id
+
+    # ------------------------------------------------------------------ 죽은 워커 정리 (P8.3, D-44)
+    async def reap(self, *, now: datetime | None = None) -> list[tuple[str, str, str]]:
+        """in_flight run 중 죽었거나(is_alive False) 타임아웃(timeout_min+5분)인 것을 실패 처리.
+
+        반환 [(task_id, run_id, reason)]. ``task.failed`` → projection이 ready/blocked, 슬롯 반환.
+        """
+        now = now or datetime.now(UTC)
+        reaped: list[tuple[str, str, str]] = []
+        for task_id, inf in list(self.in_flight_runs.items()):
+            deadline = inf.started_at + timedelta(minutes=inf.timeout_min + REAP_GRACE_MIN)
+            if now > deadline:
+                reason = "timeout"
+            elif not await self._launcher.is_alive(inf.worker_id):
+                reason = "worker_died"
+            else:
+                continue
+            await self._fail_run(inf, reason)
+            self.in_flight.discard(task_id)
+            self.in_flight_runs.pop(task_id, None)
+            self._run_to_task.pop(inf.run_id, None)
+            self._task_run.pop(task_id, None)
+            reaped.append((task_id, inf.run_id, reason))
+        if reaped:
+            log.warning("scheduler.reaped", runs=reaped)
+        return reaped
+
+    async def recover_orphans(self) -> list[tuple[str, str]]:
+        """기동 시: DB에 assigned/running인데 이 프로세스가 모르는 Task(이전 잔재)를 실패 처리."""
+        async with self._factory() as session:
+            stmt = select(m.Task).where(
+                m.Task.status.in_((TaskStatus.ASSIGNED, TaskStatus.RUNNING))
+            )
+            if self.in_flight:
+                stmt = stmt.where(m.Task.id.not_in(self.in_flight))
+            rows = (await session.execute(stmt)).scalars().all()
+            orphans: list[tuple[str, str]] = []
+            for task in rows:
+                assigned = await session.scalar(
+                    select(m.Event)
+                    .where(m.Event.type == "task.assigned", m.Event.subject_id == task.id)
+                    .order_by(m.Event.seq.desc())
+                )
+                run_id = str((assigned.payload if assigned else {}).get("run_id") or "")
+                if not run_id:
+                    continue
+                inf = InFlight(
+                    project_id=task.project_id,
+                    goal_id=task.goal_id,
+                    task_id=task.id,
+                    run_id=run_id,
+                    worker_id="",
+                    started_at=datetime.now(UTC),
+                    timeout_min=0,
+                    attempt=task.attempt_count + 1,
+                )
+                orphans.append((task.id, run_id))
+                await self._fail_run(inf, "worker_died")
+        if orphans:
+            log.warning("scheduler.recovered_orphans", tasks=orphans)
+        return orphans
+
+    async def _fail_run(self, inf: InFlight, reason: str) -> None:
+        """``task.failed`` + (없으면) ``run.finished``를 system:scheduler로 발행."""
+        async with self._factory() as session:
+            finished = await session.scalar(
+                select(m.Event.id).where(
+                    m.Event.type == "run.finished", m.Event.subject_id == inf.run_id
+                )
+            )
+        failed = await self._emit(
+            inf.project_id,
+            inf.goal_id,
+            EventType.TASK_FAILED,
+            "task",
+            inf.task_id,
+            {"run_id": inf.run_id, "reason": reason, "attempt": inf.attempt},
+            None,
+        )
+        if finished is None:
+            await self._emit(
+                inf.project_id,
+                inf.goal_id,
+                EventType.RUN_FINISHED,
+                "run",
+                inf.run_id,
+                {
+                    "outcome": "timeout" if reason == "timeout" else "failed",
+                    "agent_outcome": "timeout" if reason == "timeout" else "failed",
+                    "tokens_in": 0,
+                    "tokens_out": 0,
+                    "cost_usd": 0.0,
+                    "duration_s": 0.0,
+                    "error": "worker died" if reason == "worker_died" else reason,
+                },
+                failed,
+            )
+
+    async def _emit(
+        self,
+        project_id: str,
+        goal_id: str,
+        type_: EventType,
+        entity: EntityType,
+        id_: str,
+        payload: dict[str, object],
+        causation: str | None,
+    ) -> str:
+        event = Event(
+            project_id=project_id,
+            actor=SCHEDULER_ACTOR,
+            type=type_,
+            subject=Subject(entity=entity, id=id_),
+            payload=payload,
+            correlation_id=goal_id,
             causation_id=causation,
         )
         async with self._factory() as session:

@@ -136,6 +136,9 @@ class BaseAgent(ABC):
         self.model = model
         self.prices = prices or Prices()  # D-39: 단가 미설정이면 cost_usd 0
         self.last_event_id: str | None = None
+        self._published_types: list[
+            EventType
+        ] = []  # 이번 run에서 낸 타입 (task.failed 보장용, D-44)
 
     async def publish(
         self,
@@ -145,6 +148,7 @@ class BaseAgent(ABC):
         id_: str,
         payload: dict[str, Any],
     ) -> Event:
+        self._published_types.append(type_)
         event = Event(
             project_id=input.project_context.project_id,
             actor=Actor(type="agent", id=input.agent_id),
@@ -163,6 +167,7 @@ class BaseAgent(ABC):
 
     async def run(self, input: AgentInput) -> AgentOutput:
         started = time.monotonic()
+        self._published_types = []
         await self.publish(
             input, EventType.TASK_STARTED, "task", input.task.id, {"run_id": input.run_id}
         )
@@ -183,6 +188,15 @@ class BaseAgent(ABC):
             log.exception("agent.execute_failed", run_id=input.run_id, task_id=input.task.id)
             output = AgentOutput(
                 outcome="failed", summary=f"{type(exc).__name__}: {exc}", error=str(exc)
+            )
+        if output.outcome == "failed" and EventType.TASK_FAILED not in self._published_types:
+            # D-44 (F-5c): task.failed 없이 run.finished(failed)만 나가면 Task가 running에 영구 고착
+            await self.publish(
+                input,
+                EventType.TASK_FAILED,
+                "task",
+                input.task.id,
+                {"run_id": input.run_id, "reason": "error", "attempt": input.task.attempt},
             )
         if output.cost_usd == 0.0 and self.prices.is_set:  # execute가 준 값이 있으면 그대로
             output = output.model_copy(

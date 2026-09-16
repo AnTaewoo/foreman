@@ -444,12 +444,12 @@ async def test_ingest_out_of_order_goes_to_retry_queue(
     assert applied == 1 and (await h.task("T1")).status is TaskStatus.RUNNING
 
 
-# ---------------------------------------------------------------- P8.3 (D-44, F-5/F-5c) 죽은 워커 정리
+# ------------------------------------------ P8.3 (D-44, F-5/F-5c) 죽은 워커 정리
 # (b) launcher.is_alive — Fake는 dead 집합으로 제어
 async def test_reap_dead_worker_publishes_failed_and_reassigns(
     factory: async_sessionmaker[AsyncSession], redis: Redis
 ) -> None:
-    from datetime import UTC, datetime, timedelta
+    from datetime import UTC, datetime
 
     h = Harness(factory, redis, max_workers=1)
     await h.publish(*BOOTSTRAP, task_created("T1", [], ["src/a/**"]))

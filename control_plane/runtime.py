@@ -97,6 +97,7 @@ class Runtime:
         *,
         launcher: WorkerLauncher | None = None,
         retry_interval: float = 1.0,
+        reap_interval: float = 5.0,
         clock: Callable[[], datetime] | None = None,
         consumer: str = "cp1",
         block_ms: int = 200,
@@ -144,6 +145,7 @@ class Runtime:
             self.handlers.append(self.dry_merger.handle)
         self.tasks: list[asyncio.Task[None]] = []
         self._retry_interval = retry_interval
+        self._reap_interval = reap_interval
         self._clock = clock or (lambda: datetime.now(UTC))
         self._consumer = consumer
         self._block_ms = block_ms
@@ -154,10 +156,12 @@ class Runtime:
         self._stop.clear()
         self.relay.start()
         assert self.relay._task is not None
+        await self.scheduler.recover_orphans()  # D-44 (3): 이전 프로세스의 assigned/running 잔재
         self.tasks = [
             self.relay._task,
             asyncio.create_task(self._consume(), name="control-plane-consumer"),
             asyncio.create_task(self._retry_loop(), name="control-plane-retry"),
+            asyncio.create_task(self._reap_loop(), name="control-plane-reaper"),
         ]
         log.info("runtime.started", launcher=type(self.launcher).__name__)
 
@@ -177,6 +181,17 @@ class Runtime:
         await self.bus.subscribe(
             GROUP, self._handle, consumer=self._consumer, block_ms=self._block_ms
         )
+
+    async def _reap_loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                await self.scheduler.reap(now=self._clock())
+            except Exception:
+                log.exception("runtime.reap_loop_failed")
+            try:
+                await asyncio.wait_for(self._stop.wait(), timeout=self._reap_interval)
+            except TimeoutError:
+                pass
 
     async def _retry_loop(self) -> None:
         while not self._stop.is_set():
