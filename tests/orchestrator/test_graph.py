@@ -164,7 +164,12 @@ async def test_runs_to_interrupt() -> None:
     assert "## Repository" in values["repo_summary"]
     assert sink.types() == ["goal.plan_proposed"]
     ev = sink.events[0]
-    assert ev.payload == {"plan_discussion_number": 1, "revision": 1}
+    # P9.1 (D-53): Plan 본문이 이벤트에 실린다 (Discussion 본문과 동일)
+    assert ev.payload == {
+        "plan_discussion_number": 1,
+        "revision": 1,
+        "plan_markdown": values["plan"],
+    }
     assert ev.correlation_id == "G1" and ev.causation_id is None and ev.actor.id == "orchestrator"
     assert values["last_event_id"] == ev.id
     assert len(provider.calls) == 1 and provider.calls[0].system  # analyze.md 시스템 프롬프트

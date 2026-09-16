@@ -339,3 +339,63 @@ async def test_list_projects(client: httpx.AsyncClient, pump: Pump) -> None:
     await pump()
     items = (await client.get("/projects")).json()["items"]
     assert [p["name"] for p in items] == ["one"] and items[0]["repo"] == REPO
+
+
+# P9.1 (D-52/D-53): Goal 목록, plan_markdown + Discussion 링크, Task spec + Issue/PR 링크, repo_url
+async def test_goal_list_plan_markdown_and_links(
+    client: httpx.AsyncClient, pump: Pump, publish: Publish
+) -> None:
+    r = await client.post("/projects", json={"name": "demo", "repo": "acme/demo"})
+    assert r.status_code == 201
+    pid = r.json()["id"]
+    await pump()
+    assert (await client.get(f"/projects/{pid}")).json()["repo_url"] == "https://github.com/acme/demo"
+    assert (await client.get("/projects")).json()["items"][0]["repo_url"] == (
+        "https://github.com/acme/demo"
+    )
+    gid = await make_goal(client, pump, pid)
+    events = seed(pid, gid)
+    events[0] = events[0].model_copy(
+        update={"payload": {**events[0].payload, "plan_markdown": "# Plan\n\n- step"}}
+    )
+    await publish(*events)
+    await pump()
+    g = (await client.get(f"/projects/{pid}/goals/{gid}")).json()
+    assert g["plan_markdown"] == "# Plan\n\n- step"
+    assert g["plan_discussion_url"] == "https://github.com/acme/demo/discussions/1"
+
+    gid2 = await make_goal(client, pump, pid)  # 나중 것이 앞 (created_at desc)
+    lst = (await client.get(f"/projects/{pid}/goals")).json()["items"]
+    assert [x["id"] for x in lst] == [gid2, gid]
+    first = lst[1]
+    assert first["title"] == "g" and first["status"] == "active"
+    assert first["plan_discussion_number"] == 1 and first["plan_revision"] == 1
+    assert first["total"] == 2 and first["done"] == 0 and "created_at" in first
+    assert lst[0]["status"] == "draft" and lst[0]["total"] == 0
+
+    tasks = {t["id"]: t for t in (await client.get(f"/projects/{pid}/tasks")).json()["items"]}
+    assert tasks["T1"]["spec"] == "s1"
+    assert tasks["T1"]["issue_url"] == "https://github.com/acme/demo/issues/1"
+    assert tasks["T1"]["pr_url"] is None
+    await publish(
+        Event(
+            project_id=pid,
+            actor=Actor(type="system", id="pr-opener"),
+            type=E.PR_OPENED,
+            subject=Subject(entity="pr", id="7"),
+            payload={"task_id": "T1", "run_id": "R1", "pr_number": 7, "head": "ai/x", "base": "main"},
+            correlation_id=gid,
+            causation_id=None,
+        )
+    )
+    await pump()
+    t1 = next(
+        t for t in (await client.get(f"/projects/{pid}/tasks")).json()["items"] if t["id"] == "T1"
+    )
+    assert t1["pr_url"] == "https://github.com/acme/demo/pull/7"
+
+    # 로컬 경로 repo면 링크 None
+    r = await client.post("/projects", json={"name": "local", "repo": REPO})
+    assert r.status_code == 201
+    assert r.json()["repo_url"] is None
+    assert (await client.get(f"/projects/{pid}/goals/00000000000000000000000000")).status_code == 404

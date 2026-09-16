@@ -417,6 +417,33 @@ async def test_plan_proposed_revision(
         assert goal.status is GoalStatus.AWAITING_PLAN_APPROVAL and goal.plan_revision == 2
 
 
+# P9.1 (D-53): plan_markdown 키가 있으면 goals.plan_markdown에 저장, 없으면 None(구 이벤트 호환)
+async def test_plan_proposed_stores_markdown(
+    factory: async_sessionmaker[AsyncSession], bus: EventBus, projection: Projection
+) -> None:
+    events = await publish_all(bus, factory, SEQUENCE[:3])
+    for e in events:
+        await projection.apply(e)
+    async with factory() as s:
+        goal = await s.get(m.Goal, "G1")
+        assert goal is not None and goal.plan_markdown is None
+    (rev2,) = await publish_all(
+        bus,
+        factory,
+        [
+            ev(
+                E.GOAL_PLAN_PROPOSED,
+                ("goal", "G1"),
+                {"plan_discussion_number": 5, "revision": 2, "plan_markdown": "# Plan\n- a"},
+            )
+        ],
+    )
+    await projection.apply(rev2)
+    async with factory() as s:
+        goal = await s.get(m.Goal, "G1")
+        assert goal is not None and goal.plan_markdown == "# Plan\n- a"
+
+
 # (h)(i) 핸들러 등록
 def test_all_event_types_have_handlers_and_unused_are_noop() -> None:
     assert set(HANDLERS) == set(EventType)
