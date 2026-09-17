@@ -505,10 +505,14 @@ async def test_llm_profiles_endpoint_and_goal_llm(
     from control_plane.api.app import create_app
     from control_plane.config import Settings
 
+    async def ok_probe(profile: str) -> None:  # 프로브는 아래 테스트에서 따로 검증
+        return None
+
     app1 = create_app(
         Settings(_env_file=None, llm_provider="openai_compat", openai_api_key="sk-x"),
         factory=factory,
         redis=redis,
+        llm_probe=ok_probe,
     )
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://t") as c:
         info = (await c.get("/llm")).json()
@@ -534,3 +538,37 @@ async def test_llm_profiles_endpoint_and_goal_llm(
         r = await c.post(f"/projects/{pid}/goals", json={"title": "g"})  # 생략 → 기본 프로파일
         assert r.status_code == 202
         assert (await events_of(factory, "goal.created"))[-1].payload.get("llm") == "ollama"
+
+
+# OpenAI 프로브 진단 #4: 프로파일 호환성 오류(예: max_tokens 400)는 Goal 생성 즉시 400으로 알리고
+# Goal을 만들지 않는다. ollama는 프로브하지 않는다
+async def test_goal_llm_probe_rejects_incompatible_profile(
+    factory: async_sessionmaker[AsyncSession], redis: Redis, pump: Pump
+) -> None:
+    from agents.llm.base import ProviderError
+    from control_plane.api.app import create_app
+    from control_plane.config import Settings
+
+    probed: list[str] = []
+
+    async def probe(profile: str) -> None:
+        probed.append(profile)
+        if profile == "openai":
+            raise ProviderError("openai_compat HTTP 400: max_tokens unsupported")
+
+    app1 = create_app(
+        Settings(_env_file=None, llm_provider="openai_compat", openai_api_key="sk-x"),
+        factory=factory,
+        redis=redis,
+        llm_probe=probe,
+    )
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://t") as c:
+        pid = (await c.post("/projects", json={"name": "d", "repo": REPO})).json()["id"]
+        await pump()
+        before = len(await events_of(factory, "goal.created"))
+        r = await c.post(f"/projects/{pid}/goals", json={"title": "g", "llm": "openai"})
+        assert r.status_code == 400 and "max_tokens unsupported" in r.json()["detail"]
+        assert len(await events_of(factory, "goal.created")) == before
+        r = await c.post(f"/projects/{pid}/goals", json={"title": "g", "llm": "ollama"})
+        assert r.status_code == 202
+        assert probed == ["openai"]

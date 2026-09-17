@@ -189,6 +189,27 @@ def test_fake_provider_loads_script() -> None:
         entrypoint.provider_from_env({"WORKER_LLM_PROVIDER": "bogus"})
 
 
+def test_openai_compat_provider_honours_token_param_and_budget() -> None:
+    """OpenAI 프로브 진단 #1·#3: 워커도 프로파일의 토큰 파라미터 이름·예산을 받는다."""
+    from agents.llm.ollama import OllamaCompatProvider
+
+    p = entrypoint.provider_from_env(
+        {
+            "WORKER_LLM_PROVIDER": "openai_compat",
+            "WORKER_LLM_BASE_URL": "https://api.openai.com/v1",
+            "WORKER_LLM_MODEL": "gpt-5.6-luna",
+            "WORKER_LLM_API_KEY": "sk",
+            "WORKER_LLM_TOKEN_PARAM": "max_completion_tokens",
+            "WORKER_LLM_MAX_TOKENS": "16384",
+        }
+    )
+    assert isinstance(p, OllamaCompatProvider)
+    assert p.token_param == "max_completion_tokens" and p.max_tokens == 16384
+    q = entrypoint.provider_from_env({"WORKER_LLM_PROVIDER": "openai_compat"})
+    assert isinstance(q, OllamaCompatProvider)
+    assert q.token_param == "max_tokens" and q.max_tokens is None
+
+
 # P6.5: 워커는 WORKER_LLM_PRICE_IN_PER_MTOK / _OUT_PER_MTOK 로 단가를 받는다 (기본 0)
 def test_prices_from_env() -> None:
     from agents.llm.pricing import Prices

@@ -351,6 +351,10 @@ def test_worker_llm_env_per_profile(redis: Redis) -> None:
     assert (
         env["WORKER_LLM_BASE_URL"] == "https://api.openai.com/v1"
     )  # 원격은 host.docker.internal 치환 없음
+    assert env["WORKER_LLM_TOKEN_PARAM"] == "max_completion_tokens"  # OpenAI 프로브 진단 #1
+    assert env["WORKER_LLM_MAX_TOKENS"] == "16384"  # 진단 #3: 추론 토큰 예산
+    base = worker_llm_env(s)
+    assert base["WORKER_LLM_TOKEN_PARAM"] == "max_tokens" and "WORKER_LLM_MAX_TOKENS" not in base
     launcher = build_launcher(s, redis)
     spec = LaunchSpec(
         task_id="T", run_id="R", project_id="P", goal_id="G", branch="ai/x", repo_url="/tmp/x",

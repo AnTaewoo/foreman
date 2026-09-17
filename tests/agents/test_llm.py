@@ -387,3 +387,77 @@ def test_llm_profiles_and_get_provider_by_profile() -> None:
     with pytest.raises(ProviderConfigError, match="unknown"):
         get_provider(cfg, profile="nope")
     assert isinstance(get_provider(cfg), OllamaCompatProvider)  # profile 없음 → 기본
+
+
+# P9 (OpenAI 프로브 진단 #1·#3): gpt-5.6 계열은 max_tokens를 거부하고 max_completion_tokens를 요구하며,
+# 추론 토큰이 completion 예산을 먹는다 → provider별 토큰 파라미터 이름·기본 예산을 프로파일이 정한다
+async def test_ollama_token_param_and_budget_override() -> None:
+    rec = ChatRecorder([_chat_response("a"), _chat_response("b"), _chat_response("c")])
+    p = OllamaCompatProvider(
+        base_url="http://x/v1",
+        model="gpt-5.6-luna",
+        transport_handler=rec,
+        token_param="max_completion_tokens",
+        max_tokens=16384,
+    )
+    assert p.token_param == "max_completion_tokens" and p.max_tokens == 16384
+    await p.complete(msgs("ping"))  # 호출자가 기본 예산을 쓰면 provider 예산으로
+    assert rec.requests[0]["max_completion_tokens"] == 16384
+    assert "max_tokens" not in rec.requests[0]
+    await p.complete(msgs("ping"), max_tokens=20)  # 명시한 예산은 그대로
+    assert rec.requests[1]["max_completion_tokens"] == 20
+    q = OllamaCompatProvider(base_url="http://x/v1", model="m", transport_handler=rec)
+    await q.complete(msgs("ping"))  # 기본(ollama)은 종전과 같다
+    assert rec.requests[2]["max_tokens"] == DEFAULT_MAX_TOKENS
+    assert q.token_param == "max_tokens" and q.max_tokens is None
+
+
+def test_profile_env_token_param_and_budget() -> None:
+    from agents.llm import get_provider, profile_env
+
+    cfg = SimpleNamespace(
+        llm_provider="openai_compat",
+        llm_base_url="http://localhost:11434/v1",
+        llm_model="qwen2.5-coder:14b",
+        llm_api_key="ollama",
+        openai_api_key="sk-openai",
+        openai_model="gpt-5.6-luna",
+        openai_base_url="https://api.openai.com/v1",
+        openai_max_tokens=16384,
+        anthropic_api_key="",
+        anthropic_model="claude-opus-5",
+    )
+    assert profile_env(cfg, "openai")["token_param"] == "max_completion_tokens"
+    assert profile_env(cfg, "openai")["max_tokens"] == 16384
+    assert profile_env(cfg, "ollama")["token_param"] == "max_tokens"
+    assert profile_env(cfg, "ollama")["max_tokens"] is None
+    prov = get_provider(cfg, profile="openai")
+    assert isinstance(prov, OllamaCompatProvider)
+    assert prov.token_param == "max_completion_tokens" and prov.max_tokens == 16384
+
+
+# 진단 #4: 파라미터 오류 하나가 Goal 전체를 죽인다 → 원격 프로파일은 Goal 생성 전에 1콜 프로브,
+# 성공은 프로세스 안에서 캐시(프로파일당 한 번), ollama는 프로브하지 않는다
+async def test_probe_profile_once_and_skips_ollama() -> None:
+    from agents.llm import probe_profile, reset_probe_cache
+
+    reset_probe_cache()
+    calls: list[str] = []
+
+    def factory(settings: object, *, profile: str | None = None) -> FakeProvider:
+        calls.append(str(profile))
+        return FakeProvider(script=["ok"])
+
+    cfg = SimpleNamespace()
+    await probe_profile(cfg, "openai", factory=factory)
+    await probe_profile(cfg, "openai", factory=factory)
+    assert calls == ["openai"]
+    await probe_profile(cfg, "ollama", factory=factory)
+    assert calls == ["openai"]
+
+    def bad(settings: object, *, profile: str | None = None) -> ModelProvider:
+        raise ProviderError("openai_compat HTTP 400: max_tokens unsupported")
+
+    reset_probe_cache()
+    with pytest.raises(ProviderError, match="max_tokens unsupported"):
+        await probe_profile(cfg, "openai", factory=bad)
