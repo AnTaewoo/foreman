@@ -120,6 +120,8 @@ async def _goal_created(session: AsyncSession, event: Event) -> None:
     row.description = str(p.get("description", ""))
     row.status = GoalStatus.DRAFT
     row.created_at = event.ts
+    if p.get("llm"):  # D-57
+        row.llm_profile = str(p["llm"])
 
 
 @on(E.PROJECT_UPDATED)

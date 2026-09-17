@@ -24,6 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from agents.llm.base import ModelProvider
+from agents.llm.router import CURRENT_PROFILE
 from control_plane.events.bus import EventBus
 from control_plane.events.schema import Actor, Event, EventType, Subject
 from control_plane.orchestrator import emit as emit_mod
@@ -201,6 +202,7 @@ class GoalRunner:
             if repo_full_name is None or created is None:
                 raise RuntimeError(f"project {project_id} or goal.created {goal_id} not found")
             payload = created.payload
+            CURRENT_PROFILE.set(str(payload.get("llm")) if payload.get("llm") else None)  # D-57
             if self.token_provider is not None:  # D-41: 동기 clone 전에 토큰을 신선하게 (PC-7 발견)
                 await self.token_provider.token()
             repo_path = await asyncio.to_thread(self._repo_path_for, repo_full_name)
@@ -278,6 +280,9 @@ class GoalRunner:
         self, project_id: str, goal_id: str, approved: bool, by: str, reason: str
     ) -> None:
         try:
+            async with self._factory() as s:  # D-57: 재개 시에도 Goal의 프로파일로
+                goal = await s.get(m.Goal, goal_id)
+            CURRENT_PROFILE.set(goal.llm_profile if goal is not None else None)
             out = await self.graph().ainvoke(
                 Command(resume={"approved": approved, "by": by, "reason": reason}),
                 self._cfg(goal_id),

@@ -64,6 +64,22 @@
       : `승인자 계정 "${state.demo.user_id}"로 동작합니다.`;
   }
   // 프로젝트 선택: ?project=<id> > 마지막 선택(localStorage) > 첫 항목. 둘 이상이면 <select> 표시
+  // D-57: LLM 프로파일 목록 (ollama/openai/anthropic). 키 없는 것은 비활성
+  async function loadLlm() {
+    try {
+      const info = await api("/llm");
+      const sel = $("llm"); sel.innerHTML = "";
+      for (const p of info.profiles) {
+        const o = document.createElement("option");
+        o.value = p.name; o.disabled = !p.available;
+        o.textContent = `${p.name} — ${p.model}${p.available ? "" : " (키 없음)"}`;
+        o.selected = p.name === info.default; sel.appendChild(o);
+      }
+      const remembered = safeGet("foreman.llm");
+      if (remembered && [...sel.options].some((o) => o.value === remembered && !o.disabled)) sel.value = remembered;
+      sel.onchange = () => safeSet("foreman.llm", sel.value);
+    } catch (e) { console.warn(e); }
+  }
   async function loadProject() {
     const { items } = await api("/projects");
     if (!items.length) {
@@ -123,7 +139,7 @@
     for (const g of state.goals) {
       const li = document.createElement("li");
       li.className = (g.id === state.goalId ? "active " : "") + (isShowcase(g) ? "showcase" : "");
-      li.innerHTML = `<span class="t" title="${esc(g.title)}">${esc(g.title)}</span>${badge(g.status)}<span class="muted small">${g.done}/${g.total}</span>`;
+      li.innerHTML = `<span class="t" title="${esc(g.title)}">${esc(g.title)}</span>${g.llm ? `<span class="muted small">${esc(g.llm)}</span>` : ""}${badge(g.status)}<span class="muted small">${g.done}/${g.total}</span>`;
       li.onclick = () => selectGoal(g.id);
       ul.appendChild(li);
     }
@@ -191,7 +207,8 @@
     const title = $("goal-title").value.trim(); if (!title) return;
     $("goal-submit").disabled = true;
     try {
-      const g = await api(`/projects/${state.project.id}/goals`, { method: "POST", body: { title } });
+      const llm = $("llm").value || undefined;
+      const g = await api(`/projects/${state.project.id}/goals`, { method: "POST", body: { title, llm } });
       $("goal-title").value = "";
       toast("Goal을 만들었습니다. Plan이 올라오면 Approve 버튼이 보입니다.");
       await loadGoals(); await selectGoal(g.id);
@@ -264,7 +281,7 @@
   // ---- boot ------------------------------------------------------------
   (async () => {
     try {
-      await loadDemo(); await loadProject(); await loadGoals(); await loadEvents();
+      await loadDemo(); await loadLlm(); await loadProject(); await loadGoals(); await loadEvents();
       if (state.goals.length) await selectGoal(state.goals[0].id);
       connectWs();
     } catch (e) { toast(`초기화 실패: ${e.message}`); }

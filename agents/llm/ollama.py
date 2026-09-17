@@ -30,6 +30,8 @@ class OllamaCompatProvider:
         timeout: float = 300.0,
     ) -> None:
         self._model = model
+        self.model = model  # D-57: 프로파일 확인용 (읽기 전용)
+        self.base_url = base_url.rstrip("/")
         transport = httpx.MockTransport(transport_handler) if transport_handler else None
         self._client = httpx.AsyncClient(
             base_url=base_url.rstrip("/"),

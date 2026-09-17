@@ -59,7 +59,10 @@
       <form id="goal-form">
         <div class="examples" id="examples"></div>
         <input id="goal-title" name="title" maxlength="300" placeholder="Goal (영어 한 문장)" required>
-        <button type="submit" id="goal-submit">Goal 생성</button>
+        <div class="row">
+          <label class="small muted" style="flex:1">LLM <select id="llm"></select></label>
+          <button type="submit" id="goal-submit">Goal 생성</button>
+        </div>
       </form>
       <ul id="goals" class="list"></ul>
     </section>

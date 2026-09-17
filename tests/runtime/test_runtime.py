@@ -348,7 +348,9 @@ def test_worker_llm_env_per_profile(redis: Redis) -> None:
     env = worker_llm_env(s, profile="openai")
     assert env["WORKER_LLM_PROVIDER"] == "openai_compat"
     assert env["WORKER_LLM_MODEL"] == "gpt-5.6-luna" and env["WORKER_LLM_API_KEY"] == "sk-openai"
-    assert env["WORKER_LLM_BASE_URL"] == "https://api.openai.com/v1"  # 원격은 host.docker.internal 치환 없음
+    assert (
+        env["WORKER_LLM_BASE_URL"] == "https://api.openai.com/v1"
+    )  # 원격은 host.docker.internal 치환 없음
     launcher = build_launcher(s, redis)
     spec = LaunchSpec(
         task_id="T", run_id="R", project_id="P", goal_id="G", branch="ai/x", repo_url="/tmp/x",

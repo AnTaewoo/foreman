@@ -125,6 +125,7 @@ class Goal(Base):
     plan_discussion_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     plan_revision: Mapped[int] = mapped_column(Integer, default=0)
     plan_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)  # D-53 (0003)
+    llm_profile: Mapped[str | None] = mapped_column(String(40), nullable=True)  # D-57 (0005)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utc_now, onupdate=utc_now)
 

@@ -75,6 +75,13 @@ def create_app(
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @application.get("/llm")
+    async def llm_info() -> dict[str, object]:
+        """D-57: 콘솔의 LLM 선택 목록 (api_key는 포함하지 않는다)."""
+        from agents.llm import available_profiles, default_profile
+
+        return {"default": default_profile(settings), "profiles": available_profiles(settings)}
+
     @application.get("/demo")
     async def demo_info() -> dict[str, object]:
         """콘솔이 읽는 데모 설정 (토큰은 절대 포함하지 않는다)."""
@@ -117,7 +124,7 @@ async def _close(state: AppState) -> None:
 
 def build_runner(settings: Settings, state: AppState) -> GoalRunner:
     """설정으로 실 실행기: provider(D-33), GitHub(DRY_RUN이면 Dry). 체크포인터는 startup."""
-    from agents.llm import get_provider
+    from agents.llm.router import ProfileRouter
     from control_plane.repo_cache import RepoCache
 
     token_provider = None if settings.dry_run else make_token_provider(settings)  # D-41
@@ -129,10 +136,10 @@ def build_runner(settings: Settings, state: AppState) -> GoalRunner:
     return GoalRunner(
         factory=state.factory,
         bus=state.bus,
-        provider=get_provider(settings),
+        provider=ProfileRouter(settings),  # D-57: Goal의 프로파일로 위임
         github=get_github_client(settings),
         discussions=get_discussions_client(settings),
-        model=settings.llm_model if settings.llm_provider != "anthropic" else None,
+        model=None,  # 프로파일의 provider가 모델을 정한다 (D-57)
         repo_path_for=repo_cache.ensure,  # D-38
         token_provider=token_provider,
         repo_cache=repo_cache,

@@ -26,6 +26,7 @@ FINISHED = (TaskStatus.DONE, TaskStatus.CANCELLED)
 class GoalIn(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     description: str = ""
+    llm: str | None = None  # D-57: ollama|openai|anthropic (없으면 기본 프로파일)
 
 
 class GoalAccepted(BaseModel):
@@ -51,6 +52,7 @@ class GoalProgress(BaseModel):
     plan_discussion_number: int | None
     plan_discussion_url: str | None = None  # P9.1 (owner/name repo일 때)
     plan_markdown: str | None = None  # D-53
+    llm: str | None = None  # D-57
     tasks: dict[str, int]  # status → count
     total: int
     done: int
@@ -68,6 +70,7 @@ class GoalSummary(BaseModel):
     created_at: datetime
     total: int
     done: int
+    llm: str | None = None  # D-57
 
 
 class GoalList(BaseModel):
@@ -101,6 +104,14 @@ async def create_goal(
     if project.archived_at is not None:  # D-54
         raise HTTPException(409, "project is archived")
     await goal_quota(state, project_id)  # 데모 모드 한도 (P9.3)
+    from agents.llm import available_profiles, default_profile
+
+    profile = body.llm or default_profile(state.settings)
+    known = {p["name"]: p for p in available_profiles(state.settings)}
+    if profile not in known:
+        raise HTTPException(400, f"unknown llm profile {profile!r} (ollama|openai|anthropic)")
+    if not known[profile]["available"]:
+        raise HTTPException(400, f"llm profile {profile!r} is not available (API key missing)")
     gid = str(ULID())
     await publish(
         state,
@@ -109,7 +120,7 @@ async def create_goal(
             actor=human(user),
             type=EventType.GOAL_CREATED,
             subject=Subject(entity="goal", id=gid),
-            payload={"title": body.title, "description": body.description},
+            payload={"title": body.title, "description": body.description, "llm": profile},
             correlation_id=gid,
             causation_id=None,  # 루트 (D-25)
         ),
@@ -155,6 +166,7 @@ async def list_goals(project_id: str, state: StateDep) -> GoalList:
                 plan_revision=g.plan_revision,
                 plan_discussion_number=g.plan_discussion_id,
                 created_at=g.created_at,
+                llm=g.llm_profile,
                 total=total.get(g.id, 0),
                 done=done.get(g.id, 0),
             )
@@ -195,6 +207,7 @@ async def get_goal(project_id: str, goal_id: str, state: StateDep) -> GoalProgre
         plan_discussion_number=goal.plan_discussion_id,
         plan_discussion_url=gh_url(repo, "discussions", goal.plan_discussion_id) if repo else None,
         plan_markdown=goal.plan_markdown,
+        llm=goal.llm_profile,
         tasks=tasks,
         total=sum(tasks.values()),
         done=tasks.get(TaskStatus.DONE.value, 0),

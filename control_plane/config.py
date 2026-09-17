@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr = SecretStr("ollama")  # Ollama는 아무 값이나 받는다
     anthropic_api_key: SecretStr = SecretStr("")
     anthropic_model: str = "claude-opus-5"
+    # D-57: OpenAI 프로파일 (Goal마다 ollama/openai/anthropic 선택)
+    openai_api_key: SecretStr = SecretStr("")
+    openai_model: str = "gpt-5.6"
+    openai_base_url: str = "https://api.openai.com/v1"
     # D-39: 비용 = 토큰 × 단가(USD per 1M tokens). 기본 0 → cost_usd 0. 단가표를 코드에 박지 않는다
     llm_price_in_per_mtok: float = 0.0
     llm_price_out_per_mtok: float = 0.0

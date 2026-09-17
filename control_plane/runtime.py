@@ -48,16 +48,15 @@ def host_url(url: str) -> str:
     )
 
 
-def worker_llm_env(settings: Settings) -> dict[str, str]:
-    """워커 컨테이너의 LLM 설정 (P4.4 계약). 키는 provider 키만 — GitHub 토큰은 주지 않는다(§12)."""
-    env: dict[str, str] = {"WORKER_LLM_PROVIDER": settings.llm_provider}
-    if settings.llm_provider == "openai_compat":
-        env["WORKER_LLM_BASE_URL"] = host_url(settings.llm_base_url)
-        env["WORKER_LLM_MODEL"] = settings.llm_model
-        env["WORKER_LLM_API_KEY"] = settings.llm_api_key.get_secret_value()
-    elif settings.llm_provider == "anthropic":
-        env["WORKER_LLM_MODEL"] = settings.anthropic_model
-        env["WORKER_LLM_API_KEY"] = settings.anthropic_api_key.get_secret_value()
+def worker_llm_env(settings: Settings, profile: str | None = None) -> dict[str, str]:
+    """워커의 LLM 설정 (P4.4; D-57 프로파일). provider 키만 — GitHub 토큰은 없다(§12)."""
+    from agents.llm import default_profile, profile_env
+
+    cfg = profile_env(settings, profile or default_profile(settings))
+    env: dict[str, str] = {"WORKER_LLM_PROVIDER": cfg["provider"], "WORKER_LLM_MODEL": cfg["model"]}
+    if cfg["provider"] == "openai_compat":
+        env["WORKER_LLM_BASE_URL"] = host_url(cfg["base_url"])  # localhost만 host.docker.internal로
+    env["WORKER_LLM_API_KEY"] = cfg["api_key"]
     env.update(prices_of(settings).to_env())  # D-39
     return env
 
@@ -77,16 +76,20 @@ def build_launcher(
         return DockerCliLauncher(
             image=settings.worker_image,
             redis_url=host_url(settings.redis_url),
-            worker_env=worker_llm_env(settings),
+            worker_env=lambda profile: worker_llm_env(settings, profile),  # D-57
             mounts=mounts if mounts is not None else [(root, root)],  # D-38: repo_root 마운트
         )
     from agents.llm import get_provider
+    from agents.llm.base import ModelProvider
+
+    def provider_for(profile: str | None = None) -> ModelProvider:  # D-57
+        return get_provider(settings, profile=profile)
 
     return InProcessLauncher(
         redis,
-        provider_factory=lambda: get_provider(settings),
+        provider_factory=provider_for,
         workdir=Path(tempfile.gettempdir()) / "foreman-inprocess",
-        model=settings.llm_model if settings.llm_provider == "openai_compat" else None,
+        model=None,  # 프로파일의 provider가 자기 모델을 쓴다
         prices=prices_of(settings),
     )
 

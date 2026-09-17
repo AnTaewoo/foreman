@@ -96,11 +96,12 @@ make migrate                         # alembic upgrade head
 make worker-image                    # foreman-worker:dev 빌드 (Scheduler가 이 이미지로 워커를 띄운다)
 ```
 
-LLM은 `.env`에서 둘 중 하나:
+LLM은 세 프로파일 중 키가 있는 것을 콘솔에서 Goal마다 고릅니다(D-57). `HITL_LLM_PROVIDER`는 기본 선택만 정합니다.
 
 ```
-HITL_LLM_PROVIDER=anthropic        HITL_ANTHROPIC_API_KEY=sk-ant-…
-HITL_LLM_PROVIDER=openai_compat    HITL_LLM_MODEL=qwen2.5-coder:14b   # 로컬 Ollama: ollama pull qwen2.5-coder:14b
+HITL_LLM_PROVIDER=openai_compat    HITL_LLM_MODEL=qwen2.5-coder:14b   # 프로파일 ollama (로컬, 항상 사용 가능)
+HITL_OPENAI_API_KEY=sk-…           HITL_OPENAI_MODEL=gpt-5.6          # 프로파일 openai (OpenAI 호환 API)
+HITL_ANTHROPIC_API_KEY=sk-ant-…    HITL_ANTHROPIC_MODEL=claude-opus-5 # 프로파일 anthropic
 ```
 
 포트를 바꿨으면 `.env`의 `HITL_DATABASE_URL`/`HITL_REDIS_URL`도 맞춥니다. Docker 없이 워커를 돌리려면

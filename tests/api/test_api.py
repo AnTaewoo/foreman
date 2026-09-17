@@ -498,7 +498,7 @@ async def test_delete_project_archives_and_cancels(
     assert (await client.delete("/projects/01UNKNOWN00000000000000000")).status_code == 404
 
 
-# P9 LLM 프로파일 (D-57): GET /llm 목록, POST goals {llm} → 이벤트·목록·상세에 표시, 없는/키 없는 프로파일은 400
+# P9 LLM 프로파일 (D-57): GET /llm, POST goals {llm} → 이벤트·목록·상세; 없는/키 없는 프로파일 400
 async def test_llm_profiles_endpoint_and_goal_llm(
     factory: async_sessionmaker[AsyncSession], redis: Redis, pump: Pump
 ) -> None:
@@ -526,7 +526,9 @@ async def test_llm_profiles_endpoint_and_goal_llm(
         await pump()
         assert (await c.get(f"/projects/{pid}/goals/{gid}")).json()["llm"] == "openai"
         assert (await c.get(f"/projects/{pid}/goals")).json()["items"][0]["llm"] == "openai"
-        assert (await c.post(f"/projects/{pid}/goals", json={"title": "g", "llm": "nope"})).status_code == 400
+        assert (
+            await c.post(f"/projects/{pid}/goals", json={"title": "g", "llm": "nope"})
+        ).status_code == 400
         r = await c.post(f"/projects/{pid}/goals", json={"title": "g", "llm": "anthropic"})
         assert r.status_code == 400 and "not available" in r.json()["detail"]
         r = await c.post(f"/projects/{pid}/goals", json={"title": "g"})  # 생략 → 기본 프로파일

@@ -91,3 +91,10 @@ GitHub에서 PR을 **머지** → Task done. 심사자는 이 showcase로 결과
 - 개발 중 테스트: `make check`는 sqlite. **통합 테스트(`make test-integration`)는 `hitl_test` DB를 비우고 다시 만든다** —
   데모 DB `hitl`은 건드리지 않는다(`FOREMAN_TEST_DATABASE_URL`로 변경 가능). `-o addopts=""`로 전체를 돌리지 말 것.
 - 접속 확인은 시크릿 창에서: `/`, `/health`, `/docs`, Goal 생성 → 429/승인 흐름 (`docs/pc/PC-9.md`).
+
+## LLM 프로파일 (D-57)
+
+콘솔의 Goal 폼에서 `ollama` / `openai` / `anthropic`을 고른다. 키가 있는 프로파일만 선택된다.
+`.env`에 `HITL_OPENAI_API_KEY`, `HITL_OPENAI_MODEL`(예: `gpt-5.6`), 선택적으로 `HITL_OPENAI_BASE_URL`을 넣고
+`deploy/demo_down.sh` → `deploy/demo_up.sh`로 재시작하면 `GET /llm`에 `openai`가 available로 나온다.
+워커는 Goal의 프로파일로 `WORKER_LLM_*`를 받는다(토큰·키 외 비밀 없음).

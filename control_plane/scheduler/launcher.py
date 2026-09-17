@@ -30,6 +30,7 @@ class LaunchSpec:
     repo_url: str
     task_json: dict[str, Any]  # AgentInput dump (WORKER_TASK_JSON)
     timeout_min: int
+    llm_profile: str | None = None  # D-57: Goal이 고른 LLM 프로파일 (None = 기본)
 
     def env(self, *, redis_url: str, extra: dict[str, str] | None = None) -> dict[str, str]:
         return {
@@ -90,7 +91,7 @@ class DockerCliLauncher:
         *,
         image: str = "foreman-worker:dev",
         redis_url: str,
-        worker_env: dict[str, str] | None = None,
+        worker_env: dict[str, str] | Callable[[str | None], dict[str, str]] | None = None,
         docker_bin: str = "docker",
         extra_args: tuple[str, ...] = ("--add-host", "host.docker.internal:host-gateway"),
         mounts: Sequence[tuple[str, str]] = (),
@@ -114,9 +115,16 @@ class DockerCliLauncher:
             raise LaunchError(f"docker {args[0]}: {err.decode(errors='replace').strip()}")
         return out.decode(errors="replace").strip()
 
+    def env_for(self, spec: LaunchSpec) -> dict[str, str]:
+        """워커 env — D-57: worker_env가 callable이면 프로파일별 LLM 키를 만든다."""
+        extra = (
+            self._worker_env(spec.llm_profile) if callable(self._worker_env) else self._worker_env
+        )
+        return spec.env(redis_url=self.redis_url, extra=extra)
+
     async def launch(self, spec: LaunchSpec) -> str:
         env_args: list[str] = []
-        for k, v in spec.env(redis_url=self.redis_url, extra=self._worker_env).items():
+        for k, v in self.env_for(spec).items():
             env_args += ["-e", f"{k}={v}"]
         mount_args: list[str] = []
         mounts = list(self.mounts)
@@ -171,7 +179,7 @@ class InProcessLauncher:
         self,
         redis: Any,  # Any: redis.asyncio.Redis — launcher 모듈은 redis 타입에 의존하지 않는다
         *,
-        provider_factory: Callable[[], Any],  # Any: agents.llm.base.ModelProvider
+        provider_factory: Callable[..., Any],  # Any: ModelProvider; (profile?) → provider
         workdir: Path,
         model: str | None = None,
         test_command: str = "pytest -q",
@@ -181,12 +189,20 @@ class InProcessLauncher:
         self._redis = redis
         self._prices = prices
         self._provider_factory = provider_factory
+
         self._workdir = Path(workdir)
         self._model = model
         self._test_command = test_command
         self._shell_timeout = shell_timeout
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self.results: dict[str, str] = {}  # run_id → outcome / "crashed: …"
+
+    def _provider(self, spec: LaunchSpec) -> Any:
+        """D-57: 팩토리가 profile을 받으면 spec.llm_profile을 넘긴다 (무인자 람다도 허용)."""
+        try:
+            return self._provider_factory(spec.llm_profile)
+        except TypeError:
+            return self._provider_factory()
 
     async def launch(self, spec: LaunchSpec) -> str:
         task = asyncio.create_task(self._run(spec), name=f"inprocess-{spec.run_id}")
@@ -211,7 +227,7 @@ class InProcessLauncher:
             )
             agent = CodingAgent(
                 publish=RedisPublisher(self._redis),
-                provider=self._provider_factory(),
+                provider=self._provider(spec),
                 github=DryRunGitHubClient(),
                 repo=str(spec.task_json["project_context"]["repo"]),
                 worktree=repo,

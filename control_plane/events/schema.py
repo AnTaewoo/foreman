@@ -250,6 +250,7 @@ class GoalDecomposedPayload(TypedDict):
 class GoalCreatedPayload(TypedDict):
     title: str
     description: str
+    llm: NotRequired[str]  # D-57: LLM 프로파일 (ollama|openai|anthropic), additive
 
 
 class GoalPlanProposedPayload(TypedDict):

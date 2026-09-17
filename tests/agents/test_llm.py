@@ -350,12 +350,13 @@ def test_estimate_cost() -> None:
     assert Prices.from_env({}) == Prices()
 
 
-# P9 LLM 프로파일 (D-57): 콘솔에서 Goal마다 LLM을 고른다. ollama(로컬) / openai(gpt) / anthropic — 키가 있는 것만 available
+# P9 LLM 프로파일 (D-57): Goal마다 LLM을 고른다. ollama / openai / anthropic — 키 있는 것만
 def test_llm_profiles_and_get_provider_by_profile() -> None:
     from types import SimpleNamespace
 
-    from agents.llm import available_profiles, default_profile, get_provider
     from pydantic import SecretStr
+
+    from agents.llm import available_profiles, default_profile, get_provider
 
     cfg = SimpleNamespace(
         llm_provider="openai_compat",
@@ -370,7 +371,10 @@ def test_llm_profiles_and_get_provider_by_profile() -> None:
     )
     profiles = {p["name"]: p for p in available_profiles(cfg)}
     assert profiles["ollama"] == {
-        "name": "ollama", "provider": "openai_compat", "model": "qwen2.5-coder:14b", "available": True
+        "name": "ollama",
+        "provider": "openai_compat",
+        "model": "qwen2.5-coder:14b",
+        "available": True,
     }  # fmt: skip
     assert profiles["openai"]["model"] == "gpt-5.6-luna" and profiles["openai"]["available"] is True
     assert profiles["anthropic"]["available"] is False  # 키 없음

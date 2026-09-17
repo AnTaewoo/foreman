@@ -175,6 +175,20 @@ class Scheduler:
             tasks = await load_project_tasks(session, project_id)
             candidates = pick_ready(tasks, in_flight=self.in_flight, free_slots=free)
             project = await session.get(m.Project, project_id) if candidates else None
+            goal_rows = (
+                {  # D-57: Goal이 고른 LLM 프로파일
+                    g.id: g
+                    for g in (
+                        await session.execute(
+                            select(m.Goal).where(m.Goal.id.in_({c.goal_id for c in candidates}))
+                        )
+                    )
+                    .scalars()
+                    .all()
+                }
+                if candidates
+                else {}
+            )
             epics = (
                 {
                     e.id: e
@@ -216,6 +230,7 @@ class Scheduler:
                 )
             # P6.1 (리뷰 A3): repo/브랜치는 프로젝트 행에서, 생성자 값은 행이 없을 때의 폴백
             repo_name = project.repo_full_name if project is not None else self._repo_url
+            goal_row = goal_rows.get(cand.goal_id)
             spec = self._spec(
                 project_id,
                 cand,
@@ -225,6 +240,7 @@ class Scheduler:
                 default_branch=project.default_branch
                 if project is not None
                 else self._default_branch,
+                llm_profile=goal_row.llm_profile if goal_row is not None else None,
             )
             try:
                 if self._repo_resolver is not None:  # D-38: clone 대상은 로컬 경로
@@ -281,6 +297,7 @@ class Scheduler:
         *,
         repo_url: str | None = None,
         default_branch: str | None = None,
+        llm_profile: str | None = None,
     ) -> LaunchSpec:
         repo_url = repo_url or self._repo_url
         default_branch = default_branch or self._default_branch
@@ -318,6 +335,7 @@ class Scheduler:
             repo_url=repo_url,
             task_json=task_json,
             timeout_min=self._timeout_min,
+            llm_profile=llm_profile,
         )
 
     async def _publish(
