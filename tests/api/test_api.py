@@ -496,3 +496,39 @@ async def test_delete_project_archives_and_cancels(
     # 두 번째 DELETE는 409 (이미 보관)
     assert (await client.delete(f"/projects/{pid}")).status_code == 409
     assert (await client.delete("/projects/01UNKNOWN00000000000000000")).status_code == 404
+
+
+# P9 LLM 프로파일 (D-57): GET /llm 목록, POST goals {llm} → 이벤트·목록·상세에 표시, 없는/키 없는 프로파일은 400
+async def test_llm_profiles_endpoint_and_goal_llm(
+    factory: async_sessionmaker[AsyncSession], redis: Redis, pump: Pump
+) -> None:
+    from control_plane.api.app import create_app
+    from control_plane.config import Settings
+
+    app1 = create_app(
+        Settings(_env_file=None, llm_provider="openai_compat", openai_api_key="sk-x"),
+        factory=factory,
+        redis=redis,
+    )
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://t") as c:
+        info = (await c.get("/llm")).json()
+        assert info["default"] == "ollama"
+        by = {p["name"]: p for p in info["profiles"]}
+        assert by["openai"]["available"] is True and by["anthropic"]["available"] is False
+        assert "model" in by["ollama"] and "api_key" not in str(info)
+        pid = (await c.post("/projects", json={"name": "d", "repo": REPO})).json()["id"]
+        await pump()
+        r = await c.post(f"/projects/{pid}/goals", json={"title": "g", "llm": "openai"})
+        assert r.status_code == 202, r.text
+        gid = r.json()["id"]
+        created = await events_of(factory, "goal.created")
+        assert created[-1].payload["llm"] == "openai"
+        await pump()
+        assert (await c.get(f"/projects/{pid}/goals/{gid}")).json()["llm"] == "openai"
+        assert (await c.get(f"/projects/{pid}/goals")).json()["items"][0]["llm"] == "openai"
+        assert (await c.post(f"/projects/{pid}/goals", json={"title": "g", "llm": "nope"})).status_code == 400
+        r = await c.post(f"/projects/{pid}/goals", json={"title": "g", "llm": "anthropic"})
+        assert r.status_code == 400 and "not available" in r.json()["detail"]
+        r = await c.post(f"/projects/{pid}/goals", json={"title": "g"})  # 생략 → 기본 프로파일
+        assert r.status_code == 202
+        assert (await events_of(factory, "goal.created"))[-1].payload.get("llm") == "ollama"

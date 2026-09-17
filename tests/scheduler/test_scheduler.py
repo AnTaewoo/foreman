@@ -612,3 +612,15 @@ async def test_ingest_marks_published_no_duplicate_xadd(
         len(tool_rows) == 1 and ev_rows == []
     )  # F-12: run.tool_called는 tool_calls에만 (D-31 설계)
     assert (await h.task("T1")).status is TaskStatus.RUNNING
+
+
+# P9 LLM 프로파일 (D-57): Goal의 llm_profile이 LaunchSpec으로 내려간다
+async def test_launch_spec_carries_goal_llm_profile(
+    factory: async_sessionmaker[AsyncSession], redis: Redis
+) -> None:
+    h = Harness(factory, redis, max_workers=1)
+    boot = list(BOOTSTRAP)
+    boot[1] = ev(E.GOAL_CREATED, "goal", GID, {"title": "g", "description": "d", "llm": "openai"})
+    await h.publish(*boot, task_created("T1", [], ["src/a/**"]))
+    await h.pump()
+    assert h.launcher.specs[0].llm_profile == "openai"

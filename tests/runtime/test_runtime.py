@@ -330,3 +330,33 @@ def test_runtime_repo_cache_is_dry_in_dry_mode(
         settings_for("sqlite+aiosqlite://", dry_run=True), factory, redis, launcher=FakeLauncher()
     )
     assert rt.repo_cache.dry_run is True
+
+
+# P9 LLM 프로파일 (D-57): 워커 env도 Goal의 프로파일을 따른다
+def test_worker_llm_env_per_profile(redis: Redis) -> None:
+    from control_plane.runtime import build_launcher, worker_llm_env
+    from control_plane.scheduler.launcher import LaunchSpec
+
+    s = Settings(
+        _env_file=None,
+        llm_provider="openai_compat",
+        llm_model="qwen2.5-coder:14b",
+        openai_api_key="sk-openai",
+        openai_model="gpt-5.6-luna",
+    )
+    assert worker_llm_env(s)["WORKER_LLM_MODEL"] == "qwen2.5-coder:14b"
+    env = worker_llm_env(s, profile="openai")
+    assert env["WORKER_LLM_PROVIDER"] == "openai_compat"
+    assert env["WORKER_LLM_MODEL"] == "gpt-5.6-luna" and env["WORKER_LLM_API_KEY"] == "sk-openai"
+    assert env["WORKER_LLM_BASE_URL"] == "https://api.openai.com/v1"  # 원격은 host.docker.internal 치환 없음
+    launcher = build_launcher(s, redis)
+    spec = LaunchSpec(
+        task_id="T", run_id="R", project_id="P", goal_id="G", branch="ai/x", repo_url="/tmp/x",
+        task_json={}, timeout_min=1, llm_profile="openai",
+    )  # fmt: skip
+    assert launcher.env_for(spec)["WORKER_LLM_MODEL"] == "gpt-5.6-luna"
+    spec2 = LaunchSpec(
+        task_id="T", run_id="R", project_id="P", goal_id="G", branch="ai/x", repo_url="/tmp/x",
+        task_json={}, timeout_min=1,
+    )  # fmt: skip
+    assert launcher.env_for(spec2)["WORKER_LLM_MODEL"] == "qwen2.5-coder:14b"

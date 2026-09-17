@@ -469,6 +469,25 @@ async def test_project_archived_via_project_updated(
         assert p is not None and p.archived_at is None
 
 
+# P9 LLM 프로파일 (D-57): goal.created{llm} → goals.llm_profile (없으면 None = 기본 프로파일)
+async def test_goal_created_stores_llm_profile(
+    factory: async_sessionmaker[AsyncSession], bus: EventBus, projection: Projection
+) -> None:
+    events = await publish_all(
+        bus,
+        factory,
+        [
+            SEQUENCE[0],
+            ev(E.GOAL_CREATED, ("goal", "G1"), {"title": "g", "description": "", "llm": "openai"}),
+        ],
+    )
+    for e in events:
+        await projection.apply(e)
+    async with factory() as s:
+        goal = await s.get(m.Goal, "G1")
+        assert goal is not None and goal.llm_profile == "openai"
+
+
 # (h)(i) 핸들러 등록
 def test_all_event_types_have_handlers_and_unused_are_noop() -> None:
     # D-54: project.updated는 이제 archived를 반영하는 핸들러가 있다 (noop 아님)

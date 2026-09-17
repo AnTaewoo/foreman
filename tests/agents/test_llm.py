@@ -348,3 +348,38 @@ def test_estimate_cost() -> None:
         {"WORKER_LLM_PRICE_IN_PER_MTOK": "3", "WORKER_LLM_PRICE_OUT_PER_MTOK": "15"}
     ) == Prices(3.0, 15.0)
     assert Prices.from_env({}) == Prices()
+
+
+# P9 LLM 프로파일 (D-57): 콘솔에서 Goal마다 LLM을 고른다. ollama(로컬) / openai(gpt) / anthropic — 키가 있는 것만 available
+def test_llm_profiles_and_get_provider_by_profile() -> None:
+    from types import SimpleNamespace
+
+    from agents.llm import available_profiles, default_profile, get_provider
+    from pydantic import SecretStr
+
+    cfg = SimpleNamespace(
+        llm_provider="openai_compat",
+        llm_base_url="http://localhost:11434/v1",
+        llm_model="qwen2.5-coder:14b",
+        llm_api_key=SecretStr("ollama"),
+        openai_api_key=SecretStr("sk-openai"),
+        openai_model="gpt-5.6-luna",
+        openai_base_url="https://api.openai.com/v1",
+        anthropic_api_key=SecretStr(""),
+        anthropic_model="claude-opus-5",
+    )
+    profiles = {p["name"]: p for p in available_profiles(cfg)}
+    assert profiles["ollama"] == {
+        "name": "ollama", "provider": "openai_compat", "model": "qwen2.5-coder:14b", "available": True
+    }  # fmt: skip
+    assert profiles["openai"]["model"] == "gpt-5.6-luna" and profiles["openai"]["available"] is True
+    assert profiles["anthropic"]["available"] is False  # 키 없음
+    assert default_profile(cfg) == "ollama"  # llm_provider=openai_compat → ollama
+    p = get_provider(cfg, profile="openai")
+    assert isinstance(p, OllamaCompatProvider) and p.model == "gpt-5.6-luna"
+    assert p.base_url.startswith("https://api.openai.com")
+    with pytest.raises(ProviderConfigError, match="anthropic"):
+        get_provider(cfg, profile="anthropic")
+    with pytest.raises(ProviderConfigError, match="unknown"):
+        get_provider(cfg, profile="nope")
+    assert isinstance(get_provider(cfg), OllamaCompatProvider)  # profile 없음 → 기본
