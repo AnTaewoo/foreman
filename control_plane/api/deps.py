@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from control_plane.orchestrator.runner import GoalRunner
 
 GoalHook = Callable[[str, str], Awaitable[None]]  # (project_id, goal_id) — P5.2 runner가 건다
+LlmProbe = Callable[[str], Awaitable[None]]  # profile → ProviderError를 올린다
 
 
 @dataclass
@@ -39,6 +40,7 @@ class AppState:
     owns_redis: bool = False
     on_goal_created: GoalHook | None = None
     runner: GoalRunner | None = None  # P5.2: Goal 실행기(웹훅 승인 재개)
+    llm_probe: LlmProbe | None = None  # Goal 생성 전 원격 프로파일 1콜 검증 (None = 검증 없음)
 
 
 def build_state(

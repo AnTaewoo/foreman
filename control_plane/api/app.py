@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from control_plane.api import approvals, events, goals, projects, stream, tasks
 from control_plane.api.demo_guard import RateLimitMiddleware
-from control_plane.api.deps import AppState, build_state
+from control_plane.api.deps import AppState, LlmProbe, build_state
 from control_plane.api.idempotency import IdempotencyMiddleware
 from control_plane.config import Settings, get_settings
 from control_plane.logging import configure_logging
@@ -36,6 +36,7 @@ def create_app(
     factory: async_sessionmaker[AsyncSession] | None = None,
     redis: Redis | None = None,
     runner: GoalRunner | None = None,
+    llm_probe: LlmProbe | None = None,
 ) -> FastAPI:
     """설정을 주입받아 앱을 만든다. factory/redis를 안 주면 설정으로 만들고 shutdown에서 닫는다.
 
@@ -45,6 +46,13 @@ def create_app(
     settings = settings or get_settings()
     configure_logging(settings)
     state = build_state(settings, factory=factory, redis=redis)
+    if llm_probe is None:  # 기본: 실제 1콜 프로브 (테스트는 가짜를 주입)
+        from agents.llm import probe_profile
+
+        async def llm_probe(profile: str) -> None:
+            await probe_profile(settings, profile)
+
+    state.llm_probe = llm_probe
     if runner is not None:
         state.runner = runner
         state.on_goal_created = runner.start

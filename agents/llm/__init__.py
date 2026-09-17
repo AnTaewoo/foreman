@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from collections.abc import Callable
+from typing import Any, Protocol
 
 from pydantic import SecretStr
 
 from agents.llm.anthropic import AnthropicProvider
-from agents.llm.base import DEFAULT_MODEL, ModelProvider, ProviderConfigError
+from agents.llm.base import DEFAULT_MODEL, Message, ModelProvider, ProviderConfigError
 from agents.llm.fake import FakeProvider
 from agents.llm.ollama import OllamaCompatProvider
 
@@ -33,14 +34,20 @@ def _secret(v: object) -> str:
     return v.get_secret_value() if hasattr(v, "get_secret_value") else str(v or "")
 
 
-def profile_env(settings: object, profile: str) -> dict[str, str]:
-    """프로파일 → provider·base_url·model·api_key (D-57). 키 없음 = 빈 문자열."""
+def profile_env(settings: object, profile: str) -> dict[str, Any]:
+    """프로파일 → provider·base_url·model·api_key·token_param·max_tokens (D-57).
+
+    키 없음 = 빈 문자열. ``token_param``/``max_tokens``는 OpenAI 프로브 진단 #1·#3:
+    gpt-5.x는 ``max_completion_tokens``만 받고 추론 토큰이 예산을 먹는다.
+    """
     if profile == "ollama":
         return {
             "provider": "openai_compat",
             "base_url": str(getattr(settings, "llm_base_url", "http://localhost:11434/v1")),
             "model": str(getattr(settings, "llm_model", "qwen2.5-coder:7b")),
             "api_key": _secret(getattr(settings, "llm_api_key", "ollama")) or "ollama",
+            "token_param": "max_tokens",
+            "max_tokens": None,
         }
     if profile == "openai":
         return {
@@ -48,6 +55,8 @@ def profile_env(settings: object, profile: str) -> dict[str, str]:
             "base_url": str(getattr(settings, "openai_base_url", "https://api.openai.com/v1")),
             "model": str(getattr(settings, "openai_model", "gpt-5.6")),
             "api_key": _secret(getattr(settings, "openai_api_key", "")),
+            "token_param": "max_completion_tokens",
+            "max_tokens": int(getattr(settings, "openai_max_tokens", 16384) or 16384),
         }
     if profile == "anthropic":
         return {
@@ -55,6 +64,8 @@ def profile_env(settings: object, profile: str) -> dict[str, str]:
             "base_url": "",
             "model": str(getattr(settings, "anthropic_model", DEFAULT_MODEL) or DEFAULT_MODEL),
             "api_key": _secret(getattr(settings, "anthropic_api_key", "")),
+            "token_param": "max_tokens",
+            "max_tokens": None,
         }
     raise ProviderConfigError(f"unknown llm profile {profile!r} (ollama|openai|anthropic)")
 
@@ -99,7 +110,11 @@ def get_provider(
         env = profile_env(settings, profile)
         if env["provider"] == "openai_compat":
             return OllamaCompatProvider(
-                base_url=env["base_url"], model=env["model"], api_key=env["api_key"] or "ollama"
+                base_url=env["base_url"],
+                model=env["model"],
+                api_key=env["api_key"] or "ollama",
+                token_param=env["token_param"],
+                max_tokens=env["max_tokens"],
             )
         if not env["api_key"]:
             raise ProviderConfigError(f"llm profile {profile!r}: anthropic API key is empty")
@@ -120,3 +135,29 @@ def get_provider(
         )
     model = str(getattr(settings, "anthropic_model", DEFAULT_MODEL) or DEFAULT_MODEL)
     return AnthropicProvider(key, model=model)
+
+
+_PROBED: set[str] = set()  # 프로세스 안에서 성공한 프로파일 (진단 #4)
+
+
+def reset_probe_cache() -> None:
+    _PROBED.clear()
+
+
+async def probe_profile(
+    settings: Any,  # Any: Settings 또는 테스트의 SimpleNamespace
+    profile: str,
+    *,
+    factory: Callable[..., ModelProvider] | None = None,
+) -> None:
+    """원격 프로파일을 Goal 생성 전에 1콜 검증한다 (진단 #4: 파라미터 오류가 Goal을 죽이지 않게).
+
+    ollama는 프로브하지 않는다(로컬, 모델 로드 비용). 성공은 프로파일당 한 번만 기록한다.
+    실패는 ProviderError 그대로 올린다 — 호출자가 400으로 바꾼다.
+    """
+    if profile == "ollama" or profile in _PROBED:
+        return
+    make = factory or get_provider
+    provider = make(settings, profile=profile)
+    await provider.complete([Message(role="user", content="Reply with OK.")], max_tokens=16)
+    _PROBED.add(profile)

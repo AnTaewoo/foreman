@@ -70,10 +70,13 @@ def provider_from_env(env: Mapping[str, str]) -> ModelProvider:
         )
         return FakeProvider(script=script)
     if kind == "openai_compat":
+        budget = env.get("WORKER_LLM_MAX_TOKENS", "")
         return OllamaCompatProvider(
             base_url=env.get("WORKER_LLM_BASE_URL", "http://localhost:11434/v1"),
             model=env.get("WORKER_LLM_MODEL", "qwen2.5-coder:7b"),
             api_key=env.get("WORKER_LLM_API_KEY", "ollama"),
+            token_param=env.get("WORKER_LLM_TOKEN_PARAM", "max_tokens"),  # gpt-5.x 호환
+            max_tokens=int(budget) if budget else None,
         )
     if kind == "anthropic":
         return AnthropicProvider(

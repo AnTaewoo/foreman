@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -15,10 +16,12 @@ from pydantic import BaseModel, SecretStr
 from agents.llm import get_provider
 from agents.llm.anthropic import AnthropicProvider
 from agents.llm.base import (
+    DEFAULT_MAX_TOKENS,
     Completion,
     Message,
     ModelProvider,
     ProviderConfigError,
+    ProviderError,
     ProviderRefusal,
     estimate_tokens,
 )
@@ -352,8 +355,6 @@ def test_estimate_cost() -> None:
 
 # P9 LLM 프로파일 (D-57): Goal마다 LLM을 고른다. ollama / openai / anthropic — 키 있는 것만
 def test_llm_profiles_and_get_provider_by_profile() -> None:
-    from types import SimpleNamespace
-
     from pydantic import SecretStr
 
     from agents.llm import available_profiles, default_profile, get_provider
@@ -389,7 +390,7 @@ def test_llm_profiles_and_get_provider_by_profile() -> None:
     assert isinstance(get_provider(cfg), OllamaCompatProvider)  # profile 없음 → 기본
 
 
-# P9 (OpenAI 프로브 진단 #1·#3): gpt-5.6 계열은 max_tokens를 거부하고 max_completion_tokens를 요구하며,
+# P9 (OpenAI 프로브 진단 #1·#3): gpt-5.6 계열은 max_tokens 대신 max_completion_tokens를 요구하고,
 # 추론 토큰이 completion 예산을 먹는다 → provider별 토큰 파라미터 이름·기본 예산을 프로파일이 정한다
 async def test_ollama_token_param_and_budget_override() -> None:
     rec = ChatRecorder([_chat_response("a"), _chat_response("b"), _chat_response("c")])

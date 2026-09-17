@@ -28,10 +28,16 @@ class OllamaCompatProvider:
         api_key: str = "ollama",
         transport_handler: TransportHandler | None = None,
         timeout: float = 300.0,
+        token_param: str = "max_tokens",
+        max_tokens: int | None = None,
     ) -> None:
         self._model = model
         self.model = model  # D-57: 프로파일 확인용 (읽기 전용)
         self.base_url = base_url.rstrip("/")
+        # OpenAI 신모델(gpt-5.x)은 max_tokens를 400으로 거부하고 max_completion_tokens를 요구한다.
+        # 추론 모델은 completion 예산을 숨은 추론에도 쓰므로 프로파일이 더 큰 기본 예산을 준다
+        self.token_param = token_param
+        self.max_tokens = max_tokens  # None = 호출자가 준 예산 그대로
         transport = httpx.MockTransport(transport_handler) if transport_handler else None
         self._client = httpx.AsyncClient(
             base_url=base_url.rstrip("/"),
@@ -54,7 +60,9 @@ class OllamaCompatProvider:
         if system is not None:
             chat.append({"role": "system", "content": system})
         chat += [{"role": m.role, "content": m.content} for m in messages]
-        body: dict[str, Any] = {"model": use_model, "messages": chat, "max_tokens": max_tokens}
+        if max_tokens == DEFAULT_MAX_TOKENS and self.max_tokens:
+            max_tokens = self.max_tokens  # 기본 예산만 provider 예산으로 바꾼다
+        body: dict[str, Any] = {"model": use_model, "messages": chat, self.token_param: max_tokens}
         if schema is not None:
             body["response_format"] = {
                 "type": "json_schema",

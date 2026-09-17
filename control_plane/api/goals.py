@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from ulid import ULID
 
+from agents.llm.base import ProviderError
 from control_plane.api.demo_guard import AdminDep, goal_quota
 from control_plane.api.deps import StateDep, UserDep, find_project, gh_url, human, publish
 from control_plane.events.schema import Event, EventType, Subject
@@ -112,6 +113,13 @@ async def create_goal(
         raise HTTPException(400, f"unknown llm profile {profile!r} (ollama|openai|anthropic)")
     if not known[profile]["available"]:
         raise HTTPException(400, f"llm profile {profile!r} is not available (API key missing)")
+    if profile != "ollama" and state.llm_probe is not None:  # 원격 프로파일만 사전 검증
+        try:
+            await state.llm_probe(profile)
+        except ProviderError as exc:
+            raise HTTPException(
+                400, f"llm profile {profile!r} rejected the probe call: {exc}"
+            ) from exc
     gid = str(ULID())
     await publish(
         state,

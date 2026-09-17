@@ -56,6 +56,9 @@ def worker_llm_env(settings: Settings, profile: str | None = None) -> dict[str, 
     env: dict[str, str] = {"WORKER_LLM_PROVIDER": cfg["provider"], "WORKER_LLM_MODEL": cfg["model"]}
     if cfg["provider"] == "openai_compat":
         env["WORKER_LLM_BASE_URL"] = host_url(cfg["base_url"])  # localhost만 host.docker.internal로
+        env["WORKER_LLM_TOKEN_PARAM"] = str(cfg["token_param"])  # OpenAI 프로브 진단 #1
+        if cfg["max_tokens"]:
+            env["WORKER_LLM_MAX_TOKENS"] = str(cfg["max_tokens"])  # 진단 #3
     env["WORKER_LLM_API_KEY"] = cfg["api_key"]
     env.update(prices_of(settings).to_env())  # D-39
     return env
