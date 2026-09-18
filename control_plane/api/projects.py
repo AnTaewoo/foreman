@@ -51,6 +51,17 @@ class ProjectOut(BaseModel):
     default_branch: str
     created_at: datetime
     archived_at: datetime | None = None  # D-54: 보관됨(목록에서 제외, 새 Goal 409)
+    # P9.12: 승인할 수 있는 GitHub 로그인(owner/approver) — 콘솔은 자기 id가 없으면 GitHub 안내
+    approvers: list[str] = []
+
+
+def approvers_of(members: list[dict[str, str]] | list[Member]) -> list[str]:
+    out = []
+    for mem in members:
+        d = mem.model_dump() if isinstance(mem, Member) else mem
+        if d.get("role") in ("owner", "approver"):
+            out.append(str(d.get("user_id")))
+    return out
 
 
 class ProjectList(BaseModel):
@@ -98,6 +109,7 @@ async def list_projects(state: StateDep, include_archived: bool = False) -> Proj
                 default_branch=r.default_branch,
                 created_at=r.created_at,
                 archived_at=r.archived_at,
+                approvers=approvers_of(list(r.members or [])),
             )
             for r in rows
         ]
@@ -222,6 +234,7 @@ async def create_project(
         repo_url=gh_url(repo),
         default_branch=default_branch,
         created_at=event.ts,
+        approvers=approvers_of(members),
     )
 
 
@@ -276,4 +289,5 @@ async def get_project(project_id: str, state: StateDep) -> ProjectOut:
         default_branch=view.default_branch,
         created_at=view.created_at,
         archived_at=view.archived_at,
+        approvers=approvers_of(view.members),
     )

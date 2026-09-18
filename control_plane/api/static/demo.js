@@ -204,6 +204,8 @@
       li.appendChild(btn); ul.appendChild(li);
     }
   }
+  // P9.12: 콘솔 사용자가 이 프로젝트의 owner/approver인가. 아니면(외부 repo) 승인은 GitHub 댓글로
+  const canApprove = () => ((state.project && state.project.approvers) || []).includes(state.demo.user_id);
   // 지금 어느 단계이고 누구 차례인가 (HITL의 핵심 메시지)
   function stage(goal, tasks) {
     const total = tasks.length, done = tasks.filter((t) => t.status === "done").length;
@@ -214,7 +216,7 @@
     switch (goal.status) {
       case "draft": case "planning":
         return { at: 1, turn: `AI가 Plan을 작성하는 중입니다${llm} — ${ago(goal.created_at) === "방금" ? "방금 시작" : ago(goal.created_at).replace(" 전", " 경과")}` };
-      case "awaiting_plan_approval": return { at: 2, turn: "당신 차례입니다 — Plan을 읽고 승인하세요." };
+      case "awaiting_plan_approval": return { at: 2, turn: canApprove() ? "당신 차례입니다 — Plan을 읽고 승인하세요." : "당신 차례입니다 — GitHub의 Plan에 /approve 댓글을 다세요." };
       case "done": return { at: 6, turn: "완료된 Goal입니다." };
       case "cancelled": case "blocked":
         return { at: goal.plan_markdown ? (total ? 3 : 2) : 1, stopped: true, turn: goal.status === "cancelled" ? "취소된 Goal입니다." : "막힌 Goal입니다 — 이벤트 로그의 사유를 확인하세요." };
@@ -238,13 +240,19 @@
     }).join("");
     $("turn").textContent = st.turn;
     const awaiting = goal.status === "awaiting_plan_approval";
-    $("approve-box").hidden = !awaiting; if (!awaiting) $("reject-box").hidden = true;
+    const approver = canApprove();
+    $("approve-box").hidden = !(awaiting && approver); if (!(awaiting && approver)) $("reject-box").hidden = true;
+    const ga = $("github-approve"); ga.hidden = !(awaiting && !approver);
+    ga.innerHTML = awaiting && !approver ? `<b>GitHub에서 승인</b>${goal.plan_discussion_url ? `<a href="${esc(goal.plan_discussion_url)}" target="_blank" rel="noopener">Plan ↗</a>` : ""}<span class="small muted">${esc(((state.project && state.project.approvers) || []).join(", ") || "repo owner")} 계정으로 <code>/approve</code> 댓글 (반려: <code>/reject 사유</code>). 승인되면 이 화면이 자동으로 이어집니다.</span>` : "";
     $("cancel-goal").hidden = ENDED.includes(goal.status);
     const review = tasks.filter((t) => t.status === "in_review" && t.pr_url);
     const mb = $("merge-box"); mb.hidden = !review.length;
     mb.innerHTML = review.length ? `<b>GitHub에서 머지 대기</b>${review.map((t) => `<a href="${esc(t.pr_url)}" target="_blank" rel="noopener">PR #${esc(t.pr_number)} ↗</a>`).join("")}<span class="small muted">머지하면 Task가 완료되고 다음 Task가 배정됩니다.</span>` : "";
     const dl = $("discussion-link");
-    if (goal.plan_discussion_url) { dl.href = goal.plan_discussion_url; dl.hidden = false; } else dl.hidden = true;
+    if (goal.plan_discussion_url) {
+      dl.href = goal.plan_discussion_url; dl.hidden = false;
+      dl.textContent = goal.plan_discussion_url.includes("/issues/") ? "Issue ↗" : "Discussion ↗"; // P9.11
+    } else dl.hidden = true;
     const plan = $("plan");
     if (goal.plan_markdown) { plan.className = "plan"; plan.innerHTML = md(goal.plan_markdown); }
     else { plan.className = "plan muted"; plan.textContent = ["draft", "planning"].includes(goal.status) ? "Plan을 만드는 중…" : "Plan 본문이 없습니다."; }

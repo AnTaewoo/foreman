@@ -145,8 +145,9 @@ Task 그래프, 예상 결정, 예산)을 읽고 **그 Plan에 댓글**을 답�
 | `/approve` | Goal 시작 — Task가 Issue로 만들어지고 워커가 첫 Task부터 코드를 씁니다 |
 | `/reject <사유>` | Goal 취소 |
 
-repo **owner 계정의 댓글만** 인정됩니다(웹훅 서명으로 확인). 콘솔의 Approve 버튼은 서버 소유 데모 repo용이라,
-내 repo에서는 GitHub 댓글을 씁니다.
+repo **owner 계정의 댓글만** 인정됩니다(웹훅 서명으로 확인). 내 repo에서는 콘솔에 Approve 버튼 대신
+"GitHub에서 승인" 안내와 Plan 링크가 나옵니다(버튼은 콘솔 계정이 승인자인 서버 데모 repo에서만). 승인하면 콘솔이
+자동으로 다음 단계로 넘어갑니다.
 
 #### 6) PR 머지 — GitHub에서
 
