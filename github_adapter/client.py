@@ -125,6 +125,20 @@ class GitHubRestClient:
         data = await self._request("POST", f"/repos/{repo}/issues", json=payload)
         return IssueRef(number=int(data["number"]), url=str(data["html_url"]), created=True)
 
+    async def create_plan_issue(self, repo: str, key: str, title: str, body: str) -> IssueRef:
+        """P9.11: Plan을 Issue로 (Plans 카테고리 없음). ``ai-platform:plan`` 마커로 멱등."""
+        for issue in await self._get_all(f"/repos/{repo}/issues", state="all"):
+            if markers.parse_plan_marker(issue.get("body")) == key:
+                return IssueRef(
+                    number=int(issue["number"]), url=str(issue["html_url"]), created=False
+                )
+        data = await self._request(
+            "POST",
+            f"/repos/{repo}/issues",
+            json={"title": title, "body": f"{markers.plan_marker(key)}\n\n{body}"},
+        )
+        return IssueRef(number=int(data["number"]), url=str(data["html_url"]), created=True)
+
     # ------------------------------------------------------------------ (c) status label
     async def update_issue_status_label(self, repo: str, issue_number: int, status: str) -> bool:
         issue = await self._request("GET", f"/repos/{repo}/issues/{issue_number}")

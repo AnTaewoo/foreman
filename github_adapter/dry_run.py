@@ -93,6 +93,23 @@ class DryRunGitHubClient:
         )
         return IssueRef(number=number, url=self._url(repo, "issues", number), created=True)
 
+    async def create_plan_issue(self, repo: str, key: str, title: str, body: str) -> IssueRef:
+        r = self._repo(repo)
+        for number, issue in r.issues.items():
+            if markers.parse_plan_marker(issue.get("body")) == key:
+                return IssueRef(number=number, url=self._url(repo, "issues", number), created=False)
+        number = r.take_number()
+        r.issues[number] = {
+            "task_id": None,
+            "title": title,
+            "body": f"{markers.plan_marker(key)}\n\n{body}",
+            "labels": [],
+            "milestone": None,
+            "comments": [],
+        }
+        log.info("would create_plan_issue", repo=repo, number=number, key=key, title=title)
+        return IssueRef(number=number, url=self._url(repo, "issues", number), created=True)
+
     async def update_issue_status_label(self, repo: str, issue_number: int, status: str) -> bool:
         r = self._repo(repo)
         issue = r.issues.setdefault(issue_number, {"task_id": None, "labels": [], "comments": []})

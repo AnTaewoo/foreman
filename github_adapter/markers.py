@@ -12,6 +12,19 @@ PR_MARKER_RE = re.compile(
     r"\s+agent=(?P<agent>\S+)\s+tier=(?P<tier>\S+)\s*-->"
 )
 COMMENT_MARKER_RE = re.compile(r"<!--\s*ai-platform:comment\s+key=(?P<key>\S+)\s*-->")
+PLAN_MARKER_RE = re.compile(r"<!--\s*ai-platform:plan\s+key=(?P<key>\S+)\s*-->")
+
+
+def plan_marker(key: str) -> str:
+    """P9.11: Plans 카테고리가 없는 repo의 Plan Issue (key = ``<goal>-<revision>``)."""
+    return f"<!-- ai-platform:plan key={key} -->"
+
+
+def parse_plan_marker(body: str | None) -> str | None:
+    if not body:
+        return None
+    m = PLAN_MARKER_RE.search(body)
+    return m.group("key") if m else None
 
 
 def issue_marker(task_id: str) -> str:

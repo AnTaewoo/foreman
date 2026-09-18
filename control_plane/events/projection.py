@@ -146,6 +146,7 @@ async def _goal_plan_proposed(session: AsyncSession, event: Event) -> None:
     goal.status = GoalStatus.AWAITING_PLAN_APPROVAL
     if (n := event.payload.get("plan_discussion_number")) is not None:
         goal.plan_discussion_id = int(n)
+    goal.plan_kind = "issue" if event.payload.get("plan_issue") else None  # P9.11 (additive)
     goal.plan_revision = int(event.payload.get("revision", goal.plan_revision + 1))
     if (md := event.payload.get("plan_markdown")) is not None:  # D-53
         goal.plan_markdown = str(md)

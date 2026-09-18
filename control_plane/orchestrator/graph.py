@@ -44,6 +44,10 @@ from github_adapter.protocol import GitHubClient
 log = structlog.get_logger(__name__)
 
 PLAN_CATEGORY = "Plans"
+PLAN_ISSUE_FOOTER = (  # P9.11: Plan Issue에서 승인하는 법 (Discussion과 같은 슬래시 명령)
+    "승인: 이 Issue에 `/approve` 댓글 · 반려: `/reject <사유>` "
+    "(repo owner 또는 approver만, Foreman 콘솔 버튼도 가능)"
+)
 ORCHESTRATOR_ACTOR = Actor(type="agent", id="orchestrator")
 
 
@@ -153,25 +157,33 @@ def build_graph(
         )
         # 제목이 멱등 키라 Goal마다 유일해야 한다 (같은 제목 Goal의 Discussion 재사용, P9)
         title = f"Plan #{revision} (Goal #{state['goal_id'][-6:]}): {state['goal_title']}"
-        discussion = await deps.discussions.create_discussion(
-            state["repo_full_name"], PLAN_CATEGORY, title, markdown
-        )
+        payload: dict[str, Any] = {"revision": revision, "plan_markdown": markdown}  # D-53
+        try:
+            discussion = await deps.discussions.create_discussion(
+                state["repo_full_name"], PLAN_CATEGORY, title, markdown
+            )
+            number, node_id = discussion.number, discussion.id
+        except LookupError:  # P9.11: Discussions가 꺼졌거나 Plans 카테고리 없음 → Issue
+            issue = await deps.github.create_plan_issue(
+                state["repo_full_name"],
+                f"{state['goal_id']}-{revision}",
+                title,
+                f"{markdown}\n\n---\n{PLAN_ISSUE_FOOTER}",
+            )
+            number, node_id = issue.number, ""
+            payload["plan_issue"] = True  # additive: API가 /issues/N 링크를 만든다
         event = await deps.publish(
             _event(
                 state,
                 EventType.GOAL_PLAN_PROPOSED,
-                {
-                    "plan_discussion_number": discussion.number,
-                    "revision": revision,
-                    "plan_markdown": markdown,  # D-53: API가 Plan 본문을 보여준다
-                },
+                {"plan_discussion_number": number, **payload},
             )
         )
         return {
             "plan": markdown,
             "plan_json": plan.model_dump(),
-            "plan_discussion_number": discussion.number,
-            "plan_discussion_id": discussion.id,
+            "plan_discussion_number": number,
+            "plan_discussion_id": node_id,
             "plan_revision": revision,
             "last_event_id": event.id,
         }

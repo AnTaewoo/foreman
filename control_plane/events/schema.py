@@ -258,6 +258,7 @@ class GoalPlanProposedPayload(TypedDict):
     plan_discussion_number: int
     revision: int  # /changes 재제출이면 2 이상 (B6)
     plan_markdown: NotRequired[str]  # Plan 본문 (D-53, additive; Discussion 본문과 동일)
+    plan_issue: NotRequired[bool]  # P9.11 (additive): Plans 카테고리가 없어 Issue로 게시됨
 
 
 class EpicCreatedPayload(TypedDict):

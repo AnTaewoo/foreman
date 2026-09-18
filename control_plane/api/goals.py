@@ -87,6 +87,12 @@ class CancelOut(BaseModel):
     cancelled_tasks: list[str]
 
 
+def plan_url(repo: str, goal: m.Goal) -> str | None:
+    """Plan 링크 — Discussion, 또는 Plans 카테고리가 없어 Issue로 게시됐으면 Issue (P9.11)."""
+    kind = "issues" if goal.plan_kind == "issue" else "discussions"
+    return gh_url(repo, kind, goal.plan_discussion_id)
+
+
 async def _goal(state: StateDep, project_id: str, goal_id: str) -> m.Goal:
     async with state.factory() as s:
         row = await s.get(m.Goal, goal_id)
@@ -213,7 +219,7 @@ async def get_goal(project_id: str, goal_id: str, state: StateDep) -> GoalProgre
         status=goal.status.value,
         plan_revision=goal.plan_revision,
         plan_discussion_number=goal.plan_discussion_id,
-        plan_discussion_url=gh_url(repo, "discussions", goal.plan_discussion_id) if repo else None,
+        plan_discussion_url=plan_url(repo, goal) if repo else None,
         plan_markdown=goal.plan_markdown,
         llm=goal.llm_profile,
         tasks=tasks,

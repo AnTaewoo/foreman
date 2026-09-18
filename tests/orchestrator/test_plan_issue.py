@@ -1,4 +1,4 @@
-"""P9.11 — Plans 카테고리(또는 Discussions)가 없으면 Plan을 Issue로 게시하고 그 Issue의 /approve로 승인."""
+"""P9.11 — Plans 카테고리가 없으면 Plan을 Issue로 게시, 그 Issue의 /approve로 승인."""
 
 from __future__ import annotations
 

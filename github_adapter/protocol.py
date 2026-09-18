@@ -90,6 +90,10 @@ class GitHubClient(Protocol):
 
     async def create_task_issue(self, repo: str, task: TaskIssue) -> IssueRef: ...
 
+    async def create_plan_issue(self, repo: str, key: str, title: str, body: str) -> IssueRef:
+        """P9.11: Plans 카테고리가 없으면 Plan을 Issue로. ``key`` 마커로 멱등."""
+        ...
+
     async def update_issue_status_label(self, repo: str, issue_number: int, status: str) -> bool:
         """``status:*`` 라벨 교체. 바뀌었으면 True."""
         ...
