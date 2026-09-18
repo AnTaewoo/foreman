@@ -58,6 +58,30 @@ async def test_existing_routes_unchanged(client: httpx.AsyncClient) -> None:
     assert "/" not in schema["paths"]  # 콘솔은 API 문서에 안 나온다
 
 
+# 2차 계정 리허설(2026-09-19): 외부 repo에서 콘솔 Approve가 403(judge는 멤버 아님).
+# 콘솔 사용자가 owner/approver일 때만 버튼, 아니면 GitHub /approve 안내 + Plan 링크
+async def test_approve_button_only_for_approvers(client: httpx.AsyncClient) -> None:
+    html = (await client.get("/")).text
+    assert 'id="github-approve"' in html and 'id="approve-box"' in html
+    js = (await client.get("/static/demo.js")).text
+    assert "approvers" in js and "canApprove" in js
+    r = await client.post(
+        "/projects",
+        json={
+            "name": "d",
+            "repo": "acme/demo",
+            "members": [
+                {"user_id": "alice", "role": "owner"},
+                {"user_id": "judge", "role": "approver"},
+                {"user_id": "bob", "role": "viewer"},
+            ],
+        },
+    )
+    pid = r.json()["id"]
+    assert r.json()["approvers"] == ["alice", "judge"]
+    assert (await client.get(f"/projects/{pid}")).json()["approvers"] == ["alice", "judge"]
+
+
 # P9.11 공개 App: 콘솔 연결은 두 단계 — ① App 설치 링크 → ② repo 입력·점검·연결.
 # 점검의 경고(required=False, Discussions/Plans)는 막지 않는 노란 항목으로 보인다
 async def test_console_two_step_connect(client: httpx.AsyncClient) -> None:

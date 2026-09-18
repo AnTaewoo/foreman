@@ -4,6 +4,14 @@
 # 정식은 deploy/systemd/*.service. 내리려면 deploy/demo_down.sh. 로그: $LOG_DIR/foreman-{api,cp}.log
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# control plane은 워커 컨테이너를 띄운다(docker run) → 프로세스에 docker 그룹이 있어야 한다.
+# 로그인 셸에 그룹이 안 잡혀 있으면(이 서버) newgrp로 자신을 다시 실행한다. 없으면 모든 Task가 launch_failed.
+if ! id -nG | tr ' ' '\n' | grep -qx docker; then
+  if [[ -z "${FOREMAN_NEWGRP:-}" ]]; then
+    echo "FOREMAN_NEWGRP=1 exec $(printf '%q' "$PWD/deploy/demo_up.sh")" | exec newgrp docker
+  fi
+  echo "docker group unavailable even after newgrp — workers cannot start" >&2; exit 1
+fi
 LOG_DIR="${LOG_DIR:-$HOME/.foreman-logs}"; mkdir -p "$LOG_DIR"
 # .env는 그대로(기본 dry-run). 실 GitHub는 PC-7 때부터 환경변수로만 켠다. 데모 모드는 .env에 HITL_DEMO_MODE=true를 넣을 때만
 export HITL_DRY_RUN=false
@@ -16,3 +24,4 @@ for _ in $(seq 1 60); do curl -sf localhost:8000/health >/dev/null && break; sle
 curl -s localhost:8000/health; echo
 curl -s localhost:8000/demo; echo
 tail -1 "$LOG_DIR/foreman-cp.log" | cut -c1-160
+docker version --format 'docker ok (server {{.Server.Version}})' || echo "WARNING: docker API not reachable — workers will fail" >&2
