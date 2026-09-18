@@ -29,6 +29,10 @@ async def test_root_serves_demo_console(client: httpx.AsyncClient) -> None:
     ):
         assert needle in r.text, needle
     assert "로컬 LLM" not in r.text  # 안내 문구는 고른 LLM에 맞춘다 (하드코딩 제거)
+    # 사용자 방향 2026-09-18: 심플하게 — 세부 정보는 접거나 뺀다 (보이는 게 많을수록 프런트 오류도 는다)
+    assert 'id="events-box"' in r.text and 'id="plan-box"' in r.text and 'id="settings"' in r.text
+    for gone in ('id="goal-meta"', 'id="llm-hint"', "<th>시도</th>", "<th>Issue</th>"):
+        assert gone not in r.text, gone
 
 
 async def test_static_assets(client: httpx.AsyncClient) -> None:
