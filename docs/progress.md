@@ -226,3 +226,4 @@
 | 2026-09-19T03:40 | P9.10 | Green+Gate | run_check repo별 installation·install_url·Discussions 경고, POST /projects 외부 설치=무토큰·owner=설치 계정·GitHub 이름/브랜치, installation_id 이벤트(추가)→projection; 조정: 빈 repo 자동 초기 커밋 취소(문서 미확인)→400; make check 563 | |
 | 2026-09-19T04:10 | P9.11 | Red | Plan Issue fallback(그래프·Dry·REST 멱등)·plan_url(kind) 4건 — import 실패(의도) | |
 | 2026-09-19T04:40 | P9.11 | Green+Gate (백엔드) | Plans 없으면 create_discussion LookupError → create_plan_issue(ai-platform:plan 마커, REST·Dry 멱등), payload plan_issue(추가)→goals.plan_kind(0006)→plan_url /issues/N; make check 567 | |
+| 2026-09-19T05:00 | P9.11 | Red (콘솔) | 두 단계 연결(install-app 링크·Issue 안내·warn 스타일)·/demo install_url 캐시 2 fail(의도) | |

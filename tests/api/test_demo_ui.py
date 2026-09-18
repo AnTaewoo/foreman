@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import httpx
+import pytest
 
 
 async def test_root_serves_demo_console(client: httpx.AsyncClient) -> None:
@@ -55,3 +56,34 @@ async def test_existing_routes_unchanged(client: httpx.AsyncClient) -> None:
     assert (await client.get("/docs")).status_code == 200
     schema = (await client.get("/openapi.json")).json()
     assert "/" not in schema["paths"]  # 콘솔은 API 문서에 안 나온다
+
+
+# P9.11 공개 App: 콘솔 연결은 두 단계 — ① App 설치 링크 → ② repo 입력·점검·연결.
+# 점검의 경고(required=False, Discussions/Plans)는 막지 않는 노란 항목으로 보인다
+async def test_console_two_step_connect(client: httpx.AsyncClient) -> None:
+    html = (await client.get("/")).text
+    assert 'id="install-app"' in html and "App 설치" in html
+    assert "Issue로" in html  # Plans 카테고리가 없으면 Plan은 Issue로 (조건 안내)
+    js = (await client.get("/static/demo.js")).text
+    assert "install_url" in js and "required === false" in js
+    css = (await client.get("/static/demo.css")).text
+    assert ".check li.warn" in css
+    info = (await client.get("/demo")).json()
+    assert "install_url" in info and info["install_url"] is None  # Dry: GitHub 호출 없음
+
+
+async def test_demo_info_install_url_cached(monkeypatch: pytest.MonkeyPatch) -> None:
+    """실 모드: `GET /app`의 slug로 설치 링크를 만들고 프로세스 안에서 한 번만 부른다."""
+    from control_plane.api import app as app_mod
+
+    calls: list[str] = []
+
+    async def fake(settings: object) -> str | None:
+        calls.append("app")
+        return "https://github.com/apps/foreman-antaewoo/installations/new"
+
+    monkeypatch.setattr(app_mod, "fetch_install_url", fake)
+    cache = app_mod.InstallUrl(dry_run=False)
+    assert await cache.get(object()) == await cache.get(object())
+    assert calls == ["app"]
+    assert await app_mod.InstallUrl(dry_run=True).get(object()) is None
