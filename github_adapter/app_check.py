@@ -54,6 +54,7 @@ class CheckItem:
 @dataclass
 class CheckReport:
     items: list[CheckItem] = field(default_factory=list)
+    canonical: str | None = None  # GitHub가 돌려준 정식 owner/name (대소문자 정규화)
 
     @property
     def ok(self) -> bool:
@@ -171,7 +172,12 @@ async def run_check(settings: Any, http: httpx.AsyncClient, *, repo: str) -> Che
             else []
         )
         r2 = await http.get(f"/repos/{repo}", headers=inst_headers)
-        ok = repo in names and r2.status_code == 200
+        if (
+            r2.status_code == 200
+        ):  # GitHub는 대소문자를 구분하지 않는다 → 정식 이름으로 나머지를 점검
+            repo = str(r2.json().get("full_name") or repo)
+            report.canonical = repo
+        ok = repo.lower() in {str(n).lower() for n in names} and r2.status_code == 200
         report.add(
             "repo",
             ok,

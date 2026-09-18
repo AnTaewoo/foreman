@@ -49,9 +49,12 @@ async def stream(
     since: int | None = Query(default=None, ge=0),
 ) -> None:
     state: AppState = websocket.app.state.ctx
-    await websocket.accept()
     group = f"ws:{ULID()}"
     stream_name = stream_key(project_id)
+    # group을 accept 전에 만든다: accept 뒤에 만들면 그 사이 발행된 이벤트를 놓친다
+    # (부하 때 tests/api/test_stream.py가 receive에서 영원히 멈추던 경쟁, 2026-09-18)
+    await _create_group(state, stream_name, group)
+    await websocket.accept()
     bus = EventBus(state.redis)  # 연결 전용 (stop이 연결 단위)
     queue: asyncio.Queue[Delivery] = asyncio.Queue()
     sent: set[str] = set()
@@ -59,7 +62,6 @@ async def stream(
     async def enqueue(delivery: Delivery) -> None:
         await queue.put(delivery)
 
-    await _create_group(state, stream_name, group)
     pump = asyncio.create_task(
         bus.subscribe(group, enqueue, consumer="ws", project_id=project_id, block_ms=500)
     )

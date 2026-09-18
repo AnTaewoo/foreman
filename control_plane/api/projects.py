@@ -75,6 +75,7 @@ class RepoCheckOut(BaseModel):
     dry_run: bool
     ok: bool
     items: list[CheckItemOut]
+    canonical: str | None = None  # GitHub의 정식 owner/name — 콘솔은 이 이름으로 연결한다
 
 
 @router.get("")
@@ -215,6 +216,7 @@ async def check_repo(repo: str, state: StateDep) -> RepoCheckOut:
         dry_run=False,
         ok=report.ok,
         items=[CheckItemOut(name=i.name, ok=i.ok, detail=i.detail) for i in report.items],
+        canonical=report.canonical,
     )
 
 

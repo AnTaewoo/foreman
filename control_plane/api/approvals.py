@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import structlog
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from control_plane.api.deps import AppState, publish
@@ -37,7 +37,14 @@ class ApprovalService:
 
     async def resolve_project(self, repo: str) -> ProjectRef | None:
         async with self._factory() as s:
-            row = await s.scalar(select(m.Project).where(m.Project.repo_full_name == repo))
+            # 인계서 2026-09-18 #3·#4: 보관되지 않은 것 중 최신, 이름은 대소문자 무시
+            row = await s.scalar(
+                select(m.Project)
+                .where(func.lower(m.Project.repo_full_name) == repo.lower())
+                .where(m.Project.archived_at.is_(None))
+                .order_by(m.Project.created_at.desc())
+                .limit(1)
+            )
         if row is None:
             return None
         return ProjectRef(project_id=row.id, default_branch=row.default_branch)

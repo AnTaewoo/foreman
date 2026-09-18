@@ -247,6 +247,7 @@
       const li = document.createElement("li"); li.className = it.ok ? "ok" : "bad";
       li.textContent = `${it.name}: ${it.detail}`; ul.appendChild(li);
     }
+    if (body.canonical) $("connect-repo").value = body.canonical; // GitHub의 정식 대소문자로 연결
     return body.ok;
   }
   $("connect-check-btn").onclick = async () => {

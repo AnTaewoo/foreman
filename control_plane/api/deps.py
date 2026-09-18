@@ -131,21 +131,31 @@ async def find_project(state: AppState, project_id: str) -> ProjectView | None:
     )
 
 
+def repo_key(repo: str) -> str:
+    """비교용 키: GitHub `owner/name`은 대소문자 무시(인계서 #4), 로컬 경로는 그대로."""
+    return repo.lower() if _OWNER_NAME.match(repo) else repo
+
+
 async def repo_taken(state: AppState, repo: str) -> bool:
     """같은 repo의 (보관되지 않은) 프로젝트가 이미 있나 (D-45, D-54) — projection·events 둘 다."""
+    key = repo_key(repo)
     async with state.factory() as s:
-        rows = (
-            await s.execute(
-                select(m.Project.id, m.Project.archived_at).where(m.Project.repo_full_name == repo)
-            )
-        ).all()
+        rows = [
+            (pid, archived_at)
+            for pid, name, archived_at in (
+                await s.execute(
+                    select(m.Project.id, m.Project.repo_full_name, m.Project.archived_at)
+                )
+            ).all()
+            if repo_key(str(name)) == key
+        ]
         if any(archived_at is None for _, archived_at in rows):
             return True
         projected = {pid for pid, _ in rows}
         created = await s.execute(
             select(m.Event.subject_id, m.Event.payload).where(m.Event.type == "project.created")
         )
-        candidates = [pid for pid, p in created.all() if str(p.get("repo")) == repo]
+        candidates = [pid for pid, p in created.all() if repo_key(str(p.get("repo"))) == key]
         updated = await s.execute(
             select(m.Event.subject_id, m.Event.payload).where(m.Event.type == "project.updated")
         )
