@@ -14,6 +14,21 @@ async def test_root_serves_demo_console(client: httpx.AsyncClient) -> None:
     assert 'id="connect-form"' in r.text and 'id="connect-check"' in r.text  # repo 연결 + 점검
     assert 'id="delete-project"' in r.text  # 프로젝트 삭제(보관) (D-54)
     assert 'id="llm"' in r.text  # LLM 프로파일 선택 (D-57)
+    # 콘솔 UI 리뷰 2026-09-18: 인라인 에러, 진행 단계, 위험 구역(보관), 이벤트·Goal 필터, 접근성
+    for needle in (
+        'id="goal-error"',
+        'role="alert"',
+        'id="steps"',
+        'id="danger"',
+        'id="events-all"',
+        'id="goal-filter"',
+        'id="ws-banner"',
+        'id="reject-box"',
+        'rel="icon"',
+        'aria-live="polite"',
+    ):
+        assert needle in r.text, needle
+    assert "로컬 LLM" not in r.text  # 안내 문구는 고른 LLM에 맞춘다 (하드코딩 제거)
 
 
 async def test_static_assets(client: httpx.AsyncClient) -> None:
@@ -23,8 +38,10 @@ async def test_static_assets(client: httpx.AsyncClient) -> None:
     # 사용자 보고: 새 버튼이 HTML엔 보이는데 눌리지 않음 = 옛 demo.js 캐시. 항상 재검증하게 한다
     assert "no-cache" in js.headers.get("cache-control", "")
     assert "no-cache" in (await client.get("/")).headers.get("cache-control", "")
+    assert "STATUS_LABEL" in js.text and "scrollIntoView" in js.text and "replaceState" in js.text
     css = await client.get("/static/demo.css")
     assert css.status_code == 200
+    assert "prefers-color-scheme: dark" in css.text and ":focus-visible" in css.text
     assert (await client.get("/static/nope.js")).status_code == 404
 
 
