@@ -60,9 +60,8 @@
 
       <form id="goal-form">
         <label class="field"><span>새 Goal</span>
-          <input id="goal-title" name="title" maxlength="300" placeholder="만들 기능을 한 문장으로" required>
+          <input id="goal-title" name="title" maxlength="300" placeholder="만들 기능을 한 문장으로 (영어 권장)" required>
         </label>
-        <p class="small muted hint">영어 권장 — 에이전트 프롬프트와 코드 식별자가 영어입니다.</p>
         <details class="examples-box">
           <summary class="small">예시 Goal</summary>
           <div class="examples" id="examples"></div>
@@ -71,18 +70,19 @@
           <label class="field grow"><span>LLM</span><select id="llm"></select></label>
           <button type="submit" id="goal-submit">Goal 생성</button>
         </div>
-        <p class="small muted hint" id="llm-hint"></p>
         <p id="goal-error" class="error" role="alert" hidden></p>
       </form>
 
       <label class="check-inline small"><input type="checkbox" id="goal-filter"> 취소·완료된 Goal 숨기기</label>
       <ul id="goals" class="list"></ul>
 
-      <section id="danger" class="danger" hidden aria-labelledby="danger-h">
-        <h3 id="danger-h">위험 구역</h3>
-        <p class="small muted">프로젝트를 보관하면 남은 Goal·Task가 취소되고 목록에서 빠집니다. 이벤트 기록과 GitHub의 Issue/PR/Discussion은 남습니다.</p>
-        <button type="button" id="delete-project" class="danger-btn small">프로젝트 보관</button>
-      </section>
+      <details id="settings" class="settings" hidden>
+        <summary class="small">프로젝트 설정</summary>
+        <section id="danger" class="danger" aria-label="위험 구역">
+          <p class="small muted">보관하면 남은 Goal·Task가 취소되고 목록에서 빠집니다. 이벤트 기록과 GitHub의 Issue/PR/Discussion은 남습니다.</p>
+          <button type="button" id="delete-project" class="danger-btn small">프로젝트 보관</button>
+        </section>
+      </details>
     </section>
 
     <section class="col wide" id="detail" hidden aria-labelledby="goal-title-view">
@@ -91,7 +91,6 @@
         <span class="badge" id="goal-status"></span>
         <button id="cancel-goal" class="secondary small" title="Goal과 남은 Task를 취소합니다 (GitHub Issue는 그대로)">Goal 취소</button>
       </div>
-      <p class="small muted" id="goal-meta"></p>
       <ol id="steps" class="steps" aria-label="진행 단계"></ol>
       <p id="turn" class="turn" aria-live="polite"></p>
       <p id="detail-error" class="error" role="alert" hidden></p>
@@ -107,19 +106,23 @@
       </div>
       <div class="actions merge" id="merge-box" hidden></div>
 
-      <details open>
+      <details id="plan-box">
         <summary>Plan <a id="discussion-link" href="#" target="_blank" rel="noopener" hidden>Discussion ↗</a></summary>
         <div id="plan" class="plan muted">Plan을 만드는 중…</div>
       </details>
-      <h3>Tasks <span class="muted" id="task-count"></span></h3>
-      <div class="table-wrap">
-        <table id="tasks"><thead><tr><th>#</th><th>Task</th><th>상태</th><th>시도</th><th>Issue</th><th>PR</th></tr></thead><tbody></tbody></table>
+      <div id="tasks-box" hidden>
+        <h3>Tasks <span class="muted" id="task-count"></span></h3>
+        <div class="table-wrap">
+          <table id="tasks"><thead><tr><th>#</th><th>Task</th><th>상태</th><th>PR</th></tr></thead><tbody></tbody></table>
+        </div>
       </div>
-      <h3 class="events-head">이벤트
-        <span class="ws" id="ws-state"><span class="dot" id="ws-dot"></span><span id="ws-text">연결 중…</span></span>
+      <details id="events-box">
+        <summary>이벤트 로그
+          <span class="ws" id="ws-state"><span class="dot" id="ws-dot"></span><span id="ws-text">연결 중…</span></span>
+        </summary>
         <label class="check-inline small"><input type="checkbox" id="events-all"> 프로젝트 전체 보기</label>
-      </h3>
-      <ul id="events" class="events"></ul>
+        <ul id="events" class="events"></ul>
+      </details>
     </section>
   </main>
 

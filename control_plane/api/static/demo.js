@@ -14,11 +14,6 @@
     done: "완료", cancelled: "취소됨", blocked: "막힘", failed: "실패", pending: "대기", ready: "배정 대기",
     assigned: "배정됨", running: "실행 중", in_review: "머지 대기",
   };
-  const LLM_HINT = {
-    ollama: "로컬 모델 · 과금 없음 · 느림 (Plan까지 1~3분)",
-    openai: "OpenAI API · 호출당 과금 · 빠름 (Plan까지 보통 1분 이내)",
-    anthropic: "Anthropic API · 호출당 과금 · 빠름 (Plan까지 보통 1분 이내)",
-  };
   const STEPS = ["생성", "Plan 작성", "Plan 승인", "Task 실행", "PR 머지", "완료"];
   const ENDED = ["done", "cancelled"];
   const state = {
@@ -118,15 +113,14 @@
       }
       const remembered = safeGet("foreman.llm");
       if (remembered && [...sel.options].some((o) => o.value === remembered && !o.disabled)) sel.value = remembered;
-      const hint = () => { $("llm-hint").textContent = LLM_HINT[sel.value] || ""; };
-      sel.onchange = () => { safeSet("foreman.llm", sel.value); hint(); }; hint();
+      sel.onchange = () => safeSet("foreman.llm", sel.value);
     } catch (e) { console.warn(e); }
   }
   // 프로젝트 선택: ?project=<id> > 마지막 선택(localStorage) > 첫 항목. 둘 이상이면 <select> 표시
   async function loadProjects() {
     state.projects = (await api("/projects")).items;
     const has = state.projects.length > 0;
-    $("danger").hidden = !has; $("goal-submit").disabled = !has;
+    $("settings").hidden = !has; $("goal-submit").disabled = !has;
     if (!has) { $("project-name").textContent = "— 프로젝트가 없습니다"; $("connect").open = true; return; }
     const wanted = new URLSearchParams(location.search).get("project") || safeGet("foreman.project");
     state.project = state.projects.find((p) => p.id === wanted) || state.projects[0];
@@ -204,7 +198,7 @@
       li.className = (g.id === state.goalId ? "active " : "") + (isShowcase(g) ? "showcase" : "");
       const btn = document.createElement("button"); btn.type = "button"; btn.className = "goal";
       if (g.id === state.goalId) btn.setAttribute("aria-current", "true");
-      btn.innerHTML = `<span class="t"><b title="${esc(g.title)}">${esc(g.title)}</b><span class="muted small">${esc(ago(g.created_at))}${g.llm ? ` · ${esc(g.llm)}` : ""}${g.total ? ` · Task ${g.done}/${g.total}` : ""}</span></span>${badge(g.status)}`;
+      btn.innerHTML = `<span class="t"><b title="${esc(g.title)}">${esc(g.title)}</b></span>${g.total ? `<span class="muted small">${g.done}/${g.total}</span>` : ""}${badge(g.status)}`;
       btn.onclick = () => selectGoal(g.id, true);
       li.appendChild(btn); ul.appendChild(li);
     }
@@ -235,7 +229,6 @@
     $("detail").hidden = false;
     $("goal-title-view").textContent = goal.title;
     $("goal-status").outerHTML = badge(goal.status).replace("<span", '<span id="goal-status"');
-    $("goal-meta").textContent = [goal.created_at ? `${ago(goal.created_at)} 생성` : "", goal.llm ? `LLM ${goal.llm}` : ""].filter(Boolean).join(" · ");
     const st = stage(goal, tasks);
     $("steps").innerHTML = STEPS.map((name, i) => {
       const now = st.at < 6 && i === st.at;
@@ -253,7 +246,11 @@
     if (goal.plan_discussion_url) { dl.href = goal.plan_discussion_url; dl.hidden = false; } else dl.hidden = true;
     const plan = $("plan");
     if (goal.plan_markdown) { plan.className = "plan"; plan.innerHTML = md(goal.plan_markdown); }
-    else { plan.className = "plan muted"; plan.textContent = ["draft", "planning"].includes(goal.status) ? `Plan을 만드는 중… ${LLM_HINT[goal.llm] ? `(${LLM_HINT[goal.llm]})` : ""}` : "Plan 본문이 없습니다."; }
+    else { plan.className = "plan muted"; plan.textContent = ["draft", "planning"].includes(goal.status) ? "Plan을 만드는 중…" : "Plan 본문이 없습니다."; }
+    // Plan은 읽어야 할 때(승인 대기)만 펼친다. 상태가 바뀔 때만 건드려 사용자의 접기/펼치기를 존중
+    const planKey = `${goal.id}:${goal.status}`;
+    if (planKey !== state.planKey) { state.planKey = planKey; $("plan-box").open = awaiting; }
+    $("tasks-box").hidden = !tasks.length;
     $("task-count").textContent = tasks.length ? `${tasks.filter((t) => t.status === "done").length}/${tasks.length} 완료` : "";
     const tb = $("tasks").querySelector("tbody");
     const open = new Set([...tb.querySelectorAll("tr.spec-row.open")].map((r) => r.dataset.id)); // 다시 그려도 펼침 유지
@@ -261,9 +258,10 @@
     tasks.sort((a, b) => (a.issue_number || 0) - (b.issue_number || 0));
     for (const t of tasks) {
       const tr = document.createElement("tr"); tr.className = "task-row";
-      tr.innerHTML = `<td>${t.issue_number ?? ""}</td><td><button type="button" class="task-toggle" aria-expanded="${open.has(t.id)}">${esc(t.title)}</button><br><span class="muted small">${esc(t.owned_paths.join(", "))}</span></td><td>${badge(t.status)}</td><td>${t.attempt_count}</td><td>${link(t.issue_url, `#${t.issue_number ?? ""}`)}</td><td>${link(t.pr_url, `PR #${t.pr_number ?? ""}`)}${t.branch_name ? `<br><code class="small">${esc(t.branch_name)}</code>` : ""}</td>`;
+      // 4열만: # (Issue 링크) · Task · 상태 · PR. 소유 파일·브랜치·시도 횟수는 Issue/PR에서 본다
+      tr.innerHTML = `<td>${t.issue_url ? link(t.issue_url, `#${t.issue_number}`) : esc(t.issue_number ?? "")}</td><td><button type="button" class="task-toggle" aria-expanded="${open.has(t.id)}">${esc(t.title)}</button></td><td>${badge(t.status)}</td><td>${link(t.pr_url, `PR #${t.pr_number ?? ""}`)}</td>`;
       const sr = document.createElement("tr"); sr.className = `spec-row${open.has(t.id) ? " open" : ""}`; sr.dataset.id = t.id;
-      sr.innerHTML = `<td></td><td class="spec" colspan="5">${esc(t.spec || "(spec 없음)")}</td>`;
+      sr.innerHTML = `<td></td><td class="spec" colspan="3">${esc(t.spec || "(spec 없음)")}</td>`;
       const btn = tr.querySelector(".task-toggle");
       btn.onclick = () => { btn.setAttribute("aria-expanded", String(sr.classList.toggle("open"))); };
       tb.appendChild(tr); tb.appendChild(sr);
@@ -279,6 +277,7 @@
   function scheduleEvents() { if (!state.evFrame) state.evFrame = requestAnimationFrame(() => { state.evFrame = 0; renderEvents(); }); }
   // 기본은 선택한 Goal의 이벤트만(correlation_id = goal id). "프로젝트 전체 보기"로 전부
   function renderEvents() {
+    if (!$("events-box").open) return; // 접혀 있으면 그리지 않는다 (펼칠 때 그린다)
     const all = $("events-all").checked, gid = state.goalId;
     const mine = (e) => all || !gid || e.correlation_id === gid || (e.payload && e.payload.goal_id === gid) || e.subject.id === gid;
     const rows = state.events.filter(mine).slice(-200).reverse();
@@ -386,6 +385,7 @@
   };
   $("goal-filter").onchange = () => { safeSet("foreman.hideEnded", $("goal-filter").checked ? "1" : ""); renderGoals(); };
   $("events-all").onchange = renderEvents;
+  $("events-box").ontoggle = renderEvents;
 
   // ---- GitHub repo 연결 (POST /projects) + 사전 점검 (GET /projects/check) ------------------
   function renderCheck(body) {
