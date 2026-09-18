@@ -8,7 +8,9 @@ cd "$(dirname "$0")/.."
 # 로그인 셸에 그룹이 안 잡혀 있으면(이 서버) newgrp로 자신을 다시 실행한다. 없으면 모든 Task가 launch_failed.
 if ! id -nG | tr ' ' '\n' | grep -qx docker; then
   if [[ -z "${FOREMAN_NEWGRP:-}" ]]; then
-    echo "FOREMAN_NEWGRP=1 exec $(printf '%q' "$PWD/deploy/demo_up.sh")" | exec newgrp docker
+    # 파이프라인 안의 exec는 서브셸만 바꾼다 → newgrp의 종료 코드로 여기서 끝낸다
+    echo "FOREMAN_NEWGRP=1 exec $(printf '%q' "$PWD/deploy/demo_up.sh")" | newgrp docker
+    exit $?
   fi
   echo "docker group unavailable even after newgrp — workers cannot start" >&2; exit 1
 fi
