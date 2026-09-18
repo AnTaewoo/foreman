@@ -80,6 +80,34 @@ GitHub에서 PR을 **머지** → Task done. 심사자는 이 showcase로 결과
    → 콘솔 상단 "프로젝트" 선택 상자(둘 이상일 때) 또는 `https://foreman.antaewoo.com/?project=<id>`.
 5. Goal 생성 → Plan 승인 → Issue → PR. PR 머지 → Task done은 **App 웹훅 URL**이 이 서버를 가리켜야 들어온다.
 
+## 공개 App — 심사자가 자기 GitHub repo로 (P9.7–P9.11, ROADMAP §6 2026-09-19)
+
+서버 `.env`의 App 자격 증명 4개는 그대로 둔다. App ID·키·웹훅 secret은 App 단위라 모든 설치에 공통이고,
+installation id만 repo마다 다르다 — 연결 시 서버가 `GET /repos/{o}/{r}/installation`으로 찾아 프로젝트에 기록한다
+(`HITL_GITHUB_INSTALLATION_ID`는 서버 소유 repo의 기본값일 뿐).
+
+사용자(1회):
+1. GitHub → Settings → Developer settings → GitHub Apps → 이 App → **Advanced → Make public** (Any account).
+   권한·이벤트·웹훅 URL은 그대로.
+2. 배포(심사 시작 전 1회, planning 중 Goal이 없을 때): `git pull` → **`make migrate`**(0006 `goals.plan_kind`) →
+   `deploy/demo_down.sh && deploy/demo_up.sh`(또는 systemd 두 unit 재시작).
+3. 리허설(시크릿 창 + 두 번째 GitHub 계정, llm=openai): 콘솔 "내 GitHub repo 연결" → ① App 설치 → ② repo 입력 →
+   점검 → 연결 → Goal → 그 계정으로 Plan에 `/approve` → PR → 그 계정이 GitHub에서 머지 → Goal `done`.
+
+심사자 안내(제출 문구 예):
+> https://foreman.antaewoo.com 에서 완료된 showcase Goal을 바로 볼 수 있습니다. 직접 해 보려면 "내 GitHub repo
+> 연결" → ① GitHub App 설치(연결할 repo 선택) → ② `아이디/repo` 입력 → 점검 → 연결 → Goal 입력.
+> repo 조건: 커밋 1개 이상("Add a README file"). Plan 승인은 GitHub의 Plan(Discussion 또는 Issue)에 `/approve` 댓글,
+> PR 머지는 GitHub에서 본인이 합니다.
+
+동작 요약:
+- 외부 installation repo는 **관리 토큰 없이** 연결된다(설치가 곧 권한 증명). owner = 설치 계정, 콘솔 `judge`
+  승인자는 없다 → 승인·머지는 GitHub에서 그 계정으로. 서버 소유 repo는 종전대로(데모 모드면 관리 토큰).
+- 빈 repo는 400(커밋 먼저). Discussions/Plans가 없으면 점검은 △ 경고, Plan은 마커 달린 **Issue**로 올라간다.
+- 공개 App이면 누구나 연결해 LLM 크레딧을 쓸 수 있다 → **데모 모드(한도·레이트리밋)를 켜는 것을 권장**한다.
+  `.env`는 건드리지 않고 launcher/unit override(`HITL_DEMO_MODE=true`, `HITL_ADMIN_TOKEN=…`)로 — 켤지와 위치는
+  사용자 결정.
+
 ## 운영
 
 - 로그: `journalctl -u foreman-api -f`, `journalctl -u foreman-control-plane -f` (json). 토큰·키는 로그에 없다.
