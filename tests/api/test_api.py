@@ -439,6 +439,7 @@ async def test_repo_check_real_mode_runs_app_check(
         rep = CheckReport()
         rep.add("auth", True, "app ok")
         rep.add("discussions", False, "category 'Plans' not found")
+        rep.canonical = "Acme/Demo"  # 인계서 #4: GitHub의 정식 이름
         return rep
 
     class FakeHttp:
@@ -457,6 +458,21 @@ async def test_repo_check_real_mode_runs_app_check(
     body = r.json()
     assert body["dry_run"] is False and body["ok"] is False
     assert [(i["name"], i["ok"]) for i in body["items"]] == [("auth", True), ("discussions", False)]
+    assert body["canonical"] == "Acme/Demo"  # 콘솔은 이 이름으로 연결한다
+
+
+# 인계서 2026-09-18 #4: 같은 repo를 대소문자만 바꿔 두 번 연결할 수 없다 (D-45 비교도 같은 기준)
+async def test_repo_taken_ignores_case_for_owner_name(
+    client: httpx.AsyncClient, pump: Pump
+) -> None:
+    assert (
+        await client.post("/projects", json={"name": "a", "repo": "Org/Demo"})
+    ).status_code == 201
+    r = await client.post("/projects", json={"name": "b", "repo": "org/demo"})  # projection 전
+    assert r.status_code == 409
+    await pump()
+    r = await client.post("/projects", json={"name": "b", "repo": "ORG/DEMO"})  # projection 후
+    assert r.status_code == 409
 
 
 # P9 (D-54): DELETE /projects/{id} = 보관. Goal·Task 취소 → project.updated{archived} → 제외,

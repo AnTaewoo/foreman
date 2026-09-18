@@ -613,3 +613,25 @@ async def test_webhook_skips_pr_opened_already_recorded(
     await pump()
     assert await service.should_publish(opened(7)) is False  # tasks.pr_number == 7
     assert await service.should_publish(opened(8)) is True
+
+
+# 인계서 2026-09-18 #3: 같은 repo를 보관 후 다시 연결하면 webhook이 보관된(옛) 프로젝트로 갔다 →
+# 보관되지 않은 것 중 최신. #4: GitHub 이름은 대소문자를 구분하지 않는다
+async def test_resolve_project_prefers_live_newest_and_ignores_case(
+    factory: async_sessionmaker[AsyncSession], redis: Redis, pump: Pump
+) -> None:
+    from control_plane.api.approvals import ApprovalService
+
+    service = ApprovalService(factory=factory, runner=None)
+    app1 = create_app(Settings(_env_file=None), factory=factory, redis=redis)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://t") as c:
+        old = (await c.post("/projects", json={"name": "a", "repo": "Org/Demo"})).json()["id"]
+        await pump()
+        assert (await c.delete(f"/projects/{old}")).status_code == 202
+        await pump()
+        ref = await service.resolve_project("Org/Demo")
+        assert ref is None  # 보관된 것뿐이면 webhook은 무시(204)
+        new = (await c.post("/projects", json={"name": "b", "repo": "Org/Demo"})).json()["id"]
+        await pump()
+    ref = await service.resolve_project("org/demo")
+    assert ref is not None and ref.project_id == new and new != old

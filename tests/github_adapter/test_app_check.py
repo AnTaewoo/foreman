@@ -247,3 +247,21 @@ def test_script_exit_codes() -> None:
     ok = CheckReport(items=[CheckItem("app", True, "foreman-dev")])
     bad = CheckReport(items=[CheckItem("app", False, "401")])
     assert ok.ok and ok.exit_code == 0 and not bad.ok and bad.exit_code == 1
+
+
+# 인계서 2026-09-18 #4: `antaewoo/foreman_calc`는 실패, `AnTaewoo/Foreman_calc`는 통과했다.
+# GitHub는 대소문자를 구분하지 않는다 → GET /repos의 정식 full_name으로 정규화해 점검
+async def test_repo_name_is_case_insensitive_and_canonicalized(
+    github_mock: respx.MockRouter, http: httpx.AsyncClient, private_key_pem: str
+) -> None:
+    from github_adapter.app_check import run_check
+
+    mock_all(github_mock, repo="Org/Demo")
+    github_mock.get("/repos/org/demo").mock(
+        return_value=httpx.Response(200, json={"full_name": "Org/Demo", "default_branch": "main"})
+    )
+    report = await run_check(settings(private_key_pem), http, repo="org/demo")
+    assert report.ok, report.render()
+    assert report.canonical == "Org/Demo"
+    repo_item = next(i for i in report.items if i.name == "repo")
+    assert "Org/Demo" in repo_item.detail
