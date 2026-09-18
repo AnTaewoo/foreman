@@ -4,92 +4,129 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
-  <title>Foreman — HITL 데모 콘솔</title>
+  <title>Foreman 콘솔</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6fed'/%3E%3Cpath d='M10 8h13v4h-8v4h7v4h-7v5h-5z' fill='%23fff'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/static/demo.css">
 </head>
 <body>
+  <div id="ws-banner" class="banner" role="alert" hidden>실시간 연결이 끊겼습니다. 다시 연결하는 중입니다 — 화면이 최신이 아닐 수 있습니다.</div>
   <header class="top">
     <div>
-      <h1>Foreman <span class="muted">HITL Multi-Agent Dev Platform · 데모 콘솔</span></h1>
+      <h1>Foreman <span class="muted">HITL Multi-Agent Dev Platform<span id="demo-tag" hidden> · 데모</span></span></h1>
       <p class="lead">
         Goal 한 문장 → AI 에이전트 팀이 <b>Plan → Issue → 브랜치 → PR</b>을 만들고,
-        사람은 <b>Plan 승인</b>과 <b>PR 머지</b>만 합니다. 모든 상태 변화는 서명된 이벤트 체인으로 남습니다.
+        사람은 <b>Plan 승인</b>과 <b>PR 머지</b>만 합니다.
       </p>
     </div>
-    <nav class="links">
-      <a id="repo-link" href="#" target="_blank" rel="noopener">대상 GitHub repo ↗</a>
+    <nav class="links" aria-label="바로가기">
+      <a id="repo-link" href="#" target="_blank" rel="noopener" hidden>대상 GitHub repo ↗</a>
       <a href="/docs" target="_blank" rel="noopener">API 문서 ↗</a>
       <a href="https://github.com/AnTaewoo/foreman" target="_blank" rel="noopener">소스 ↗</a>
     </nav>
   </header>
 
-  <section class="howto">
+  <details class="howto" id="howto">
+    <summary>사용 방법 (3단계)</summary>
     <ol>
-      <li><b>Goal 만들기</b> — 아래 예시 버튼 하나를 누르고 "Goal 생성". 1~3분 뒤 Plan이 올라옵니다(로컬 LLM).</li>
-      <li><b>Plan 승인</b> — Plan 본문을 읽고 <b>Approve</b>. 그러면 Task가 GitHub Issue로 만들어지고 워커 컨테이너가 코드를 씁니다.</li>
-      <li><b>PR 확인</b> — Task마다 draft PR 링크가 생깁니다. <b>PR 머지는 repo 소유자가 GitHub에서</b> 합니다(사람 승인 지점). 머지되면 Task가 done이 되고 다음 Task가 배정됩니다.</li>
+      <li><b>Goal 만들기</b> — 만들 기능을 한 문장으로 적고 "Goal 생성". 잠시 뒤 Plan이 올라옵니다.</li>
+      <li><b>Plan 승인</b> — Plan 본문을 읽고 <b>Approve</b>. Task가 GitHub Issue로 만들어지고 워커 컨테이너가 코드를 씁니다.</li>
+      <li><b>PR 머지</b> — Task마다 draft PR이 생깁니다. <b>머지는 repo 소유자가 GitHub에서</b> 합니다. 머지되면 Task가 완료되고 다음 Task가 배정됩니다.</li>
     </ol>
     <p class="muted small" id="demo-note"></p>
-  </section>
+  </details>
 
   <main class="grid">
-    <section class="col">
-      <h2>Goals <span class="muted" id="project-name"></span></h2>
-      <div class="row">
-        <label class="small muted" id="project-label" hidden>프로젝트 <select id="project"></select></label>
-        <button type="button" id="delete-project" class="secondary small" title="프로젝트를 보관합니다: 남은 Goal·Task 취소, 목록에서 제외. 이벤트와 GitHub Issue/PR/Discussion은 남습니다">프로젝트 삭제</button>
-      </div>
+    <section class="col" aria-labelledby="goals-h">
+      <h2 id="goals-h">Goals <span class="muted" id="project-name"></span></h2>
+      <label class="field" id="project-label" hidden><span>프로젝트</span><select id="project"></select></label>
       <details id="connect" class="connect">
         <summary>GitHub repo 연결</summary>
         <form id="connect-form">
-          <input id="connect-repo" placeholder="owner/name (예: AnTaewoo/my-repo)" required>
+          <label class="field"><span>repo (owner/name)</span><input id="connect-repo" placeholder="AnTaewoo/my-repo" required></label>
           <div class="row">
-            <input id="connect-name" placeholder="프로젝트 이름 (비우면 repo 이름)">
-            <input id="connect-branch" placeholder="기본 브랜치" value="main">
+            <label class="field"><span>프로젝트 이름</span><input id="connect-name" placeholder="비우면 repo 이름"></label>
+            <label class="field"><span>기본 브랜치</span><input id="connect-branch" value="main"></label>
           </div>
-          <input id="connect-token" placeholder="관리 토큰 (데모 모드일 때만)" hidden>
+          <label class="field" id="connect-token-label" hidden><span>관리 토큰 (데모 모드)</span><input id="connect-token" type="password" autocomplete="off"></label>
           <div class="row">
             <button type="button" id="connect-check-btn" class="secondary">점검</button>
             <button type="submit" id="connect-submit">연결</button>
           </div>
+          <p id="connect-error" class="error" role="alert" hidden></p>
           <ul id="connect-check" class="check"></ul>
           <p class="small muted">repo 조건: 기본 브랜치에 <b>커밋 1개 이상</b>(생성 시 "Add a README file" 체크), Discussions 켜기 + 카테고리 <b>Plans</b>, GitHub App 설치. "점검"이 전부 ok면 연결하세요.</p>
         </form>
       </details>
+
       <form id="goal-form">
-        <div class="examples" id="examples"></div>
-        <input id="goal-title" name="title" maxlength="300" placeholder="Goal (영어 한 문장)" required>
-        <div class="row">
-          <label class="small muted" style="flex:1">LLM <select id="llm"></select></label>
+        <label class="field"><span>새 Goal</span>
+          <input id="goal-title" name="title" maxlength="300" placeholder="만들 기능을 한 문장으로" required>
+        </label>
+        <p class="small muted hint">영어 권장 — 에이전트 프롬프트와 코드 식별자가 영어입니다.</p>
+        <details class="examples-box">
+          <summary class="small">예시 Goal</summary>
+          <div class="examples" id="examples"></div>
+        </details>
+        <div class="row end">
+          <label class="field grow"><span>LLM</span><select id="llm"></select></label>
           <button type="submit" id="goal-submit">Goal 생성</button>
         </div>
+        <p class="small muted hint" id="llm-hint"></p>
+        <p id="goal-error" class="error" role="alert" hidden></p>
       </form>
+
+      <label class="check-inline small"><input type="checkbox" id="goal-filter"> 취소·완료된 Goal 숨기기</label>
       <ul id="goals" class="list"></ul>
+
+      <section id="danger" class="danger" hidden aria-labelledby="danger-h">
+        <h3 id="danger-h">위험 구역</h3>
+        <p class="small muted">프로젝트를 보관하면 남은 Goal·Task가 취소되고 목록에서 빠집니다. 이벤트 기록과 GitHub의 Issue/PR/Discussion은 남습니다.</p>
+        <button type="button" id="delete-project" class="danger-btn small">프로젝트 보관</button>
+      </section>
     </section>
 
-    <section class="col wide" id="detail" hidden>
+    <section class="col wide" id="detail" hidden aria-labelledby="goal-title-view">
       <div class="detail-head">
         <h2 id="goal-title-view"></h2>
         <span class="badge" id="goal-status"></span>
         <button id="cancel-goal" class="secondary small" title="Goal과 남은 Task를 취소합니다 (GitHub Issue는 그대로)">Goal 취소</button>
       </div>
+      <p class="small muted" id="goal-meta"></p>
+      <ol id="steps" class="steps" aria-label="진행 단계"></ol>
+      <p id="turn" class="turn" aria-live="polite"></p>
+      <p id="detail-error" class="error" role="alert" hidden></p>
+
       <div class="actions" id="approve-box" hidden>
         <button id="approve">Approve — Plan 승인</button>
-        <button id="reject" class="secondary">Reject</button>
-        <input id="reject-reason" placeholder="거절 사유 (선택)">
+        <button id="reject" class="secondary">Reject…</button>
       </div>
+      <div class="actions reject" id="reject-box" hidden>
+        <label class="field grow"><span>반려 사유 (선택) — 반려하면 이 Goal은 취소됩니다</span><input id="reject-reason"></label>
+        <button id="reject-confirm" class="danger-btn">반려 확정 (Goal 취소)</button>
+        <button id="reject-cancel" class="secondary">돌아가기</button>
+      </div>
+      <div class="actions merge" id="merge-box" hidden></div>
+
       <details open>
         <summary>Plan <a id="discussion-link" href="#" target="_blank" rel="noopener" hidden>Discussion ↗</a></summary>
         <div id="plan" class="plan muted">Plan을 만드는 중…</div>
       </details>
       <h3>Tasks <span class="muted" id="task-count"></span></h3>
-      <table id="tasks"><thead><tr><th>#</th><th>Task</th><th>상태</th><th>시도</th><th>Issue</th><th>PR</th></tr></thead><tbody></tbody></table>
-      <h3>이벤트 <span class="muted" id="ws-state">연결 중…</span></h3>
+      <div class="table-wrap">
+        <table id="tasks"><thead><tr><th>#</th><th>Task</th><th>상태</th><th>시도</th><th>Issue</th><th>PR</th></tr></thead><tbody></tbody></table>
+      </div>
+      <h3 class="events-head">이벤트
+        <span class="ws" id="ws-state"><span class="dot" id="ws-dot"></span><span id="ws-text">연결 중…</span></span>
+        <label class="check-inline small"><input type="checkbox" id="events-all"> 프로젝트 전체 보기</label>
+      </h3>
       <ul id="events" class="events"></ul>
     </section>
   </main>
 
-  <div id="toast" class="toast" hidden></div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden>
+    <span id="toast-text"></span>
+    <button type="button" id="toast-close" class="toast-close" aria-label="알림 닫기">×</button>
+  </div>
   <script src="/static/demo.js"></script>
 </body>
 </html>

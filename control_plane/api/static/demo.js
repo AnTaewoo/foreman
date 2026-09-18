@@ -1,5 +1,5 @@
-/* Foreman 데모 콘솔 (P9.2, D-52). 빌드 없음, 같은 origin의 API만 호출한다.
- * 상태: project(첫 프로젝트) · goals 목록 · 선택 goal 상세(plan, tasks) · WS 이벤트 로그.
+/* Foreman 콘솔 (P9.2, D-52; UI 리뷰 2026-09-18). 빌드 없음, 같은 origin의 API만 호출한다.
+ * 상태: project · goals 목록 · 선택 goal 상세(단계, plan, tasks) · WS 이벤트 로그(Goal별 필터).
  * WS 이벤트가 오면 500ms 디바운스로 goal/tasks를 다시 읽는다(읽기는 projection 반영 후). */
 (() => {
   const $ = (id) => document.getElementById(id);
@@ -9,14 +9,44 @@
     "Add a slugify(text) utility module that lowercases and hyphenates, with tests",
     "Add a greet(name) helper module returning 'Hello, <name>!' with tests",
   ];
-  const state = { demo: { user_id: "judge" }, project: null, goals: [], goalId: null, lastSeq: 0, ws: null, timer: null };
+  const STATUS_LABEL = {
+    draft: "준비 중", planning: "Plan 작성 중", awaiting_plan_approval: "승인 대기", active: "진행 중",
+    done: "완료", cancelled: "취소됨", blocked: "막힘", failed: "실패", pending: "대기", ready: "배정 대기",
+    assigned: "배정됨", running: "실행 중", in_review: "머지 대기",
+  };
+  const LLM_HINT = {
+    ollama: "로컬 모델 · 과금 없음 · 느림 (Plan까지 1~3분)",
+    openai: "OpenAI API · 호출당 과금 · 빠름 (Plan까지 보통 1분 이내)",
+    anthropic: "Anthropic API · 호출당 과금 · 빠름 (Plan까지 보통 1분 이내)",
+  };
+  const STEPS = ["생성", "Plan 작성", "Plan 승인", "Task 실행", "PR 머지", "완료"];
+  const ENDED = ["done", "cancelled"];
+  const state = {
+    demo: { user_id: "judge" }, projects: [], project: null, goals: [], goalId: null, goal: null, tasks: [],
+    taskLabel: new Map(), events: [], openEvents: new Set(), lastSeq: 0, ws: null, wsDownSince: null, timer: null, evFrame: 0,
+  };
 
   // ---- helpers ---------------------------------------------------------
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  function safeGet(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }
+  function safeSet(k, v) { try { localStorage.setItem(k, v); } catch (_) { /* 무시 */ } }
   let toastTimer = null;
-  function toast(msg, ms = 6000) {
-    const t = $("toast"); t.textContent = msg; t.hidden = false;
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+  // 정보 알림은 6초 뒤 닫히고, 오류는 사용자가 닫을 때까지 남는다
+  function toast(msg, bad = false) {
+    const t = $("toast"); $("toast-text").textContent = msg; t.classList.toggle("bad", bad); t.hidden = false;
+    clearTimeout(toastTimer); if (!bad) toastTimer = setTimeout(() => { t.hidden = true; }, 6000);
+  }
+  $("toast-close").onclick = () => { $("toast").hidden = true; };
+  // 조치가 필요한 오류는 해당 폼 아래에 남긴다 (box = 요소 id). 토스트로도 알린다
+  function showError(box, e) {
+    const el = $(box); el.textContent = e.message; el.hidden = false; toast(e.message, true);
+  }
+  const clearError = (box) => { $(box).hidden = true; };
+  // 진행 중: 버튼을 잠그고 라벨을 바꿔 두 번 누르지 못하게 한다
+  async function busy(btn, label, fn) {
+    if (btn.disabled) return; const old = btn.textContent;
+    btn.disabled = true; btn.textContent = label;
+    try { return await fn(); } finally { btn.disabled = false; btn.textContent = old; }
   }
   async function api(path, opts = {}) {
     const headers = { "X-User-Id": state.demo.user_id, ...(opts.headers || {}) };
@@ -25,8 +55,9 @@
     let data = null;
     try { data = await r.json(); } catch (_) { /* 본문 없음 */ }
     if (!r.ok) {
-      const detail = data && data.detail ? (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)) : r.statusText;
-      throw new Error(`${r.status}: ${detail}`);
+      const d = data && data.detail;
+      const detail = !d ? r.statusText : typeof d === "string" ? d : Array.isArray(d) ? d.map((x) => x.msg || JSON.stringify(x)).join("; ") : JSON.stringify(d);
+      const err = new Error(`요청이 거절되었습니다 (${r.status}) — ${detail}`); err.status = r.status; throw err;
     }
     return data;
   }
@@ -49,21 +80,31 @@
     if (inList) out.push("</ul>"); if (inCode) out.push("</code></pre>");
     return out.join("");
   }
-  const badge = (s) => `<span class="badge ${esc(s)}">${esc(s)}</span>`;
+  const badge = (s) => `<span class="badge ${esc(s)}" title="${esc(s)}">${esc(STATUS_LABEL[s] || s)}</span>`;
   const link = (url, text) => url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(text)} ↗</a>` : '<span class="muted">—</span>';
   const isShowcase = (g) => /^\[showcase\]/i.test(g.title || "") && g.status !== "cancelled"; // 취소된 showcase는 고정 안 함
   const ts = (iso) => { try { return new Date(iso).toLocaleTimeString("ko-KR", { hour12: false }); } catch (_) { return iso; } };
+  function ago(iso) {
+    const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+    if (!isFinite(s)) return ""; if (s < 60) return "방금";
+    if (s < 3600) return `${Math.floor(s / 60)}분 전`; if (s < 86400) return `${Math.floor(s / 3600)}시간 전`;
+    return `${Math.floor(s / 86400)}일 전`;
+  }
+  function setUrl(params) {
+    const u = new URL(location.href);
+    for (const [k, v] of Object.entries(params)) { if (v) u.searchParams.set(k, v); else u.searchParams.delete(k); }
+    history.replaceState(null, "", u.toString());
+  }
 
   // ---- load ------------------------------------------------------------
   async function loadDemo() {
     try { state.demo = await api("/demo"); } catch (_) { /* 데모 모드 아님 */ }
-    $("connect-token").hidden = !state.demo.demo_mode;
-    const n = $("demo-note");
-    n.textContent = state.demo.demo_mode
+    const demo = !!state.demo.demo_mode;
+    $("connect-token-label").hidden = !demo; $("demo-tag").hidden = !demo;
+    $("demo-note").textContent = demo
       ? `데모 모드: 프로젝트당 동시에 진행되는 Goal ${state.demo.max_running_goals}개, 시간당 ${state.demo.goals_per_hour}개까지. 승인자 계정 "${state.demo.user_id}"로 동작합니다.`
-      : `승인자 계정 "${state.demo.user_id}"로 동작합니다.`;
+      : `이 콘솔의 승인·생성은 계정 "${state.demo.user_id}"로 기록됩니다.`;
   }
-  // 프로젝트 선택: ?project=<id> > 마지막 선택(localStorage) > 첫 항목. 둘 이상이면 <select> 표시
   // D-57: LLM 프로파일 목록 (ollama/openai/anthropic). 키 없는 것은 비활성
   async function loadLlm() {
     try {
@@ -77,36 +118,48 @@
       }
       const remembered = safeGet("foreman.llm");
       if (remembered && [...sel.options].some((o) => o.value === remembered && !o.disabled)) sel.value = remembered;
-      sel.onchange = () => safeSet("foreman.llm", sel.value);
+      const hint = () => { $("llm-hint").textContent = LLM_HINT[sel.value] || ""; };
+      sel.onchange = () => { safeSet("foreman.llm", sel.value); hint(); }; hint();
     } catch (e) { console.warn(e); }
   }
-  async function loadProject() {
-    const { items } = await api("/projects");
-    if (!items.length) {
-      $("project-name").textContent = "— 프로젝트가 없습니다. 아래 \"GitHub repo 연결\"로 만드세요";
-      $("goal-submit").disabled = true;
-      $("delete-project").hidden = true;
-      return;
-    }
-    $("delete-project").hidden = false;
+  // 프로젝트 선택: ?project=<id> > 마지막 선택(localStorage) > 첫 항목. 둘 이상이면 <select> 표시
+  async function loadProjects() {
+    state.projects = (await api("/projects")).items;
+    const has = state.projects.length > 0;
+    $("danger").hidden = !has; $("goal-submit").disabled = !has;
+    if (!has) { $("project-name").textContent = "— 프로젝트가 없습니다"; $("connect").open = true; return; }
     const wanted = new URLSearchParams(location.search).get("project") || safeGet("foreman.project");
-    state.project = items.find((p) => p.id === wanted) || items[0];
-    $("project-name").textContent = `· ${state.project.name} (${state.project.repo})`;
-    const rl = $("repo-link");
-    if (state.project.repo_url) { rl.href = state.project.repo_url; rl.hidden = false; } else rl.hidden = true;
+    state.project = state.projects.find((p) => p.id === wanted) || state.projects[0];
     const sel = $("project"); sel.innerHTML = "";
-    for (const p of items) {
-      const o = document.createElement("option"); o.value = p.id; o.textContent = `${p.name} — ${p.repo}`;
-      o.selected = p.id === state.project.id; sel.appendChild(o);
+    for (const p of state.projects) {
+      const o = document.createElement("option"); o.value = p.id; o.textContent = `${p.name} — ${p.repo}`; sel.appendChild(o);
     }
-    $("project-label").hidden = items.length < 2;
-    sel.onchange = () => {
-      safeSet("foreman.project", sel.value);
-      const u = new URL(location.href); u.searchParams.set("project", sel.value); location.href = u.toString();
-    };
+    $("project-label").hidden = state.projects.length < 2;
+    sel.onchange = () => switchProject(sel.value);
+    renderProject();
   }
-  function safeGet(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }
-  function safeSet(k, v) { try { localStorage.setItem(k, v); } catch (_) { /* 무시 */ } }
+  function renderProject() {
+    const p = state.project;
+    $("project").value = p.id;
+    $("project-name").textContent = `· ${p.name} (${p.repo})`;
+    const rl = $("repo-link");
+    if (p.repo_url) { rl.href = p.repo_url; rl.hidden = false; } else rl.hidden = true;
+  }
+  // 프로젝트 전환은 새로고침 없이 상태만 다시 읽는다
+  async function switchProject(id, goalId = null) {
+    const p = state.projects.find((x) => x.id === id); if (!p) return;
+    state.project = p; safeSet("foreman.project", p.id); setUrl({ project: p.id, goal: goalId });
+    Object.assign(state, { goals: [], goalId: null, goal: null, tasks: [], events: [], lastSeq: 0 });
+    state.taskLabel.clear(); state.openEvents.clear();
+    const old = state.ws; state.ws = null; if (old) old.close();
+    renderProject(); $("detail").hidden = true; renderEvents();
+    try {
+      await loadGoals(); await loadEvents();
+      const first = state.goals.find((g) => g.id === goalId) || visibleGoals()[0];
+      if (first) await selectGoal(first.id);
+    } catch (e) { toast(e.message, true); }
+    connectWs();
+  }
   async function loadGoals() {
     if (!state.project) return;
     const { items } = await api(`/projects/${state.project.id}/goals`);
@@ -114,13 +167,15 @@
     renderGoals();
   }
   async function loadGoal() {
-    if (!state.goalId) return;
-    const pid = state.project.id;
-    const [goal, tasks] = await Promise.all([
-      api(`/projects/${pid}/goals/${state.goalId}`),
-      api(`/projects/${pid}/tasks`),
-    ]);
-    renderGoal(goal, tasks.items.filter((t) => t.goal_id === goal.id));
+    if (!state.goalId || !state.project) return;
+    const pid = state.project.id, gid = state.goalId;
+    const [goal, tasks] = await Promise.all([api(`/projects/${pid}/goals/${gid}`), api(`/projects/${pid}/tasks`)]);
+    if (gid !== state.goalId || pid !== state.project.id) return; // 그 사이 다른 Goal을 골랐다
+    for (const t of tasks.items) state.taskLabel.set(t.id, `${t.issue_number ? `#${t.issue_number} ` : ""}${t.title}`);
+    const row = state.goals.find((g) => g.id === goal.id); // 상세 응답에 없는 값은 목록에서 (created_at, llm)
+    state.goal = { created_at: row && row.created_at, llm: row && row.llm, ...goal };
+    state.tasks = tasks.items.filter((t) => t.goal_id === goal.id);
+    renderGoal(); scheduleEvents();
   }
   async function loadEvents() {
     if (!state.project) return;
@@ -133,37 +188,84 @@
   const refreshSoon = () => { clearTimeout(state.timer); state.timer = setTimeout(async () => { try { await loadGoals(); await loadGoal(); } catch (e) { console.warn(e); } }, 500); };
 
   // ---- render ----------------------------------------------------------
+  const hideEnded = () => $("goal-filter").checked;
+  const visibleGoals = () => state.goals.filter((g) => !hideEnded() || !ENDED.includes(g.status) || g.id === state.goalId);
   function renderGoals() {
     const ul = $("goals"); ul.innerHTML = "";
-    if (!state.goals.length) { ul.innerHTML = '<li class="muted">아직 Goal이 없습니다 — 위에서 하나 만들어 보세요.</li>'; return; }
-    for (const g of state.goals) {
+    const waiting = state.goals.filter((g) => g.status === "awaiting_plan_approval").length;
+    document.title = `${waiting ? `(승인 대기 ${waiting}) ` : ""}Foreman 콘솔`; // 다른 탭에 있어도 차례가 보인다
+    const goals = visibleGoals();
+    if (!goals.length) {
+      ul.innerHTML = `<li class="muted small">${state.goals.length ? "진행 중인 Goal이 없습니다 (숨긴 Goal " + state.goals.length + "개)." : "아직 Goal이 없습니다 — 위에서 하나 만들어 보세요."}</li>`;
+      return;
+    }
+    for (const g of goals) {
       const li = document.createElement("li");
       li.className = (g.id === state.goalId ? "active " : "") + (isShowcase(g) ? "showcase" : "");
-      li.innerHTML = `<span class="t" title="${esc(g.title)}">${esc(g.title)}</span>${g.llm ? `<span class="muted small">${esc(g.llm)}</span>` : ""}${badge(g.status)}<span class="muted small">${g.done}/${g.total}</span>`;
-      li.onclick = () => selectGoal(g.id);
-      ul.appendChild(li);
+      const btn = document.createElement("button"); btn.type = "button"; btn.className = "goal";
+      if (g.id === state.goalId) btn.setAttribute("aria-current", "true");
+      btn.innerHTML = `<span class="t"><b title="${esc(g.title)}">${esc(g.title)}</b><span class="muted small">${esc(ago(g.created_at))}${g.llm ? ` · ${esc(g.llm)}` : ""}${g.total ? ` · Task ${g.done}/${g.total}` : ""}</span></span>${badge(g.status)}`;
+      btn.onclick = () => selectGoal(g.id, true);
+      li.appendChild(btn); ul.appendChild(li);
     }
   }
-  function renderGoal(goal, tasks) {
+  // 지금 어느 단계이고 누구 차례인가 (HITL의 핵심 메시지)
+  function stage(goal, tasks) {
+    const total = tasks.length, done = tasks.filter((t) => t.status === "done").length;
+    const working = tasks.some((t) => ["ready", "assigned", "running", "pending"].includes(t.status));
+    const review = tasks.filter((t) => t.status === "in_review");
+    const stuck = tasks.filter((t) => ["blocked", "failed"].includes(t.status));
+    const llm = goal.llm ? ` (${goal.llm})` : "";
+    switch (goal.status) {
+      case "draft": case "planning":
+        return { at: 1, turn: `AI가 Plan을 작성하는 중입니다${llm} — ${ago(goal.created_at) === "방금" ? "방금 시작" : ago(goal.created_at).replace(" 전", " 경과")}` };
+      case "awaiting_plan_approval": return { at: 2, turn: "당신 차례입니다 — Plan을 읽고 승인하세요." };
+      case "done": return { at: 6, turn: "완료된 Goal입니다." };
+      case "cancelled": case "blocked":
+        return { at: goal.plan_markdown ? (total ? 3 : 2) : 1, stopped: true, turn: goal.status === "cancelled" ? "취소된 Goal입니다." : "막힌 Goal입니다 — 이벤트 로그의 사유를 확인하세요." };
+      default:
+        if (total && done === total) return { at: 6, turn: "모든 Task의 PR이 머지되었습니다." };
+        if (review.length && !working) return { at: 4, turn: `당신 차례입니다 — GitHub에서 PR ${review.length}개를 머지하세요.` };
+        if (stuck.length && !working && !review.length) return { at: 3, stopped: true, turn: `Task ${stuck.length}개가 막혔습니다 — 이벤트 로그의 실패 사유를 확인하세요.` };
+        return { at: 3, turn: review.length ? `AI 워커가 실행 중입니다. 머지를 기다리는 PR이 ${review.length}개 있습니다.` : "AI 워커가 Task를 실행 중입니다." };
+    }
+  }
+  function renderGoal() {
+    const goal = state.goal, tasks = state.tasks; if (!goal) return;
     $("detail").hidden = false;
     $("goal-title-view").textContent = goal.title;
     $("goal-status").outerHTML = badge(goal.status).replace("<span", '<span id="goal-status"');
-    $("approve-box").hidden = goal.status !== "awaiting_plan_approval";
-    $("cancel-goal").hidden = ["done", "cancelled"].includes(goal.status);
+    $("goal-meta").textContent = [goal.created_at ? `${ago(goal.created_at)} 생성` : "", goal.llm ? `LLM ${goal.llm}` : ""].filter(Boolean).join(" · ");
+    const st = stage(goal, tasks);
+    $("steps").innerHTML = STEPS.map((name, i) => {
+      const now = st.at < 6 && i === st.at;
+      const cls = now ? (st.stopped ? "stopped" : "now") : i < st.at ? "past" : "";
+      return `<li class="${cls}"${now ? ' aria-current="step"' : ""}>${i + 1}. ${name}</li>`;
+    }).join("");
+    $("turn").textContent = st.turn;
+    const awaiting = goal.status === "awaiting_plan_approval";
+    $("approve-box").hidden = !awaiting; if (!awaiting) $("reject-box").hidden = true;
+    $("cancel-goal").hidden = ENDED.includes(goal.status);
+    const review = tasks.filter((t) => t.status === "in_review" && t.pr_url);
+    const mb = $("merge-box"); mb.hidden = !review.length;
+    mb.innerHTML = review.length ? `<b>GitHub에서 머지 대기</b>${review.map((t) => `<a href="${esc(t.pr_url)}" target="_blank" rel="noopener">PR #${esc(t.pr_number)} ↗</a>`).join("")}<span class="small muted">머지하면 Task가 완료되고 다음 Task가 배정됩니다.</span>` : "";
     const dl = $("discussion-link");
     if (goal.plan_discussion_url) { dl.href = goal.plan_discussion_url; dl.hidden = false; } else dl.hidden = true;
     const plan = $("plan");
     if (goal.plan_markdown) { plan.className = "plan"; plan.innerHTML = md(goal.plan_markdown); }
-    else { plan.className = "plan muted"; plan.textContent = ["draft", "planning"].includes(goal.status) ? "Plan을 만드는 중… (로컬 LLM, 1~3분)" : "Plan 본문이 없습니다."; }
-    $("task-count").textContent = tasks.length ? `${goal.done}/${tasks.length} done` : "";
-    const tb = $("tasks").querySelector("tbody"); tb.innerHTML = "";
+    else { plan.className = "plan muted"; plan.textContent = ["draft", "planning"].includes(goal.status) ? `Plan을 만드는 중… ${LLM_HINT[goal.llm] ? `(${LLM_HINT[goal.llm]})` : ""}` : "Plan 본문이 없습니다."; }
+    $("task-count").textContent = tasks.length ? `${tasks.filter((t) => t.status === "done").length}/${tasks.length} 완료` : "";
+    const tb = $("tasks").querySelector("tbody");
+    const open = new Set([...tb.querySelectorAll("tr.spec-row.open")].map((r) => r.dataset.id)); // 다시 그려도 펼침 유지
+    tb.innerHTML = "";
     tasks.sort((a, b) => (a.issue_number || 0) - (b.issue_number || 0));
     for (const t of tasks) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `<td>${t.issue_number ?? ""}</td><td>${esc(t.title)}<br><span class="muted small">${esc(t.owned_paths.join(", "))}</span></td><td>${badge(t.status)}</td><td>${t.attempt_count}</td><td>${link(t.issue_url, `#${t.issue_number ?? ""}`)}</td><td>${link(t.pr_url, `PR #${t.pr_number ?? ""}`)}${t.branch_name ? `<br><code class="small">${esc(t.branch_name)}</code>` : ""}</td>`;
-      const sr = document.createElement("tr"); sr.className = "spec-row";
-      sr.innerHTML = `<td></td><td class="spec" colspan="5">${esc(t.spec || "")}</td>`;
-      tr.onclick = () => sr.classList.toggle("open");
+      const tr = document.createElement("tr"); tr.className = "task-row";
+      tr.innerHTML = `<td>${t.issue_number ?? ""}</td><td><button type="button" class="task-toggle" aria-expanded="${open.has(t.id)}">${esc(t.title)}</button><br><span class="muted small">${esc(t.owned_paths.join(", "))}</span></td><td>${badge(t.status)}</td><td>${t.attempt_count}</td><td>${link(t.issue_url, `#${t.issue_number ?? ""}`)}</td><td>${link(t.pr_url, `PR #${t.pr_number ?? ""}`)}${t.branch_name ? `<br><code class="small">${esc(t.branch_name)}</code>` : ""}</td>`;
+      const sr = document.createElement("tr"); sr.className = `spec-row${open.has(t.id) ? " open" : ""}`; sr.dataset.id = t.id;
+      sr.innerHTML = `<td></td><td class="spec" colspan="5">${esc(t.spec || "(spec 없음)")}</td>`;
+      const btn = tr.querySelector(".task-toggle");
+      btn.onclick = () => { btn.setAttribute("aria-expanded", String(sr.classList.toggle("open"))); };
       tb.appendChild(tr); tb.appendChild(sr);
     }
   }
@@ -171,75 +273,120 @@
     if (e.seq != null && e.seq <= state.lastSeq) return; // replay/live 중복
     if (e.seq != null) state.lastSeq = Math.max(state.lastSeq, e.seq);
     if (e.type === "run.tool_called") return; // 툴 호출은 너무 많다 (체인 밖, D-31)
-    const ul = $("events");
-    const li = document.createElement("li");
-    const p = e.payload || {};
-    // task.failed면 사유 + 테스트 출력 꼬리(P9 버그 #5), 그 외는 대표 필드 하나
-    const extra = e.type === "task.failed"
-      ? `${p.reason || ""}${p.attempt != null ? ` (run ${p.attempt}${p.edit_rounds ? `, ${p.edit_rounds} edits` : ""})` : ""}${p.test_output ? ` — ${String(p.test_output).trim().split("\n").slice(-3).join(" | ")}` : ""}`
-      : (p.reason || p.branch || p.pr_number || p.title || p.summary || "");
-    li.innerHTML = `<span class="ts">${ts(e.ts)}</span><code>${esc(e.type)}</code> <span class="muted">${esc(e.subject.entity)}:${esc(String(e.subject.id).slice(-6))}</span> ${esc(String(extra).slice(0, 300))}`;
-    ul.prepend(li);
-    while (ul.children.length > 200) ul.removeChild(ul.lastChild);
-    refreshSoon();
+    state.events.push(e); if (state.events.length > 2000) state.events.splice(0, state.events.length - 2000);
+    scheduleEvents(); refreshSoon();
+  }
+  function scheduleEvents() { if (!state.evFrame) state.evFrame = requestAnimationFrame(() => { state.evFrame = 0; renderEvents(); }); }
+  // 기본은 선택한 Goal의 이벤트만(correlation_id = goal id). "프로젝트 전체 보기"로 전부
+  function renderEvents() {
+    const all = $("events-all").checked, gid = state.goalId;
+    const mine = (e) => all || !gid || e.correlation_id === gid || (e.payload && e.payload.goal_id === gid) || e.subject.id === gid;
+    const rows = state.events.filter(mine).slice(-200).reverse();
+    const ul = $("events"); ul.innerHTML = "";
+    if (!rows.length) { ul.innerHTML = '<li class="muted">아직 이벤트가 없습니다.</li>'; return; }
+    for (const e of rows) {
+      const p = e.payload || {}, id = String(e.subject.id), key = e.id || `${e.seq}`;
+      const who = e.subject.entity === "task" && state.taskLabel.has(id) ? state.taskLabel.get(id) : `${e.subject.entity}:${id.slice(-6)}`;
+      const li = document.createElement("li");
+      const head = `<span class="ts">${ts(e.ts)}</span><code>${esc(e.type)}</code> <span class="muted" title="${esc(id)}">${esc(who)}</span> `;
+      if (e.type === "task.failed") { // 사유 한 줄 + 펼치면 테스트 출력 전체 (P9 버그 #5)
+        li.className = "fail";
+        const why = `${p.reason || ""}${p.attempt != null ? ` (run ${p.attempt}${p.edit_rounds ? `, ${p.edit_rounds} edits` : ""})` : ""}`;
+        li.innerHTML = head + esc(why) + (p.test_output ? `<details${state.openEvents.has(key) ? " open" : ""}><summary>테스트 출력 보기</summary><pre>${esc(String(p.test_output).trim())}</pre></details>` : "");
+        const d = li.querySelector("details");
+        if (d) d.ontoggle = () => { if (d.open) state.openEvents.add(key); else state.openEvents.delete(key); };
+      } else {
+        li.innerHTML = head + esc(String(p.reason || p.branch || p.pr_number || p.title || p.summary || "").slice(0, 300));
+      }
+      ul.appendChild(li);
+    }
   }
 
   // ---- ws --------------------------------------------------------------
+  function wsState(kind, text) { $("ws-dot").className = `dot ${kind}`; $("ws-text").textContent = text; }
   function connectWs() {
     if (!state.project) return;
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${proto}//${location.host}/projects/${state.project.id}/stream?since=${state.lastSeq}`);
     state.ws = ws;
-    ws.onopen = () => { $("ws-state").textContent = "실시간"; };
-    ws.onmessage = (m) => { try { pushEvent(JSON.parse(m.data)); } catch (e) { console.warn(e); } };
-    ws.onclose = () => { $("ws-state").textContent = "재연결 중…"; setTimeout(connectWs, 3000); };
+    ws.onopen = () => { state.wsDownSince = null; $("ws-banner").hidden = true; wsState("on", "실시간"); };
+    ws.onmessage = (m) => { if (state.ws !== ws) return; try { pushEvent(JSON.parse(m.data)); } catch (e) { console.warn(e); } };
+    ws.onclose = () => {
+      if (state.ws !== ws) return; // 프로젝트를 바꿔 닫은 옛 연결
+      state.wsDownSince = state.wsDownSince || Date.now(); wsState("off", "재연결 중…"); setTimeout(() => { if (state.ws === ws) connectWs(); }, 3000);
+    };
     ws.onerror = () => ws.close();
   }
+  setInterval(() => {
+    if (state.wsDownSince && Date.now() - state.wsDownSince > 30000) $("ws-banner").hidden = false; // 30초 넘게 끊기면 경고
+    if (state.goal && ["draft", "planning"].includes(state.goal.status)) renderGoal(); // 경과 시간 갱신
+  }, 10000);
 
   // ---- actions ---------------------------------------------------------
-  async function selectGoal(id) {
-    state.goalId = id; renderGoals();
-    try { await loadGoal(); } catch (e) { toast(e.message); }
+  async function selectGoal(id, byUser = false) {
+    state.goalId = id; state.goal = null; setUrl({ goal: id }); clearError("detail-error"); $("reject-box").hidden = true;
+    renderGoals(); renderEvents();
+    try { await loadGoal(); } catch (e) { toast(e.message, true); }
+    // 1열 레이아웃(모바일)에서는 상세가 화면 아래에 생긴다 → 선택하면 그리로 이동
+    if (byUser && window.matchMedia("(max-width: 900px)").matches) $("detail").scrollIntoView({ behavior: "smooth", block: "start" });
   }
-  $("goal-form").onsubmit = async (ev) => {
+  const goalUrl = (action) => `/projects/${state.project.id}/goals/${state.goalId}/${action}`;
+  $("goal-form").onsubmit = (ev) => {
     ev.preventDefault();
     if (!state.project) return;
     const title = $("goal-title").value.trim(); if (!title) return;
-    $("goal-submit").disabled = true;
+    clearError("goal-error");
+    busy($("goal-submit"), "생성 중… (LLM 확인)", async () => {
+      try {
+        const g = await api(`/projects/${state.project.id}/goals`, { method: "POST", body: { title, llm: $("llm").value || undefined } });
+        $("goal-title").value = "";
+        toast("Goal을 만들었습니다. Plan이 올라오면 승인 버튼이 보입니다.");
+        await loadGoals(); await selectGoal(g.id, true);
+      } catch (e) { showError("goal-error", e); }
+    });
+  };
+  $("approve").onclick = () => busy($("approve"), "승인 중…", async () => {
+    clearError("detail-error");
+    try { await api(goalUrl("approve"), { method: "POST" }); toast("승인했습니다. Task → Issue → 워커 순으로 진행됩니다."); refreshSoon(); }
+    catch (e) { showError("detail-error", e); }
+  });
+  // Reject는 사유 입력을 펼친 뒤 한 번 더 확인한다 (반려 = Goal 취소)
+  $("reject").onclick = () => { $("reject-box").hidden = false; $("reject-reason").focus(); };
+  $("reject-cancel").onclick = () => { $("reject-box").hidden = true; };
+  $("reject-confirm").onclick = () => busy($("reject-confirm"), "반려 중…", async () => {
+    clearError("detail-error");
     try {
-      const llm = $("llm").value || undefined;
-      const g = await api(`/projects/${state.project.id}/goals`, { method: "POST", body: { title, llm } });
-      $("goal-title").value = "";
-      toast("Goal을 만들었습니다. Plan이 올라오면 Approve 버튼이 보입니다.");
-      await loadGoals(); await selectGoal(g.id);
-    } catch (e) { toast(e.message); } finally { $("goal-submit").disabled = false; }
+      await api(goalUrl("reject"), { method: "POST", body: { reason: $("reject-reason").value } });
+      $("reject-reason").value = ""; $("reject-box").hidden = true; toast("반려했습니다. Goal이 취소됩니다."); refreshSoon();
+    } catch (e) { showError("detail-error", e); }
+  });
+  $("cancel-goal").onclick = () => {
+    if (!state.goalId || !confirm("이 Goal과 남은 Task를 취소할까요? (GitHub Issue/PR은 그대로 남습니다)")) return;
+    busy($("cancel-goal"), "취소 중…", async () => {
+      clearError("detail-error");
+      try { await api(goalUrl("cancel"), { method: "POST", body: { reason: "cancelled from console" } }); toast("취소했습니다."); refreshSoon(); }
+      catch (e) { showError("detail-error", e); }
+    });
   };
-  $("approve").onclick = async () => {
-    try { await api(`/projects/${state.project.id}/goals/${state.goalId}/approve`, { method: "POST" }); toast("승인했습니다. Task → Issue → 워커 순으로 진행됩니다."); refreshSoon(); }
-    catch (e) { toast(e.message); }
-  };
-  $("delete-project").onclick = async () => {
+  $("delete-project").onclick = () => {
     if (!state.project) return;
     const p = state.project;
-    if (!confirm(`프로젝트 "${p.name}" (${p.repo})를 삭제(보관)할까요?\n남은 Goal·Task는 취소되고 목록에서 사라집니다. GitHub의 Issue/PR/Discussion과 이벤트 기록은 남습니다.`)) return;
-    const headers = {}; const tok = $("connect-token").value.trim(); if (tok) headers["X-Admin-Token"] = tok;
-    try {
-      await api(`/projects/${p.id}`, { method: "DELETE", headers });
-      safeSet("foreman.project", "");
-      const u = new URL(location.href); u.searchParams.delete("project"); location.href = u.toString();
-    } catch (e) { toast(e.message); }
+    if (!confirm(`프로젝트 "${p.name}" (${p.repo})를 보관할까요?\n남은 Goal·Task는 취소되고 목록에서 사라집니다. GitHub의 Issue/PR/Discussion과 이벤트 기록은 남습니다.`)) return;
+    const headers = {};
+    if (state.demo.demo_mode) { // 데모 모드에서는 보관할 때 관리 토큰을 직접 묻는다
+      const tok = $("connect-token").value.trim() || (prompt("관리 토큰을 입력하세요") || "").trim();
+      if (!tok) return; headers["X-Admin-Token"] = tok;
+    }
+    busy($("delete-project"), "보관 중…", async () => {
+      try {
+        await api(`/projects/${p.id}`, { method: "DELETE", headers });
+        safeSet("foreman.project", ""); setUrl({ project: null, goal: null }); location.reload();
+      } catch (e) { toast(e.message, true); }
+    });
   };
-  $("cancel-goal").onclick = async () => {
-    if (!state.goalId || !confirm("이 Goal과 남은 Task를 취소할까요? (GitHub Issue/PR은 그대로 남습니다)")) return;
-    try {
-      await api(`/projects/${state.project.id}/goals/${state.goalId}/cancel`, { method: "POST", body: { reason: "cancelled from console" } });
-      toast("취소했습니다."); refreshSoon();
-    } catch (e) { toast(e.message); }
-  };
-  $("reject").onclick = async () => {
-    try { await api(`/projects/${state.project.id}/goals/${state.goalId}/reject`, { method: "POST", body: { reason: $("reject-reason").value } }); toast("거절했습니다."); refreshSoon(); }
-    catch (e) { toast(e.message); }
-  };
+  $("goal-filter").onchange = () => { safeSet("foreman.hideEnded", $("goal-filter").checked ? "1" : ""); renderGoals(); };
+  $("events-all").onchange = renderEvents;
+
   // ---- GitHub repo 연결 (POST /projects) + 사전 점검 (GET /projects/check) ------------------
   function renderCheck(body) {
     const ul = $("connect-check"); ul.innerHTML = "";
@@ -250,41 +397,50 @@
     if (body.canonical) $("connect-repo").value = body.canonical; // GitHub의 정식 대소문자로 연결
     return body.ok;
   }
-  $("connect-check-btn").onclick = async () => {
+  $("connect-check-btn").onclick = () => {
     const repo = $("connect-repo").value.trim(); if (!repo) return;
-    $("connect-check-btn").disabled = true;
-    try { const ok = renderCheck(await api(`/projects/check?repo=${encodeURIComponent(repo)}`)); toast(ok ? "점검 통과 — 연결할 수 있습니다." : "점검 실패 항목이 있습니다."); }
-    catch (e) { toast(e.message); } finally { $("connect-check-btn").disabled = false; }
+    clearError("connect-error");
+    busy($("connect-check-btn"), "점검 중…", async () => {
+      try { const ok = renderCheck(await api(`/projects/check?repo=${encodeURIComponent(repo)}`)); toast(ok ? "점검 통과 — 연결할 수 있습니다." : "점검 실패 항목이 있습니다.", !ok); }
+      catch (e) { showError("connect-error", e); }
+    });
   };
-  $("connect-form").onsubmit = async (ev) => {
+  $("connect-form").onsubmit = (ev) => {
     ev.preventDefault();
     const repo = $("connect-repo").value.trim(); if (!repo) return;
     const owner = repo.includes("/") ? repo.split("/")[0] : state.demo.user_id;
     const members = [{ user_id: owner, role: "owner" }];
     if (owner !== state.demo.user_id) members.push({ user_id: state.demo.user_id, role: "approver" });
     const headers = {}; const tok = $("connect-token").value.trim(); if (tok) headers["X-Admin-Token"] = tok;
-    $("connect-submit").disabled = true;
-    try {
-      const p = await api("/projects", { method: "POST", headers, body: {
-        name: $("connect-name").value.trim() || repo.split("/").pop(),
-        repo, default_branch: $("connect-branch").value.trim() || "main", members } });
-      safeSet("foreman.project", p.id);
-      const u = new URL(location.href); u.searchParams.set("project", p.id); location.href = u.toString();
-    } catch (e) { toast(e.message); } finally { $("connect-submit").disabled = false; }
+    clearError("connect-error");
+    busy($("connect-submit"), "연결 중…", async () => {
+      try {
+        const p = await api("/projects", { method: "POST", headers, body: {
+          name: $("connect-name").value.trim() || repo.split("/").pop(),
+          repo, default_branch: $("connect-branch").value.trim() || "main", members } });
+        safeSet("foreman.project", p.id); setUrl({ project: p.id, goal: null }); location.reload();
+      } catch (e) { showError("connect-error", e); }
+    });
   };
 
   for (const ex of EXAMPLES) {
     const b = document.createElement("button"); b.type = "button"; b.textContent = ex;
-    b.onclick = () => { $("goal-title").value = ex; };
+    b.onclick = () => { $("goal-title").value = ex; $("goal-title").focus(); };
     $("examples").appendChild(b);
   }
 
   // ---- boot ------------------------------------------------------------
   (async () => {
+    $("goal-filter").checked = safeGet("foreman.hideEnded") === "1";
+    $("howto").open = !safeGet("foreman.howto"); safeSet("foreman.howto", "seen"); // 첫 방문에만 펼친다
     try {
-      await loadDemo(); await loadLlm(); await loadProject(); await loadGoals(); await loadEvents();
-      if (state.goals.length) await selectGoal(state.goals[0].id);
+      await loadDemo(); await loadLlm(); await loadProjects();
+      if (!state.project) return;
+      await loadGoals(); await loadEvents();
+      const wanted = new URLSearchParams(location.search).get("goal");
+      const first = state.goals.find((g) => g.id === wanted) || visibleGoals()[0];
+      if (first) await selectGoal(first.id);
       connectWs();
-    } catch (e) { toast(`초기화 실패: ${e.message}`); }
+    } catch (e) { toast(`초기화 실패: ${e.message}`, true); }
   })();
 })();
