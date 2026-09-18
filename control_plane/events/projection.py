@@ -106,6 +106,8 @@ async def _project_created(session: AsyncSession, event: Event) -> None:
     row.repo_full_name = str(p.get("repo", ""))
     row.default_branch = str(p.get("default_branch", "main"))
     row.members = list(p.get("members", []))  # P5.2 (additive key)
+    if (iid := p.get("installation_id")) is not None:  # P9.10 (additive key)
+        row.installation_id = int(iid)
     row.created_at = event.ts
 
 

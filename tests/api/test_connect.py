@@ -116,7 +116,9 @@ async def test_server_installation_still_needs_admin_token(
 ) -> None:
     check["report"] = report(installation_id=SERVER_IID, login="AnTaewoo", canonical="AnTaewoo/x")
     async with client_for(real_app(factory, redis)) as c:
-        assert (await c.post("/projects", json={"name": "x", "repo": "AnTaewoo/x"})).status_code == 401
+        assert (
+            await c.post("/projects", json={"name": "x", "repo": "AnTaewoo/x"})
+        ).status_code == 401
         r = await c.post("/projects", json={"name": "x", "repo": "AnTaewoo/x"}, headers=ADMIN)
     assert r.status_code == 201, r.text
 

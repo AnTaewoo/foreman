@@ -227,6 +227,7 @@ class ProjectCreatedPayload(TypedDict):
     repo: str  # repo_full_name 또는 로컬 경로
     default_branch: str
     members: NotRequired[list[dict[str, str]]]  # P5.2 추가(additive): [{user_id, role}] §4.1
+    installation_id: NotRequired[int]  # P9.10 추가(additive): 공개 App의 이 repo installation
 
 
 class ProjectUpdatedPayload(TypedDict):

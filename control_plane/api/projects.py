@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from ulid import ULID
 
-from control_plane.api.demo_guard import AdminDep
+from control_plane.api.demo_guard import AdminDep, require_admin
 from control_plane.api.deps import (
     _OWNER_NAME,
     StateDep,
@@ -66,6 +66,7 @@ class CheckItemOut(BaseModel):
     name: str
     ok: bool
     detail: str
+    required: bool = True  # False = 경고(연결을 막지 않는다, P9.10)
 
 
 class RepoCheckOut(BaseModel):
@@ -76,6 +77,8 @@ class RepoCheckOut(BaseModel):
     ok: bool
     items: list[CheckItemOut]
     canonical: str | None = None  # GitHub의 정식 owner/name — 콘솔은 이 이름으로 연결한다
+    install_url: str | None = None  # P9.10: App 설치 링크 (공개 App)
+    installation_id: int | None = None
 
 
 @router.get("")
@@ -152,14 +155,54 @@ async def delete_project(project_id: str, state: StateDep, user: UserDep) -> Pro
     return ProjectDeleted(id=project_id, cancelled_goals=cancelled)
 
 
-@router.post("", status_code=201, dependencies=[AdminDep])  # 데모 모드면 X-Admin-Token (P9.3)
-async def create_project(body: ProjectIn, state: StateDep, user: UserDep) -> ProjectOut:
+@router.post("", status_code=201)
+async def create_project(
+    body: ProjectIn,
+    state: StateDep,
+    user: UserDep,
+    x_admin_token: Annotated[str | None, Header()] = None,
+) -> ProjectOut:
+    """P9.10 공개 App: 실 모드의 owner/name은 App 점검(installation 탐지)을 먼저 통과해야 한다.
+    외부 installation이면 **설치가 곧 권한 증명** — 관리 토큰 없이 연결, owner는 그 계정.
+    서버 자체 installation·로컬 경로·Dry는 종전대로 데모 모드면 관리 토큰 (P9.3)."""
+    public_app = not state.settings.dry_run and bool(_OWNER_NAME.match(body.repo))
+    if not public_app:  # 종전 순서: 관리 토큰 먼저 (P9.3)
+        await require_admin(state, x_admin_token)
     if (problem := validate_repo(body.repo)) is not None:
         raise HTTPException(400, problem)
-    if await repo_taken(state, body.repo):  # D-45
-        raise HTTPException(409, f"a project for {body.repo!r} already exists")
-    pid = str(ULID())
+    repo, default_branch = body.repo, body.default_branch
     members = body.members if body.members is not None else [Member(user_id=user, role="owner")]
+    installation_id: int | None = None
+    if public_app:
+        async with github_http() as http:  # run_check가 JWT·installation 토큰을 직접 만든다
+            report = await run_check(state.settings, http, repo=body.repo)
+        if report.installation_id is None:
+            raise HTTPException(
+                400,
+                f"app_not_installed: install the GitHub App on {body.repo} first — "
+                f"{report.install_url or 'GitHub App settings → Install App'}",
+            )
+        if not report.ok:
+            failed = [f"{i.name}: {i.detail}" for i in report.items if i.required and not i.ok]
+            raise HTTPException(400, "repo check failed — " + "; ".join(failed))
+        installation_id = report.installation_id
+        repo = report.canonical or body.repo
+        default_branch = report.default_branch or body.default_branch
+        if installation_id == state.settings.github_installation_id:  # 서버 자체 → 종전대로
+            await require_admin(state, x_admin_token)
+        else:  # 결정 (3): 외부 설치 — 승인·머지는 GitHub에서 그 계정으로
+            members = [Member(user_id=str(report.account_login), role="owner")]
+    if await repo_taken(state, repo):  # D-45
+        raise HTTPException(409, f"a project for {repo!r} already exists")
+    pid = str(ULID())
+    payload: dict[str, object] = {
+        "name": body.name,
+        "repo": repo,
+        "default_branch": default_branch,
+        "members": [mem.model_dump() for mem in members],
+    }
+    if installation_id is not None:
+        payload["installation_id"] = installation_id  # P9.10 (additive)
     (event,) = await publish(
         state,
         Event(
@@ -167,12 +210,7 @@ async def create_project(body: ProjectIn, state: StateDep, user: UserDep) -> Pro
             actor=human(user),
             type=EventType.PROJECT_CREATED,
             subject=Subject(entity="project", id=pid),
-            payload={
-                "name": body.name,
-                "repo": body.repo,
-                "default_branch": body.default_branch,
-                "members": [mem.model_dump() for mem in members],
-            },
+            payload=payload,
             correlation_id=pid,  # Goal 밖 → project_id (D-25)
             causation_id=None,
         ),
@@ -180,9 +218,9 @@ async def create_project(body: ProjectIn, state: StateDep, user: UserDep) -> Pro
     return ProjectOut(
         id=pid,
         name=body.name,
-        repo=body.repo,
-        repo_url=gh_url(body.repo),
-        default_branch=body.default_branch,
+        repo=repo,
+        repo_url=gh_url(repo),
+        default_branch=default_branch,
         created_at=event.ts,
     )
 
@@ -215,8 +253,13 @@ async def check_repo(repo: str, state: StateDep) -> RepoCheckOut:
         repo=repo,
         dry_run=False,
         ok=report.ok,
-        items=[CheckItemOut(name=i.name, ok=i.ok, detail=i.detail) for i in report.items],
+        items=[
+            CheckItemOut(name=i.name, ok=i.ok, detail=i.detail, required=i.required)
+            for i in report.items
+        ],
         canonical=report.canonical,
+        install_url=report.install_url,
+        installation_id=report.installation_id,
     )
 
 

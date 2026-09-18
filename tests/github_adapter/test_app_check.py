@@ -232,9 +232,7 @@ async def test_not_installed_gives_install_link(
     from github_adapter.app_check import run_check
 
     mock_all(github_mock, hook_url="")  # 웹훅 URL 비어 있음
-    github_mock.get("/repos/org/other/installation").mock(
-        return_value=httpx.Response(404, json={})
-    )
+    github_mock.get("/repos/org/other/installation").mock(return_value=httpx.Response(404, json={}))
     report = await run_check(settings(private_key_pem), http, repo="org/other")
     by = {i.name: i for i in report.items}
     url = "https://github.com/apps/foreman-dev/installations/new"

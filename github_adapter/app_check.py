@@ -49,26 +49,36 @@ class CheckItem:
     name: str
     ok: bool
     detail: str
+    required: bool = True  # False면 경고 — 실패해도 연결을 막지 않는다 (P9.10)
 
 
 @dataclass
 class CheckReport:
     items: list[CheckItem] = field(default_factory=list)
     canonical: str | None = None  # GitHub가 돌려준 정식 owner/name (대소문자 정규화)
+    # P9.10 공개 App: repo로 찾은 installation과 연결에 쓰는 값
+    installation_id: int | None = None
+    account_login: str | None = None
+    default_branch: str | None = None
+    install_url: str | None = None  # https://github.com/apps/{slug}/installations/new
+    has_plan_category: bool = False  # Discussions + Plans — 없으면 Plan은 Issue로
 
     @property
     def ok(self) -> bool:
-        return bool(self.items) and all(i.ok for i in self.items)
+        return bool(self.items) and all(i.ok for i in self.items if i.required)
 
     @property
     def exit_code(self) -> int:
         return 0 if self.ok else 1
 
-    def add(self, name: str, ok: bool, detail: str) -> None:
-        self.items.append(CheckItem(name, ok, detail))
+    def add(self, name: str, ok: bool, detail: str, *, required: bool = True) -> None:
+        self.items.append(CheckItem(name, ok, detail, required))
 
     def render(self) -> str:
-        lines = [f"  [{'ok' if i.ok else 'FAIL'}] {i.name:<13} {i.detail}" for i in self.items]
+        lines = [
+            f"  [{'ok' if i.ok else ('FAIL' if i.required else 'warn')}] {i.name:<13} {i.detail}"
+            for i in self.items
+        ]
         return "\n".join(lines + [f"App check: {'PASS' if self.ok else 'FAIL'}"])
 
 
@@ -90,14 +100,12 @@ async def run_check(settings: Any, http: httpx.AsyncClient, *, repo: str) -> Che
     report = CheckReport()
     app_id = str(getattr(settings, "github_app_id", "") or "")
     pem = _secret(getattr(settings, "github_app_private_key", ""))
-    inst = getattr(settings, "github_installation_id", None)
     secret = _secret(getattr(settings, "github_webhook_secret", ""))
-    missing = [
+    missing = [  # P9.10: installation id는 env가 아니라 repo로 찾는다 (공개 App)
         k
         for k, v in (
             ("HITL_GITHUB_APP_ID", app_id),
             ("HITL_GITHUB_APP_PRIVATE_KEY", pem),
-            ("HITL_GITHUB_INSTALLATION_ID", inst),
             ("HITL_GITHUB_WEBHOOK_SECRET", secret),
         )
         if not v
@@ -105,7 +113,6 @@ async def run_check(settings: Any, http: httpx.AsyncClient, *, repo: str) -> Che
     if missing:
         report.add("settings", False, "missing: " + ", ".join(missing))
         return report
-    inst_id = int(str(inst))
     jwt_headers = {**API_HEADERS, "Authorization": f"Bearer {app_jwt(app_id, pem)}"}
 
     # 1) app
@@ -115,31 +122,40 @@ async def run_check(settings: Any, http: httpx.AsyncClient, *, repo: str) -> Che
         return report
     app = r.json()
     report.add("app", True, f"{app.get('name')} (id {app.get('id')})")
+    if slug := app.get("slug"):
+        report.install_url = f"https://github.com/apps/{slug}/installations/new"
 
-    # 2) installation
-    r = await http.get("/app/installations", headers=jwt_headers)
-    installs = r.json() if r.status_code == 200 else []
-    found = next((i for i in installs if int(i.get("id", -1)) == inst_id), None)
+    # 2) installation — 이 repo에 설치된 것 (GET /repos/{o}/{r}/installation, JWT, 없으면 404)
+    r = await http.get(f"/repos/{repo}/installation", headers=jwt_headers)
+    found: dict[str, Any] | None = r.json() if r.status_code == 200 else None
     if found is None:
         report.add(
             "installation",
             False,
-            f"installation {inst} not in {[i.get('id') for i in installs]} (App 설치 확인)",
+            f"App not installed on {repo} (HTTP {r.status_code}) — install it: "
+            f"{report.install_url or 'GitHub App settings → Install App'}",
         )
     else:
-        report.add("installation", True, f"{inst} on {found.get('account', {}).get('login')}")
+        report.installation_id = int(found["id"])
+        report.account_login = str((found.get("account") or {}).get("login") or "")
+        report.add("installation", True, f"{report.installation_id} on {report.account_login}")
 
     # 3) token (값은 리포트에 싣지 않는다)
-    r = await http.post(f"/app/installations/{inst_id}/access_tokens", headers=jwt_headers)
     token = ""
     granted: dict[str, Any] = dict(app.get("permissions") or {})
-    if r.status_code in (200, 201):
-        data = r.json()
-        token = str(data.get("token", ""))
-        granted = dict(data.get("permissions") or granted)
-        report.add("token", True, f"issued, expires {data.get('expires_at')}")
+    if report.installation_id is None:
+        report.add("token", False, "skipped (not installed)")
     else:
-        report.add("token", False, f"POST access_tokens → {r.status_code}")
+        r = await http.post(
+            f"/app/installations/{report.installation_id}/access_tokens", headers=jwt_headers
+        )
+        if r.status_code in (200, 201):
+            data = r.json()
+            token = str(data.get("token", ""))
+            granted = dict(data.get("permissions") or granted)
+            report.add("token", True, f"issued, expires {data.get('expires_at')}")
+        else:
+            report.add("token", False, f"POST access_tokens → {r.status_code}")
 
     # 4) permissions
     lacking = _missing_permissions(granted)
@@ -188,6 +204,7 @@ async def run_check(settings: Any, http: httpx.AsyncClient, *, repo: str) -> Che
         # 6a) 기본 브랜치에 커밋이 있는가 (P9 버그 #1): 빈 repo는 clone·pytest가 무의미하다
         if ok:
             default_branch = str(r2.json().get("default_branch") or "main")
+            report.default_branch = default_branch  # P9.10: 연결은 GitHub의 기본 브랜치로
             r3 = await http.get(f"/repos/{repo}/branches/{default_branch}", headers=inst_headers)
             if r3.status_code == 200:
                 report.add("content", True, f"branch {default_branch} has commits")
@@ -201,7 +218,7 @@ async def run_check(settings: Any, http: httpx.AsyncClient, *, repo: str) -> Che
                 )
         else:
             report.add("content", False, "skipped (repo not accessible)")
-        # 6b) Discussions 켜짐 + 카테고리 Plans (P9): 없으면 Plan Discussion 생성이 실패한다
+        # 6b) Discussions 켜짐 + 카테고리 Plans (P9). P9.10부터 경고 — 없으면 Plan은 Issue로
         if ok:
             owner, name = repo.split("/", 1)
             g = await http.post(
@@ -219,20 +236,30 @@ async def run_check(settings: Any, http: httpx.AsyncClient, *, repo: str) -> Che
                 str(c.get("name"))
                 for c in ((node.get("discussionCategories") or {}).get("nodes") or [])
             ]
+            fallback = " — the plan will be posted as an Issue instead"
             if not enabled:
                 report.add(
-                    "discussions", False, "Discussions disabled on the repo (Settings → Features)"
+                    "discussions",
+                    False,
+                    "Discussions disabled on the repo (Settings → Features)" + fallback,
+                    required=False,
                 )
             elif PLAN_CATEGORY not in cats:
-                report.add("discussions", False, f"category {PLAN_CATEGORY!r} missing (has {cats})")
+                report.add(
+                    "discussions",
+                    False,
+                    f"category {PLAN_CATEGORY!r} missing (has {cats})" + fallback,
+                    required=False,
+                )
             else:
-                report.add("discussions", True, f"enabled, categories {cats}")
+                report.has_plan_category = True
+                report.add("discussions", True, f"enabled, categories {cats}", required=False)
         else:
-            report.add("discussions", False, "skipped (repo not accessible)")
+            report.add("discussions", False, "skipped (repo not accessible)", required=False)
     else:
         report.add("repo", False, f"{repo}: skipped (no token)")
         report.add("content", False, "skipped (no token)")
-        report.add("discussions", False, "skipped (no token)")
+        report.add("discussions", False, "skipped (no token)", required=False)
 
     # 7) webhook config
     r = await http.get("/app/hook/config", headers=jwt_headers)
