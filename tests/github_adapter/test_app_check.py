@@ -74,20 +74,27 @@ def mock_all(
     )
     router.get("/app").mock(
         return_value=httpx.Response(
-            200, json={"id": 1, "name": "foreman-dev", "permissions": perms, "events": events}
+            200,
+            json={
+                "id": 1,
+                "name": "foreman-dev",
+                "slug": "foreman-dev",
+                "permissions": perms,
+                "events": events,
+            },
         )
     )
-    router.get("/app/installations").mock(
+    # P9.10: env installation 대신 repo로 탐지 (GET /repos/{o}/{r}/installation, JWT)
+    router.get(f"/repos/{repo}/installation").mock(
         return_value=httpx.Response(
             200,
-            json=[
-                {
-                    "id": installation_id,
-                    "account": {"login": "org"},
-                    "permissions": perms,
-                    "events": events,
-                }
-            ],
+            json={
+                "id": installation_id,
+                "account": {"login": "org"},
+                "app_slug": "foreman-dev",
+                "permissions": perms,
+                "events": events,
+            },
         )
     )
     router.post(f"/app/installations/{installation_id}/access_tokens").mock(
@@ -156,6 +163,13 @@ async def test_all_ok(
     text = report.render()
     assert "ghs_SECRET_TOKEN" not in text and "[ok]" in text
     assert github_mock.calls.call_count == 8
+    # P9.10: 연결에 쓰는 값
+    assert (report.installation_id, report.account_login, report.default_branch) == (
+        42,
+        "org",
+        "main",
+    )
+    assert report.install_url == "https://github.com/apps/foreman-dev/installations/new"
 
 
 async def test_empty_repo_fails_content_check(
@@ -170,8 +184,9 @@ async def test_empty_repo_fails_content_check(
     assert "commit" in bad[0].detail.lower()
 
 
-# (a') Discussions가 꺼졌거나 Plans 카테고리가 없으면 discussions 항목만 FAIL
-async def test_discussions_category_required(
+# (a') Discussions가 꺼졌거나 Plans 카테고리가 없으면 discussions 항목만 FAIL — P9.10부터 경고
+# (required=False): Plan은 Issue로 게시되므로 연결을 막지 않는다
+async def test_discussions_category_is_a_warning(
     github_mock: respx.MockRouter, http: httpx.AsyncClient, private_key_pem: str
 ) -> None:
     from github_adapter.app_check import run_check
@@ -181,6 +196,7 @@ async def test_discussions_category_required(
     bad = [i for i in report.items if not i.ok]
     assert [i.name for i in bad] == ["discussions"] and "Plans" in bad[0].detail
     assert "Ideas" in bad[0].detail
+    assert bad[0].required is False and report.ok and report.has_plan_category is False
     github_mock.reset()
     mock_all(github_mock, discussions_enabled=False)
     report = await run_check(settings(private_key_pem), http, repo="org/demo")
@@ -209,23 +225,38 @@ async def test_missing_permission_and_event(
     assert by["app"].ok and by["repo"].ok and by["webhook"].ok
 
 
-async def test_installation_repo_and_hook_failures(
+# P9.10: repo에 App이 설치되지 않았으면 installation FAIL + 설치 링크, 이후 repo 점검은 건너뛴다
+async def test_not_installed_gives_install_link(
     github_mock: respx.MockRouter, http: httpx.AsyncClient, private_key_pem: str
 ) -> None:
     from github_adapter.app_check import run_check
 
-    mock_all(
-        github_mock, installation_id=7, hook_url=""
-    )  # 설정의 42가 목록에 없다, 웹훅 URL 비어 있음
-    github_mock.post("/app/installations/42/access_tokens").mock(
+    mock_all(github_mock, hook_url="")  # 웹훅 URL 비어 있음
+    github_mock.get("/repos/org/other/installation").mock(
         return_value=httpx.Response(404, json={})
     )
     report = await run_check(settings(private_key_pem), http, repo="org/other")
     by = {i.name: i for i in report.items}
-    assert not by["installation"].ok and "42" in by["installation"].detail
-    assert not by["token"].ok
-    assert not by["webhook"].ok or by["webhook"].name == "webhook"
+    url = "https://github.com/apps/foreman-dev/installations/new"
+    assert not by["installation"].ok and url in by["installation"].detail
+    assert report.installation_id is None and report.install_url == url
+    assert not by["token"].ok and not by["repo"].ok
+    assert not by["webhook"].ok
     assert not report.ok
+
+
+# P9.10: env installation id는 필수가 아니다 (공개 App — installation은 repo마다)
+async def test_env_installation_not_required(
+    github_mock: respx.MockRouter, http: httpx.AsyncClient, private_key_pem: str
+) -> None:
+    from github_adapter.app_check import run_check
+
+    mock_all(github_mock, installation_id=77)
+    s = settings(private_key_pem)
+    s.github_installation_id = None
+    report = await run_check(s, http, repo="org/demo")
+    assert report.ok, report.render()
+    assert report.installation_id == 77
 
 
 # (c) 설정이 비어 있으면 호출 없이 [FAIL]
@@ -257,6 +288,9 @@ async def test_repo_name_is_case_insensitive_and_canonicalized(
     from github_adapter.app_check import run_check
 
     mock_all(github_mock, repo="Org/Demo")
+    github_mock.get("/repos/org/demo/installation").mock(  # 입력 이름으로 탐지
+        return_value=httpx.Response(200, json={"id": 42, "account": {"login": "Org"}})
+    )
     github_mock.get("/repos/org/demo").mock(
         return_value=httpx.Response(200, json={"full_name": "Org/Demo", "default_branch": "main"})
     )
