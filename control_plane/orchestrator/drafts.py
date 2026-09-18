@@ -8,10 +8,11 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 import structlog
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -379,6 +380,13 @@ def strip_dependency_tasks(result: DecomposeResult) -> tuple[DecomposeResult, li
             dropped[t.title] = list(t.depends_on)
             tasks.remove(t)
             notes.append(f"dropped dependency-only task '{t.title}'")
+    return _without(result, tasks, dropped), notes
+
+
+def _without(
+    result: DecomposeResult, tasks: list[TaskDraft], dropped: dict[str, list[str]]
+) -> DecomposeResult:
+    """버린 Task(제목 → 그 의존)를 가리키던 의존을 그 의존으로 재배선, 빈 Epic 정리."""
     if dropped:
         for t in tasks:
             deps: list[str] = []
@@ -394,7 +402,66 @@ def strip_dependency_tasks(result: DecomposeResult) -> tuple[DecomposeResult, li
             t.depends_on = deps
     used = {t.epic for t in tasks if t.epic}
     epics = [e for e in result.epics if not used or e.title in used]
-    return DecomposeResult(epics=epics, tasks=tasks), notes
+    return DecomposeResult(epics=epics, tasks=tasks)
+
+
+_KINDS = frozenset(get_args(TaskKindValue))
+_ROLES = frozenset(get_args(RoleValue))
+_NON_CODE_ROLES = frozenset({"research", "review", "architect"})
+# 검토·확인·조사류 — 코드를 바꾸지 않는 일 (P9.13)
+_NON_CODE_WORD_RE = re.compile(
+    r"review|verif|check|qa|audit|analy|investigat|inspect|research", re.I
+)
+
+
+def coerce_task_enums(data: Any) -> list[str]:  # Any: json.loads 결과 (검증 전 dict)
+    """P9.13: 검증 전에 모르는 ``kind``/``role_required``를 매핑한다 (라이브 A05F06 ``"review"``).
+    대소문자·구분자만 다르면 그대로, 검토·확인류면 research/review, 그 밖은 feature/coding."""
+    notes: list[str] = []
+    tasks = data.get("tasks") if isinstance(data, dict) else None
+    if not isinstance(tasks, list):
+        return notes
+    for t in tasks:
+        if not isinstance(t, dict):
+            continue
+        for key, allowed, non_code, code in (
+            ("kind", _KINDS, "research", "feature"),
+            ("role_required", _ROLES, "review", "coding"),
+        ):
+            value = t.get(key)
+            if not isinstance(value, str) or value in allowed:
+                continue
+            low = value.strip().lower().replace("-", "_").replace(" ", "_")
+            new = low if low in allowed else (non_code if _NON_CODE_WORD_RE.search(low) else code)
+            t[key] = new
+            if low != new:
+                notes.append(f"{key} {value!r} → {new!r} in {t.get('title')!r}")
+    return notes
+
+
+def _is_non_code(t: TaskDraft) -> bool:
+    # role로만 판단 — "README 작성"처럼 kind만 research인 coding Task는 파일을 바꾼다
+    return t.role_required in _NON_CODE_ROLES
+
+
+def drop_non_code_tasks(result: DecomposeResult) -> tuple[DecomposeResult, list[str]]:
+    """P9.13: MVP 1에는 Coding Agent뿐 — 조사·검토 Task는 버리고 의존을 재배선한다.
+    전부 비코드면 버리지 않고 coding/feature로 바꾼다(빈 Goal 방지)."""
+    tasks = list(result.tasks)
+    non_code = [t for t in tasks if _is_non_code(t)]
+    if not non_code:
+        return result, []
+    if len(non_code) == len(tasks):
+        for t in tasks:
+            t.role_required, t.kind = "coding", "feature"
+        return result, [f"only non-code tasks — kept as coding: {[t.title for t in tasks]}"]
+    dropped = {t.title: list(t.depends_on) for t in non_code}
+    kept = [t for t in tasks if t.title not in dropped]
+    notes = [
+        f"dropped non-code task '{t.title}' (role {t.role_required}, kind {t.kind})"
+        for t in non_code
+    ]
+    return _without(result, kept, dropped), notes
 
 
 def missing_test_paths(result: DecomposeResult) -> list[str]:
@@ -530,9 +597,12 @@ async def decompose_with_retry_full(
         )
         parsed = completion.parsed
         last_raw = completion.text or ""
+        enum_notes: list[str] = []
         if parsed is None:
             try:
-                parsed = DecomposeResult.model_validate_json(completion.text)
+                data = json.loads(completion.text)
+                enum_notes = coerce_task_enums(data)  # P9.13: 모르는 kind/role은 매핑
+                parsed = DecomposeResult.model_validate(data)
             except (ValidationError, ValueError) as exc:
                 last_error = _short_error(exc)
                 parsed = None
@@ -560,10 +630,13 @@ async def decompose_with_retry_full(
                 )
                 parsed = None
         if isinstance(parsed, DecomposeResult):
+            parsed, code_notes = drop_non_code_tasks(parsed)  # P9.13: MVP 1은 코드 Task만
             pre_notes = drop_placeholder_paths(parsed)
             parsed, dep_notes = strip_dependency_tasks(parsed)  # 3차 라이브 #1
             parsed, merge_notes = merge_test_only_tasks(parsed)  # 합치면 테스트 경로가 채워진다
             merge_notes = [
+                *enum_notes,
+                *code_notes,
                 *pre_notes,
                 *dep_notes,
                 *merge_notes,

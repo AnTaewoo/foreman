@@ -231,3 +231,4 @@
 | 2026-09-19T05:30 | P9.7–P9.11 | 완료(코드) | docs/deploy.md §공개 App(사용자: Make public, make migrate 0006, 재시작, 리허설, 심사자 안내 문구). PC-9 리허설은 배포 후 사용자 | |
 | 2026-09-19T06:30 | P9.7 | 보완 | Scheduler.complete_all() — control plane 기동 시 active Goal 프로젝트 전부 판정(배포 전 잔재); make check 570 | |
 | 2026-09-19T08:10 | P9.13 | Red | 라이브 A05F06 재현(research→README→kind:review): 한 번에 코드 Task 1개만, 모르는 kind/role 매핑, 전부 비코드면 coding으로 — import 실패(의도) | |
+| 2026-09-19T08:40 | P9.13 | Green+Gate | coerce_task_enums(검증 전 매핑)+drop_non_code_tasks(role 기준, _without 재배선 공용), 전부 비코드면 coding 유지; make check 574 (test_runtime_applies_due_retries_for_all_projects 부하 시 타임아웃 2회 — 단독·디렉터리 통과, 3회째 전체 통과) | |

@@ -1,8 +1,8 @@
 """P9.13 — 분해 정규화: 모르는 kind/role은 오류가 아니라 매핑, MVP 1에 없는 비코드 Task는 버린다.
 
 라이브(2026-09-19, Goal …A05F06 "README 작성"): Plan은 Task 1개인데 분해가 3개로 쪼갰다 —
-research(모든 파일 소유) → README 작성(coding) → `kind: "review"` 최종 검토. 스키마에 없는 "review" 한
-글자로 Goal 전체가 blocked 됐다.
+research(모든 파일 소유) → README 작성(coding) → `kind: "review"` 최종 검토.
+스키마에 없는 "review" 하나로 Goal 전체가 blocked 됐다.
 """
 
 from __future__ import annotations
