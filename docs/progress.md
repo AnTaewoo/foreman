@@ -218,3 +218,4 @@
 | 2026-09-16T12:50 | P8.5 | Green+Gate | ingest → mark_published_by_id, 중복 XADD 0, tool_calls 확인; make check 480 | 1897264 |
 | 2026-09-19T00:30 | P9.7 | 착수+Red | 운영진 공지 대응(§6 2026-09-19): 완료 판정 red 3건 중 2 fail(의도), 전부 cancelled 케이스는 이미 pass | |
 | 2026-09-19T00:45 | P9.7 | Green+Gate | Scheduler.complete: Epic별 판정 후 Goal, memo+상태 조회로 중복 0; make check 547 | |
+| 2026-09-19T01:00 | P9.8 | Red | find_installation·InstallationTokenPool·ClientRegistry 6건 — import 실패(의도) | |
