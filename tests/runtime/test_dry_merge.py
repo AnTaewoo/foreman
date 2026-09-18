@@ -107,11 +107,11 @@ async def test_dry_merger_disabled_in_real_mode(
 
 
 class _FakeTokens:
-    def token_nowait(self) -> str:
+    def token_nowait(self, repo: str) -> str:  # P9.9: repo별 (RepoRouter 인터페이스)
         return "ghs_test"
 
-    async def token(self) -> str:
-        return "ghs_test"
+    async def refresh_all(self) -> None:
+        return None
 
 
 # (c) Runtime: dry_run이면 체인에 DryMerger가 붙고, in_review Task가 done까지 간다 → 의존 Task 배정

@@ -347,13 +347,13 @@ def test_git_pusher_pushes_branch(tmp_path: Path) -> None:
     git(work, "add", "-A")
     git(work, "commit", "-q", "-m", "x")
     pusher = GitPusher(
-        token_getter=lambda: "ghs_SECRET", url_for=lambda r: str(remote), git_env=GENV
+        token_getter=lambda repo: "ghs_SECRET", url_for=lambda r: str(remote), git_env=GENV
     )
     pusher.push(work, "org/demo", "ai/e/1-t")
     assert "ai/e/1-t" in git(remote, "branch", "--list")
     assert "ghs_SECRET" not in (work / ".git" / "config").read_text()
     assert (
-        GitPusher(token_getter=lambda: "ghs_SECRET").url_for("org/demo")
+        GitPusher(token_getter=lambda repo: "ghs_SECRET").url_for("org/demo")
         == "https://x-access-token:ghs_SECRET@github.com/org/demo.git"
     )
 

@@ -499,18 +499,12 @@ async def test_runner_warms_token_before_repo_clone(
 
 
 def test_build_runner_real_mode_uses_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    """dry_run=false면 build_runner가 토큰 제공자를 만들어 RepoCache와 runner에 준다."""
+    """dry_run=false면 build_runner가 repo별 라우터(P9.9)를 만들어 RepoCache와 runner에 준다."""
     from control_plane.api import app as app_mod
     from control_plane.api.deps import build_state
+    from control_plane.github_routing import RepoRouter
 
-    class Provider:
-        def token_nowait(self) -> str:
-            return "ghs_x"
-
-        async def token(self) -> str:
-            return "ghs_x"
-
-    monkeypatch.setattr(app_mod, "make_token_provider", lambda settings: Provider())
+    monkeypatch.setattr(RepoRouter, "token_nowait", lambda self, repo: f"ghs_{repo.lower()}")
     settings = Settings(
         _env_file=None,
         dry_run=False,
@@ -519,12 +513,10 @@ def test_build_runner_real_mode_uses_token(monkeypatch: pytest.MonkeyPatch) -> N
         github_app_private_key="pem",
         github_installation_id=1,
     )
-    monkeypatch.setattr(app_mod, "get_github_client", lambda s: DryRunGitHubClient())
-    monkeypatch.setattr(app_mod, "get_discussions_client", lambda s: DryRunDiscussionsClient())
     runner = app_mod.build_runner(settings, build_state(settings))
-    assert runner.token_provider is not None
-    assert runner.repo_cache is not None and runner.repo_cache.url_for("org/demo").startswith(
-        "https://x-access-token:ghs_x@"
+    assert isinstance(runner.token_provider, RepoRouter)
+    assert runner.repo_cache is not None and runner.repo_cache.url_for("Org/Demo").startswith(
+        "https://x-access-token:ghs_org/demo@"
     )
 
 

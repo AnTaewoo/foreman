@@ -142,7 +142,7 @@ def test_settings_repo_root() -> None:
 def test_token_url_and_masking(tmp_path: Path) -> None:
     from control_plane.repo_cache import RepoCache, RepoUnavailable, mask_token
 
-    cache = RepoCache(tmp_path / "root", token_getter=lambda: "ghs_SECRET", git_env=GENV)
+    cache = RepoCache(tmp_path / "root", token_getter=lambda repo: "ghs_SECRET", git_env=GENV)
     assert cache.url_for("org/demo") == "https://x-access-token:ghs_SECRET@github.com/org/demo.git"
     assert mask_token("push https://x-access-token:ghs_SECRET@github.com/o/n.git") == (
         "push https://x-access-token:***@github.com/o/n.git"
@@ -152,7 +152,7 @@ def test_token_url_and_masking(tmp_path: Path) -> None:
     ) as exc:  # github.com에 안 나가고 실패(GIT_TERMINAL_PROMPT=0, 잘못된 호스트)
         RepoCache(
             tmp_path / "root2",
-            token_getter=lambda: "ghs_SECRET",
+            token_getter=lambda repo: "ghs_SECRET",
             url_for=lambda r: "https://x-access-token:ghs_SECRET@127.0.0.1:1/org/none.git",
             git_env=GENV,
         ).ensure("org/none")
