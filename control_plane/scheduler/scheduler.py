@@ -304,6 +304,26 @@ class Scheduler:
         return assigned
 
     # ------------------------------------------------------------------ 완료 판정 (P9.7)
+    async def complete_all(self) -> list[str]:
+        """기동 시 1회: active Goal이 있는 모든 프로젝트를 판정 (발행자가 없던 시절의 잔재)."""
+        async with self._factory() as session:
+            project_ids = (
+                (
+                    await session.execute(
+                        select(m.Goal.project_id)
+                        .where(m.Goal.status == GoalStatus.ACTIVE)
+                        .distinct()
+                        .order_by(m.Goal.project_id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        published: list[str] = []
+        for project_id in project_ids:
+            published += await self.complete(project_id)
+        return published
+
     async def complete(self, project_id: str) -> list[str]:
         """active Goal의 Task가 전부 done/cancelled이고 done ≥ 1이면 done Task가 있는 Epic마다
         ``epic.completed``, 이어서 ``goal.completed``. 발행한 id 목록 (epic들, goal 순)."""

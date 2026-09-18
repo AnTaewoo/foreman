@@ -229,3 +229,4 @@
 | 2026-09-19T05:00 | P9.11 | Red (콘솔) | 두 단계 연결(install-app 링크·Issue 안내·warn 스타일)·/demo install_url 캐시 2 fail(의도) | |
 | 2026-09-19T05:20 | P9.11 | Green+Gate (콘솔) | /demo install_url(GET /app slug, 1회 캐시), 연결 박스 ①App 설치 ②점검·연결, 경고 △, 미설치면 설치 링크; make check 569, node --check ok | |
 | 2026-09-19T05:30 | P9.7–P9.11 | 완료(코드) | docs/deploy.md §공개 App(사용자: Make public, make migrate 0006, 재시작, 리허설, 심사자 안내 문구). PC-9 리허설은 배포 후 사용자 | |
+| 2026-09-19T06:30 | P9.7 | 보완 | Scheduler.complete_all() — control plane 기동 시 active Goal 프로젝트 전부 판정(배포 전 잔재); make check 570 | |

@@ -174,6 +174,7 @@ class Runtime:
         self.relay.start()
         assert self.relay._task is not None
         await self.scheduler.recover_orphans()  # D-44 (3): 이전 프로세스의 assigned/running 잔재
+        await self.scheduler.complete_all()  # P9.7: 끝났는데 active로 남은 Goal·Epic
         self.tasks = [
             self.relay._task,
             asyncio.create_task(self._consume(), name="control-plane-consumer"),
