@@ -221,3 +221,4 @@
 | 2026-09-19T01:00 | P9.8 | Red | find_installation·InstallationTokenPool·ClientRegistry 6건 — import 실패(의도) | |
 | 2026-09-19T01:20 | P9.8 | Green+Gate | find_installation, InstallationTokenPool, ClientRegistry(dry 공유), _app_creds 중복 제거; make check 553 | |
 | 2026-09-19T01:50 | P9.9 | Red | RepoRouter·RoutingGitHubClient 4건 + token_getter(repo) 시그니처(repo_cache·pr_opener·runtime·build_runner 테스트) fail(의도) | |
+| 2026-09-19T02:30 | P9.9 | Green+Gate | RepoRouter(repo→installation, prepare·refresh_all·token_nowait(repo)), Routing client 위임, build_runner·Runtime·RepoCache·GitPusher 배선; make check 557 | |

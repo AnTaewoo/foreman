@@ -73,7 +73,7 @@ class GoalRunner:
         repo_path_for: RepoPathFor | None = None,
         emit: Emit | None = None,
         min_tasks: int = 3,  # X.2: 운영 기본 3, Fake 스크립트 테스트는 1
-        token_provider: Any = None,  # Any: InstallationTokenProvider — D-41, 실 모드 clone용
+        token_provider: Any = None,  # Any: RepoRouter(prepare(repo)) — D-41, 실 모드 clone용
         repo_cache: Any = None,  # Any: RepoCache — 관측·테스트용 참조
     ) -> None:
         self._factory = factory
@@ -204,7 +204,7 @@ class GoalRunner:
             payload = created.payload
             CURRENT_PROFILE.set(str(payload.get("llm")) if payload.get("llm") else None)  # D-57
             if self.token_provider is not None:  # D-41: 동기 clone 전에 토큰을 신선하게 (PC-7 발견)
-                await self.token_provider.token()
+                await self.token_provider.prepare(repo_full_name)  # P9.9: 그 repo의 installation
             repo_path = await asyncio.to_thread(self._repo_path_for, repo_full_name)
             state = initial_state(
                 project_id=project_id,

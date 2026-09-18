@@ -464,12 +464,11 @@ async def test_runner_warms_token_before_repo_clone(
 ) -> None:
     calls: list[str] = []
 
-    class Provider:
-        async def token(self) -> str:
-            calls.append("token")
-            return "ghs_x"
+    class Provider:  # P9.9: RepoRouter 인터페이스 — 그 repo의 installation 토큰
+        async def prepare(self, repo: str) -> None:
+            calls.append(f"token:{repo}")
 
-        def token_nowait(self) -> str:
+        def token_nowait(self, repo: str) -> str:
             return "ghs_x"
 
     def repo_path_for(repo: str) -> Path:
@@ -495,7 +494,7 @@ async def test_runner_warms_token_before_repo_clone(
     )
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://t") as c:
         _, gid = await start_goal(c, pump, runner)
-    assert calls[:2] == ["token", "clone:org/demo"] and runner.is_waiting(gid)
+    assert calls[:2] == ["token:org/demo", "clone:org/demo"] and runner.is_waiting(gid)
 
 
 def test_build_runner_real_mode_uses_token(monkeypatch: pytest.MonkeyPatch) -> None:

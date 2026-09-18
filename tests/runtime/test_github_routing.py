@@ -1,4 +1,4 @@
-"""P9.9 — 프로젝트별 installation: repo → projects.installation_id → 그 installation의 client·토큰."""
+"""P9.9 — 프로젝트별 installation: repo → installation_id → 그 client·토큰."""
 
 from __future__ import annotations
 

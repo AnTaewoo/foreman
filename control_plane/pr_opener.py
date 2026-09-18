@@ -43,7 +43,7 @@ class GitPusher:
 
     def __init__(
         self,
-        token_getter: Callable[[], str],
+        token_getter: Callable[[str], str],  # repo → 토큰 (P9.9 installation별)
         *,
         url_for: Callable[[str], str] | None = None,
         git_env: Mapping[str, str] | None = None,
@@ -53,7 +53,7 @@ class GitPusher:
         self._env = dict(git_env or GIT_ENV)
 
     def url_for(self, repo: str) -> str:
-        return self._url_for(repo) if self._url_for else token_url(repo, self._token_getter())
+        return self._url_for(repo) if self._url_for else token_url(repo, self._token_getter(repo))
 
     def push(self, repo_path: Path, repo: str, branch: str) -> None:
         r = subprocess.run(

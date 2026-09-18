@@ -364,12 +364,12 @@ async def test_runtime_wires_pusher_only_in_real_mode(
 ) -> None:
     from control_plane.runtime import Runtime
 
-    class Provider:
-        def token_nowait(self) -> str:
+    class Provider:  # P9.9: RepoRouter 인터페이스
+        def token_nowait(self, repo: str) -> str:
             return "ghs_x"
 
-        async def token(self) -> str:
-            return "ghs_x"
+        async def refresh_all(self) -> None:
+            return None
 
     dry = Runtime(
         settings_for("sqlite+aiosqlite://", dry_run=True), factory, redis, launcher=FakeLauncher()

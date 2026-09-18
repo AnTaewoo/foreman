@@ -15,7 +15,7 @@ import tempfile
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from redis.asyncio import Redis
@@ -27,12 +27,13 @@ from control_plane.dry_merge import DryMerger
 from control_plane.events.bus import RETRY_SUFFIX, STREAM_PREFIX, Delivery, EventBus
 from control_plane.events.outbox import OutboxRelay
 from control_plane.events.projection import Projection
+from control_plane.github_routing import RepoRouter
 from control_plane.pr_opener import GitPusher, PrOpener
 from control_plane.repo_cache import RepoCache
 from control_plane.scheduler.launcher import DockerCliLauncher, InProcessLauncher, WorkerLauncher
 from control_plane.scheduler.scheduler import Scheduler
 from control_plane.store import session as sess
-from github_adapter import get_github_client, make_token_provider
+from github_adapter import ClientRegistry
 from github_adapter.protocol import GitHubClient
 
 log = structlog.get_logger(__name__)
@@ -111,16 +112,22 @@ class Runtime:
         consumer: str = "cp1",
         block_ms: int = 200,
         github: GitHubClient | None = None,
-        token_provider: Any = None,  # Any: InstallationTokenProvider 또는 같은 인터페이스
+        token_provider: Any = None,  # Any: RepoRouter 류 (token_nowait(repo))
     ) -> None:
         self.settings = settings
         self.factory = factory
         self.redis = redis
         self.launcher = launcher or build_launcher(settings, redis)
         # D-41: 실 모드면 installation 토큰으로 clone·push (워커에는 안 준다)
+        # P9.9: 프로젝트별 installation — repo로 client·토큰을 고른다
+        router = (
+            RepoRouter(factory, ClientRegistry(settings))
+            if token_provider is None or github is None
+            else None
+        )
         self.token_provider = token_provider
-        if self.token_provider is None and not settings.dry_run:
-            self.token_provider = make_token_provider(settings)
+        if self.token_provider is None and router is not None and router.token_getter is not None:
+            self.token_provider = router
         token_getter = self.token_provider.token_nowait if self.token_provider else None
         self.repo_cache = RepoCache(
             Path(settings.repo_root), token_getter=token_getter, dry_run=settings.dry_run
@@ -137,7 +144,8 @@ class Runtime:
             repo_resolver=lambda repo: str(self.repo_cache.ensure(repo)),
         )
         self.handlers: list[Handler] = [self.projection.handle, self.scheduler.handle]
-        self.github = github or get_github_client(settings)  # D-37: Dry/실 선택은 control plane
+        # D-37: Dry/실 선택은 control plane. 실 모드면 repo로 installation client를 고른다 (P9.9)
+        self.github = github if github is not None else cast(RepoRouter, router).github
         self.pr_opener = PrOpener(
             factory,
             self.bus,
@@ -206,7 +214,7 @@ class Runtime:
         while not self._stop.is_set():
             if self.token_provider is not None:  # D-41: 동기 경로용 토큰을 미리 신선하게
                 try:
-                    await self.token_provider.token()
+                    await self.token_provider.refresh_all()  # P9.9: 모든 프로젝트의 installation
                 except Exception:
                     log.exception("runtime.token_refresh_failed")
             try:

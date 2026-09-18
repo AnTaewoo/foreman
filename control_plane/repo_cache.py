@@ -58,7 +58,7 @@ class RepoCache:
         *,
         url_for: Callable[[str], str] | None = None,
         git_env: Mapping[str, str] | None = None,
-        token_getter: Callable[[], str] | None = None,
+        token_getter: Callable[[str], str] | None = None,  # repo → 토큰 (P9.9 installation별)
         dry_run: bool = False,
     ) -> None:
         self.root = Path(
@@ -76,7 +76,7 @@ class RepoCache:
         if _is_url(repo):
             return repo
         if self._token_getter is not None:
-            return token_url(repo, self._token_getter())
+            return token_url(repo, self._token_getter(repo))
         return f"https://github.com/{repo}.git"
 
     def target_for(self, repo: str) -> Path:

@@ -24,7 +24,7 @@ from control_plane.api.idempotency import IdempotencyMiddleware
 from control_plane.config import Settings, get_settings
 from control_plane.logging import configure_logging
 from control_plane.orchestrator.runner import GoalRunner
-from github_adapter import get_discussions_client, get_github_client, make_token_provider
+from github_adapter import ClientRegistry
 
 log = structlog.get_logger(__name__)
 STATIC_DIR = Path(__file__).parent / "static"
@@ -133,23 +133,25 @@ async def _close(state: AppState) -> None:
 def build_runner(settings: Settings, state: AppState) -> GoalRunner:
     """설정으로 실 실행기: provider(D-33), GitHub(DRY_RUN이면 Dry). 체크포인터는 startup."""
     from agents.llm.router import ProfileRouter
+    from control_plane.github_routing import RepoRouter
     from control_plane.repo_cache import RepoCache
 
-    token_provider = None if settings.dry_run else make_token_provider(settings)  # D-41
+    # P9.9: 프로젝트별 installation — repo로 client·토큰을 고른다 (DRY_RUN이면 Dry 하나)
+    router = RepoRouter(state.factory, ClientRegistry(settings))
     repo_cache = RepoCache(
         Path(settings.repo_root),
-        token_getter=token_provider.token_nowait if token_provider is not None else None,
+        token_getter=router.token_getter,  # D-41
         dry_run=settings.dry_run,  # D-48
     )
     return GoalRunner(
         factory=state.factory,
         bus=state.bus,
         provider=ProfileRouter(settings),  # D-57: Goal의 프로파일로 위임
-        github=get_github_client(settings),
-        discussions=get_discussions_client(settings),
+        github=router.github,
+        discussions=router.discussions,
         model=None,  # 프로파일의 provider가 모델을 정한다 (D-57)
         repo_path_for=repo_cache.ensure,  # D-38
-        token_provider=token_provider,
+        token_provider=router if router.token_getter is not None else None,
         repo_cache=repo_cache,
     )
 
