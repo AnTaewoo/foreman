@@ -95,6 +95,19 @@ def _missing_permissions(granted: dict[str, Any]) -> list[str]:
     return out
 
 
+async def app_install_url(settings: Any, http: httpx.AsyncClient) -> str | None:
+    """P9.11: 공개 App 설치 링크 (``GET /app``의 slug, JWT). 자격 증명이 없거나 실패하면 None."""
+    app_id = str(getattr(settings, "github_app_id", "") or "")
+    pem = _secret(getattr(settings, "github_app_private_key", ""))
+    if not app_id or not pem:
+        return None
+    r = await http.get(
+        "/app", headers={**API_HEADERS, "Authorization": f"Bearer {app_jwt(app_id, pem)}"}
+    )
+    slug = r.json().get("slug") if r.status_code == 200 else None
+    return f"https://github.com/apps/{slug}/installations/new" if slug else None
+
+
 async def run_check(settings: Any, http: httpx.AsyncClient, *, repo: str) -> CheckReport:
     """``http``는 base_url이 GitHub API인 AsyncClient(테스트는 respx). 쓰기 호출 없음."""
     report = CheckReport()

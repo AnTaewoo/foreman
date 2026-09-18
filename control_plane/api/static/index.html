@@ -40,21 +40,22 @@
       <h2 id="goals-h">Goals <span class="muted" id="project-name"></span></h2>
       <label class="field" id="project-label" hidden><span>프로젝트</span><select id="project"></select></label>
       <details id="connect" class="connect">
-        <summary>GitHub repo 연결</summary>
+        <summary>내 GitHub repo 연결</summary>
         <form id="connect-form">
-          <label class="field"><span>repo (owner/name)</span><input id="connect-repo" placeholder="AnTaewoo/my-repo" required></label>
+          <p class="small steps-inline"><b>①</b> <a id="install-app" href="https://github.com/apps" target="_blank" rel="noopener">GitHub App 설치 ↗</a> — 연결할 repo를 골라 설치 · <b>②</b> repo 입력 → "점검" → "연결"</p>
+          <label class="field"><span>repo (owner/name)</span><input id="connect-repo" placeholder="your-id/your-repo" required></label>
           <div class="row">
             <label class="field"><span>프로젝트 이름</span><input id="connect-name" placeholder="비우면 repo 이름"></label>
             <label class="field"><span>기본 브랜치</span><input id="connect-branch" value="main"></label>
           </div>
-          <label class="field" id="connect-token-label" hidden><span>관리 토큰 (데모 모드)</span><input id="connect-token" type="password" autocomplete="off"></label>
+          <label class="field" id="connect-token-label" hidden><span>관리 토큰 (서버 소유 repo일 때만)</span><input id="connect-token" type="password" autocomplete="off"></label>
           <div class="row">
             <button type="button" id="connect-check-btn" class="secondary">점검</button>
             <button type="submit" id="connect-submit">연결</button>
           </div>
           <p id="connect-error" class="error" role="alert" hidden></p>
           <ul id="connect-check" class="check"></ul>
-          <p class="small muted">repo 조건: 기본 브랜치에 <b>커밋 1개 이상</b>(생성 시 "Add a README file" 체크), Discussions 켜기 + 카테고리 <b>Plans</b>, GitHub App 설치. "점검"이 전부 ok면 연결하세요.</p>
+          <p class="small muted">repo 조건: App 설치 + 기본 브랜치에 <b>커밋 1개 이상</b>(생성 시 "Add a README file" 체크). Discussions에 <b>Plans</b> 카테고리가 없으면 Plan은 Issue로 올라갑니다(△ 경고, 연결 가능). 연결하면 repo 소유자가 GitHub에서 Plan에 <code>/approve</code> 댓글을 달고 PR을 머지합니다.</p>
         </form>
       </details>
 

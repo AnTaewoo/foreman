@@ -163,6 +163,7 @@ async def test_demo_info(demo: httpx.AsyncClient) -> None:
         "user_id": "judge",
         "max_running_goals": 1,
         "goals_per_hour": 3,
+        "install_url": None,  # P9.11: Dry면 GitHub 호출 없이 None
     }
 
 

@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import httpx
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
@@ -28,6 +29,32 @@ from github_adapter import ClientRegistry
 
 log = structlog.get_logger(__name__)
 STATIC_DIR = Path(__file__).parent / "static"
+
+
+async def fetch_install_url(settings: Any) -> str | None:  # Any: Settings 또는 테스트 대역
+    from github_adapter.app_check import app_install_url
+    from github_adapter.client import GITHUB_API_BASE_URL
+
+    async with httpx.AsyncClient(base_url=GITHUB_API_BASE_URL, timeout=10) as http:
+        return await app_install_url(settings, http)
+
+
+class InstallUrl:
+    """P9.11: 공개 App 설치 링크를 한 번만 받아 둔다. Dry면 호출 없이 None, 실패는 재시도."""
+
+    def __init__(self, *, dry_run: bool) -> None:
+        self._dry_run = dry_run
+        self._value: str | None = None
+
+    async def get(self, settings: Any) -> str | None:  # Any: Settings 또는 테스트 대역
+        if self._dry_run:
+            return None
+        if self._value is None:
+            try:
+                self._value = await fetch_install_url(settings)
+            except httpx.HTTPError:
+                log.warning("demo.install_url_failed")
+        return self._value
 
 
 def create_app(
@@ -90,6 +117,8 @@ def create_app(
 
         return {"default": default_profile(settings), "profiles": available_profiles(settings)}
 
+    install_url = InstallUrl(dry_run=settings.dry_run)
+
     @application.get("/demo")
     async def demo_info() -> dict[str, object]:
         """콘솔이 읽는 데모 설정 (토큰은 절대 포함하지 않는다)."""
@@ -98,6 +127,7 @@ def create_app(
             "user_id": settings.demo_user_id,
             "max_running_goals": settings.demo_max_running_goals,
             "goals_per_hour": settings.demo_goals_per_hour,
+            "install_url": await install_url.get(settings),  # P9.11 공개 App 설치 링크
         }
 
     for r in (projects.router, goals.router, tasks.router, events.router, stream.router):

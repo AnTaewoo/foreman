@@ -227,3 +227,4 @@
 | 2026-09-19T04:10 | P9.11 | Red | Plan Issue fallback(그래프·Dry·REST 멱등)·plan_url(kind) 4건 — import 실패(의도) | |
 | 2026-09-19T04:40 | P9.11 | Green+Gate (백엔드) | Plans 없으면 create_discussion LookupError → create_plan_issue(ai-platform:plan 마커, REST·Dry 멱등), payload plan_issue(추가)→goals.plan_kind(0006)→plan_url /issues/N; make check 567 | |
 | 2026-09-19T05:00 | P9.11 | Red (콘솔) | 두 단계 연결(install-app 링크·Issue 안내·warn 스타일)·/demo install_url 캐시 2 fail(의도) | |
+| 2026-09-19T05:20 | P9.11 | Green+Gate (콘솔) | /demo install_url(GET /app slug, 1회 캐시), 연결 박스 ①App 설치 ②점검·연결, 경고 △, 미설치면 설치 링크; make check 569, node --check ok | |

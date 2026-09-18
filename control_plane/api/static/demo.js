@@ -96,6 +96,7 @@
     try { state.demo = await api("/demo"); } catch (_) { /* 데모 모드 아님 */ }
     const demo = !!state.demo.demo_mode;
     $("connect-token-label").hidden = !demo; $("demo-tag").hidden = !demo;
+    if (state.demo.install_url) $("install-app").href = state.demo.install_url; // P9.11 공개 App
     $("demo-note").textContent = demo
       ? `데모 모드: 프로젝트당 동시에 진행되는 Goal ${state.demo.max_running_goals}개, 시간당 ${state.demo.goals_per_hour}개까지. 승인자 계정 "${state.demo.user_id}"로 동작합니다.`
       : `이 콘솔의 승인·생성은 계정 "${state.demo.user_id}"로 기록됩니다.`;
@@ -391,8 +392,14 @@
   function renderCheck(body) {
     const ul = $("connect-check"); ul.innerHTML = "";
     for (const it of body.items) {
-      const li = document.createElement("li"); li.className = it.ok ? "ok" : "bad";
+      const li = document.createElement("li");
+      li.className = it.ok ? "ok" : it.required === false ? "warn" : "bad"; // 경고는 연결을 막지 않는다
       li.textContent = `${it.name}: ${it.detail}`; ul.appendChild(li);
+    }
+    if (body.install_url && body.installation_id == null) { // 미설치 → 설치 링크 (P9.11)
+      const li = document.createElement("li"); li.className = "bad";
+      const a = document.createElement("a"); a.href = body.install_url; a.target = "_blank"; a.rel = "noopener";
+      a.textContent = "이 repo에 GitHub App 설치 ↗"; li.appendChild(a); ul.appendChild(li);
     }
     if (body.canonical) $("connect-repo").value = body.canonical; // GitHub의 정식 대소문자로 연결
     return body.ok;

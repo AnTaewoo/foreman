@@ -288,7 +288,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P9.8 | 공개 App: installation 토큰 풀 + repo별 설치 탐지 | P9.7 | done | d58cb0d |
 | P9.9 | 프로젝트별 installation으로 실행 경로(runner·runtime·repo_cache·pr_opener) | P9.8 | done | ab33c73 |
 | P9.10 | 연결 API: 설치가 곧 권한, `installation_id` 기록, 점검 경고 강등(빈 repo는 400) | P9.9 | done | (this) |
-| P9.11 | Plans 카테고리 없으면 Plan을 Issue로 + 콘솔 2단계(App 설치 → repo 연결) | P9.10 | running | |
+| P9.11 | Plans 카테고리 없으면 Plan을 Issue로 + 콘솔 2단계(App 설치 → repo 연결) | P9.10 | done (백엔드 e24e42c) | (this) |
 | **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending (배포 대기 — 사용자 sudo 단계) | docs/pc/PC-9.md |
 
 ---
