@@ -284,6 +284,11 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P9.4 | 배포 파일(systemd) + docs/deploy.md | P9.3 | done | fa6c25e |
 | P9.5 | 데모 LLM 선정 (gemma4:e4b vs qwen2.5-coder:14b, e2e; 12b는 Ollama 업그레이드 필요) | PC-8 | done (14b 유지) | b878098 |
 | P9.6 | 데모 콘텐츠: demo_seed + showcase Goal | P9.3, P9.5 | running (스크립트 fa6c25e, 실행은 배포 후) | |
+| P9.7 | Goal·Epic 완료 판정 — Scheduler가 `epic.completed`→`goal.completed` 발행 (§6 2026-09-19) | P9.3 | running | |
+| P9.8 | 공개 App: installation 토큰 풀 + repo별 설치 탐지 | P9.7 | todo | |
+| P9.9 | 프로젝트별 installation으로 실행 경로(runner·runtime·repo_cache·pr_opener) | P9.8 | todo | |
+| P9.10 | 연결 API: 설치가 곧 권한, `installation_id` 기록, 빈 repo 초기 커밋, 점검 경고 강등 | P9.9 | todo | |
+| P9.11 | Plans 카테고리 없으면 Plan을 Issue로 + 콘솔 2단계(App 설치 → repo 연결) | P9.10 | todo | |
 | **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending (배포 대기 — 사용자 sudo 단계) | docs/pc/PC-9.md |
 
 ---
@@ -292,7 +297,8 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 
 | 일시 | Task | 사유 | 옵션 / 필요한 조치 |
 |---|---|---|---|
-| 2026-09-18 | (결정 요청) Goal·Epic 완료 발행자 (인계서 #1, D-27 공백) | 라이브 3건(Foreman_test1·2·3, openai)에서 Task 전부 done인데 Goal·Epic이 `active`로 남는다. `goal.completed`/`epic.completed`는 스키마·projection 핸들러만 있고 발행자가 없다(D-27: MVP 4). 콘솔이 끝나지 않은 것으로 보이고 데모 모드 '동시 Goal 1개' 한도에도 계속 잡힌다. **옵션 (a, 권장)** MVP 1 최소 판정 — Scheduler(이미 `epic.activated` 발행자)가 Epic의 Task가 전부 done/cancelled(그리고 done ≥ 1)이면 `epic.completed`, Epic이 전부 done이면 `goal.completed`. §9.4의 2~5단계(Test/Review Agent, Release Decision)는 MVP 4에서 이 판정 앞단에 넣는다. 스키마 변경 없음, 상태 변경은 projection만. **옵션 (b)** D-27 그대로 보류, 콘솔만 'n/n done'을 완료로 표시(데모 한도는 계속 잡힘). 결정 전 구현하지 않는다 |
+| 2026-09-19 | (기록) 운영진 공지 대응 — 공개 App + repo만 입력 (P9.7–P9.11) | 사용자 결정 | 운영진 공지(링크로 바로, 설치·환경 구축·키 발급 없이) + 사용자 방향 "App `foreman_antaewoo`를 public으로, 심사자는 자기 repo에 설치하고 웹에서 repo만 입력". App ID·키·웹훅 secret은 App 단위라 서버 env 그대로, installation id만 repo별 → `GET /repos/{o}/{r}/installation`으로 자동 탐지. **D-42 확장**: App 1개, installation 여러 개. 결정: (1) 완료 판정은 아래 결정 요청의 옵션 (a) — 단 기준은 "Goal의 Task가 전부 done/cancelled이고 done ≥ 1"(Task 없는 Epic이 Goal 완료를 막지 않게), done Task가 있는 Epic마다 `epic.completed`를 먼저 (2) 서버 installation이 아닌 repo의 `POST /projects`는 **설치가 곧 권한 증명** — admin token 없이 허용, 설치 확인 필수. 삭제·취소 등 나머지 AdminDep 유지 (3) 외부 설치 프로젝트 members는 installation 계정 login=owner만(콘솔 `judge` 없음) → 승인·머지는 GitHub에서 본인 아이디로 (4) Plans 카테고리 없으면 Plan을 Issue로 게시, Issue 댓글 `/approve` (5) 빈 repo면 서버가 README 초기 커밋(마커, 멱등). 기각: 심사자가 App을 만들어 env 4개 입력(서버를 직접 띄워야 함), manifest flow·Workspace(일정), 콘솔 머지 버튼·샌드박스 3개(외부 repo는 본인이 머지). 회원 기능 없음(신원 = 웹훅 서명된 GitHub 댓글 작성자). 사용자 작업: App → Make public |
+| 2026-09-18 | (결정 요청 → 2026-09-19 옵션 (a)로 확정, 위 행) Goal·Epic 완료 발행자 (인계서 #1, D-27 공백) | 라이브 3건(Foreman_test1·2·3, openai)에서 Task 전부 done인데 Goal·Epic이 `active`로 남는다. `goal.completed`/`epic.completed`는 스키마·projection 핸들러만 있고 발행자가 없다(D-27: MVP 4). 콘솔이 끝나지 않은 것으로 보이고 데모 모드 '동시 Goal 1개' 한도에도 계속 잡힌다. **옵션 (a, 권장)** MVP 1 최소 판정 — Scheduler(이미 `epic.activated` 발행자)가 Epic의 Task가 전부 done/cancelled(그리고 done ≥ 1)이면 `epic.completed`, Epic이 전부 done이면 `goal.completed`. §9.4의 2~5단계(Test/Review Agent, Release Decision)는 MVP 4에서 이 판정 앞단에 넣는다. 스키마 변경 없음, 상태 변경은 projection만. **옵션 (b)** D-27 그대로 보류, 콘솔만 'n/n done'을 완료로 표시(데모 한도는 계속 잡힘). 결정 전 구현하지 않는다 |
 | 2026-09-18 | (결정 요청) Plan 반려 = Goal 취소 (인계서 #2) | `POST …/reject {reason}` → `goal.cancelled`. 사유를 반영한 재계획이 없어 의존성 하나를 고치려면 Goal을 새로 만들어야 하고 취소된 Plan Discussion이 repo에 남는다. projection은 이미 plan revision 2(awaiting→planning→awaiting)를 지원한다. **옵션 (a)** reject는 취소로 두고 '수정 요청'(`/changes`, 콘솔 버튼) 경로 추가 — reason을 `draft_plan` 입력에 넣어 같은 Discussion에 revision n+1. 프롬프트 세트 변경이라 e2e로 판단(프롬프트 규칙). **옵션 (b, 제출 전 권장)** 현행 유지, 콘솔 버튼 문구를 '반려(Goal 취소)'로 명확화하고 (a)는 P10 |
 | 2026-09-18 | (기록) P9 콘솔 단순화 | 구현 조정 | 사용자 방향: "심플하게 — 세부 정보는 접거나 뺀다"(보이는 게 많을수록 프런트 오류도 는다). 정적 파일 3개만 변경(API 변경 없음). (1) Plan은 `<details id="plan-box">` — 승인 대기(`awaiting_plan_approval`)일 때만 펼치고, `goal.id:status`가 바뀔 때만 open을 건드려 사용자의 접기/펼치기를 존중 (2) 이벤트 로그는 `<details id="events-box">`(기본 접힘) — 접혀 있으면 `renderEvents`가 그리지 않고 `ontoggle`에서 그린다, WS 상태 점은 summary에 남긴다 (3) '위험 구역'은 `<details id="settings">`('프로젝트 설정', 기본 접힘) 안으로 — 프로젝트가 없으면 통째로 숨김 (4) Task 표 6열 → 4열(`#`=Issue 링크 · Task · 상태 · PR): 시도 횟수·Issue 열·소유 파일 줄 제거(Issue/PR에서 본다), Task가 없으면 표(`tasks-box`) 숨김 (5) 제거: `goal-meta`(생성 시각·LLM) 줄, `llm-hint`·`LLM_HINT`(프로파일별 안내), '영어 권장' 안내 줄(placeholder로 흡수), Goal 목록의 시각·LLM 표기(진행 `done/total`과 배지만), 죽은 CSS(`.hint`, `#goal-meta`, `.events-head`). Red bd3e8fc(`tests/api/test_demo_ui.py`: `events-box`/`plan-box`/`settings` 존재, `goal-meta`/`llm-hint`/`<th>시도</th>`/`<th>Issue</th>` 부재; 같은 커밋의 E501 주석 한 줄을 이번에 줄바꿈). 검증: `node --check demo.js`, 제거한 id의 잔여 참조 0, `make check` 544 passed. 브라우저 육안 확인은 하지 않았다(사용자 콘솔 확인 몫) |
 | 2026-09-18 | (기록) P9 콘솔 UI 리뷰 반영 | 구현 조정 | 다른 세션의 콘솔 UI/UX 리뷰(수정 11·추가 9·축소 5)를 정적 파일 3개에만 반영(API 변경 없음). '프로젝트 삭제' → 좌측 하단 '위험 구역'의 '프로젝트 보관'(빨간 계열, 데모 모드면 관리 토큰을 그때 묻는다) · 오류는 폼 아래 인라인(`role=alert`) + 닫기 버튼 있는 토스트(`role=status`, 오류는 자동으로 닫히지 않음), 메시지는 `detail`만 · 모든 쓰기 버튼은 진행 중 라벨+disabled(`busy`) · '로컬 LLM 1~3분' 하드코딩 제거, 프로파일별 힌트 · Reject는 사유 입력을 펼친 뒤 '반려 확정 (Goal 취소)' · 프로젝트 전환은 새로고침 없이(`switchProject`, 옛 WS는 재연결하지 않음), `?project=&goal=` 유지 · 이벤트는 기본 선택 Goal만(`correlation_id`), '프로젝트 전체 보기' 토글, Task는 `#번호 제목`으로, `task.failed`는 펼치면 테스트 출력 전체 · Task 행은 ▸ 버튼(펼침 유지) · 상태 배지 한국어 라벨(`STATUS_LABEL`, 원문은 title) · Goal 목록은 button(키보드), `:focus-visible`, label, muted 대비 상향 · 모바일: 선택 시 `scrollIntoView`, 표 가로 스크롤, nav wrap · 진행 단계(`#steps`)와 '누구 차례' 문구, 머지 대기 PR 버튼, 경과 시간, 취소·완료 숨기기 필터, WS 상태 점 + 30초 끊김 배너, 탭 제목 '(승인 대기 n)', 다크 모드(토큰화), favicon · 사용 방법은 `<details>`(첫 방문만 펼침), 예시 Goal 접기, '데모' 표기는 데모 모드일 때만. 발견: `hidden` 속성이 `display:flex`에 덮여 승인/반려 상자가 늘 보였다 → `[hidden]{display:none!important}`. headless Chrome 스크린샷(1360·520px, 다크)으로 확인. 리뷰의 무인증 공개 경고는 UX 밖 — 사용자 결정(데모 모드 재활성화 또는 nginx basic auth) |
@@ -871,6 +877,32 @@ discussion_comment, pull_request, pull_request_review; `check_suite`는 선택),
 - green: `demo_seed.py` — (1) `scripts/cleanup_repo.py AnTaewoo/foreman_test --apply` (2) DB `hitl` drop → `make migrate`, Redis 0 FLUSHDB 안내(PC-8 절차) (3) `POST /projects {name:"foreman demo", repo:"AnTaewoo/foreman_test", members:[{AnTaewoo,owner},{judge,approver}]}`(admin token) (4) `[Showcase]` Goal 생성 → 사용자 approve → 사용자 PR 머지 → done.
 - 정리 정책: 심사 기간(09-20 ~ +7일)에는 cleanup을 돌리지 않는다(DB↔repo 불일치 방지). 종료 후 cleanup + DB 초기화. Discussions는 누적 허용(D-42).
 - gate: 콘솔에서 showcase Goal done + merged PR 링크.
+
+### P9.7 Goal·Epic 완료 판정 (0.25d) — §6 2026-09-19
+- owned_paths: `control_plane/scheduler/scheduler.py`, `tests/scheduler/test_completion.py`(신규), `docs/design.md`(§9.4 한 문단)
+- red: 마지막 Task done → done Task가 있는 Epic마다 `epic.completed` 1건 → `goal.completed` 1건(seq가 뒤); 웹훅 재전송에도 중복 없음; 일부 cancelled여도 done ≥ 1이면 완료; Task 없는 Epic은 막지 않음; 전부 cancelled면 미발행.
+- green: `pr.merged`/`task.completed`/`task.cancelled` 처리 뒤 프로젝트의 active Goal을 판정. 중복 방지는 `activated_epics`와 같은 memo + 상태 조회. 스키마 무변경.
+- gate: `make check`.
+
+### P9.8 installation 토큰 풀 + 설치 탐지 (0.5d)
+- owned_paths: `github_adapter/auth.py`, `github_adapter/__init__.py`, `tests/github_adapter/`
+- red(respx): `find_installation(repo)` 200 → `(id, account_login)`, 404 → None, JWT로 호출; 풀이 installation별 토큰을 따로 받고 캐시; 팩토리가 `installation_id` 인자로 그 installation 토큰을 쓴다, 없으면 env.
+- gate: `make check`.
+
+### P9.9 프로젝트별 installation 실행 경로 (0.5d)
+- owned_paths: `control_plane/api/app.py`, `control_plane/runtime.py`, `control_plane/repo_cache.py`, `control_plane/pr_opener.py`, `control_plane/orchestrator/**`의 GitHub 호출부, 해당 tests
+- red: installation이 다른 두 프로젝트의 clone URL·REST 호출 Authorization이 각자 토큰; `installation_id` 없는 프로젝트는 env 경로(회귀 없음).
+- gate: `make check`.
+
+### P9.10 연결 API (0.5d)
+- owned_paths: `control_plane/api/projects.py`, `control_plane/api/deps.py`, `control_plane/events/schema.py`(필드 추가만), `control_plane/events/projection.py`, `github_adapter/app_check.py`, `github_adapter/client.py`(초기 커밋), tests
+- red: 미설치 repo 400 `app_not_installed` + `install_url`; 외부 설치 repo는 데모 모드에서도 admin token 없이 201, members=[installation 계정 owner]; `project.created.installation_id` → `projects.installation_id`; 빈 repo면 README 커밋 1회(재호출 멱등); `run_check`가 탐지한 installation을 쓰고 Discussions/Plans는 경고.
+- gate: `make check`.
+
+### P9.11 Plan Issue fallback + 콘솔 2단계 (0.5d)
+- owned_paths: `control_plane/orchestrator/**`의 Plan 게시부, `github_adapter/webhooks.py`·`control_plane/api/approvals.py`(Issue `/approve` 매칭), `control_plane/api/static/*`, tests
+- red: Plans 카테고리 없음 → Plan이 마커 달린 Issue로(멱등), `plan_discussion_url`에 Issue URL, 그 Issue의 `/approve`로 승인; 콘솔에 App 설치 링크 → repo 연결 2단계.
+- gate: `make check` + 시크릿 창 리허설(두 번째 GitHub 계정, llm=openai).
 
 ### PC-9 심사자 워크스루 (0.5d, 09-19)
 - 자동: `make check`, `scripts/check_runbook.sh`, `curl -I https://foreman.antaewoo.com/` 200, `/health`, WS 연결

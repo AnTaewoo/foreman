@@ -670,6 +670,10 @@ Goal → Plan(승인) → Task Graph
 4. Orchestrator가 Release Decision(T3) 생성: 변경 요약, AC 매트릭스, 남은 이슈
 5. 승인 → Goal done, 릴리즈 노트 Discussion(Reports) 게시
 
+MVP 1 최소 판정 (ROADMAP P9.7): Scheduler가 Goal의 Task가 전부 done/cancelled이고 done ≥ 1이면
+done Task가 있는 Epic마다 `epic.completed`, 이어서 `goal.completed`를 발행한다. 2~5단계는 MVP 4에서
+이 판정 앞단에 들어간다.
+
 ### 9.5 인간 개입 지점 (모두 Mission Control + GitHub 양쪽에서 가능)
 
 - Decision 응답
@@ -744,7 +748,7 @@ MVP 1 제출·시연용으로 API 서버가 `GET /`에서 정적 1페이지를 �
 
 | 영역 | 설계 |
 |---|---|
-| GitHub 인증 | GitHub App installation token (단기), 사용자 OAuth는 승인 권한 매핑에만 |
+| GitHub 인증 | GitHub App installation token (단기), 사용자 OAuth는 승인 권한 매핑에만. App은 public 1개, installation은 repo마다 — 연결 시 `GET /repos/{o}/{r}/installation`으로 찾아 `projects.installation_id`에 기록하고 그 프로젝트의 모든 GitHub 호출이 그 installation 토큰을 쓴다 (ROADMAP P9.8–P9.10). App 설치가 곧 repo 연결 권한 |
 | 권한 분리 | 플랫폼 멤버 role(owner/approver/viewer) ↔ GitHub 사용자 매핑. 승인은 approver 이상 |
 | Secrets | 워커에 미주입. Agent가 `.env`, 키 파일 읽기 시도 → 툴 레벨 차단 + 이벤트 |
 | Prompt Injection | Issue/PR/웹 내용은 "데이터"로 태깅해 시스템 프롬프트와 분리. 외부 텍스트에 포함된 명령은 툴 호출 권한 없음. Research Agent 결과는 Review Agent가 재검증 |
