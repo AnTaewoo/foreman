@@ -285,8 +285,8 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P9.5 | 데모 LLM 선정 (gemma4:e4b vs qwen2.5-coder:14b, e2e; 12b는 Ollama 업그레이드 필요) | PC-8 | done (14b 유지) | b878098 |
 | P9.6 | 데모 콘텐츠: demo_seed + showcase Goal | P9.3, P9.5 | running (스크립트 fa6c25e, 실행은 배포 후) | |
 | P9.7 | Goal·Epic 완료 판정 — Scheduler가 `epic.completed`→`goal.completed` 발행 (§6 2026-09-19) | P9.3 | done | f84116a |
-| P9.8 | 공개 App: installation 토큰 풀 + repo별 설치 탐지 | P9.7 | running | |
-| P9.9 | 프로젝트별 installation으로 실행 경로(runner·runtime·repo_cache·pr_opener) | P9.8 | todo | |
+| P9.8 | 공개 App: installation 토큰 풀 + repo별 설치 탐지 | P9.7 | done | (next) |
+| P9.9 | 프로젝트별 installation으로 실행 경로(runner·runtime·repo_cache·pr_opener) | P9.8 | running | |
 | P9.10 | 연결 API: 설치가 곧 권한, `installation_id` 기록, 빈 repo 초기 커밋, 점검 경고 강등 | P9.9 | todo | |
 | P9.11 | Plans 카테고리 없으면 Plan을 Issue로 + 콘솔 2단계(App 설치 → repo 연결) | P9.10 | todo | |
 | **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending (배포 대기 — 사용자 sudo 단계) | docs/pc/PC-9.md |

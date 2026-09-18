@@ -65,7 +65,9 @@ async def test_pool_separates_installations(
     github_mock: respx.MockRouter, http: httpx.AsyncClient, private_key_pem: str, clock: Clock
 ) -> None:
     routes = _tokens(github_mock, 42, 43, 7)
-    pool = InstallationTokenPool(APP_ID, private_key_pem, http, default_installation_id=7, now=clock)
+    pool = InstallationTokenPool(
+        APP_ID, private_key_pem, http, default_installation_id=7, now=clock
+    )
     assert await pool.provider(42).token() == "ghs_42"
     assert await pool.provider(43).token() == "ghs_43"
     assert await pool.provider(None).token() == "ghs_7"

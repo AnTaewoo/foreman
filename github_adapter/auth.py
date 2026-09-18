@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator, Callable, Generator
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -64,6 +65,10 @@ class InstallationTokenProvider:
         self._expires_at: datetime | None = None
         self._lock = asyncio.Lock()
 
+    @property
+    def installation_id(self) -> int:
+        return self._installation_id
+
     def _fresh(self) -> bool:
         if self._token is None or self._expires_at is None:
             return False
@@ -96,6 +101,71 @@ class InstallationTokenProvider:
     def invalidate(self) -> None:
         self._token = None
         self._expires_at = None
+
+
+@dataclass(frozen=True)
+class Installation:
+    id: int
+    account_login: str
+
+
+async def find_installation(
+    app_id: str,
+    private_key_pem: str,
+    repo: str,
+    client: httpx.AsyncClient,
+    *,
+    now: Callable[[], datetime] = _utc_now,
+) -> Installation | None:
+    """공개 App (P9.8): repo에 설치된 installation. 미설치면 None (404)."""
+    res = await client.get(
+        f"/repos/{repo}/installation",
+        headers={
+            **API_HEADERS,
+            "Authorization": f"Bearer {app_jwt(app_id, private_key_pem, now=now())}",
+        },
+    )
+    if res.status_code == 404:
+        return None
+    res.raise_for_status()
+    data = res.json()
+    return Installation(id=int(data["id"]), account_login=str(data["account"]["login"]))
+
+
+class InstallationTokenPool:
+    """installation id → ``InstallationTokenProvider`` (P9.8). ``None``은 env 기본 installation."""
+
+    def __init__(
+        self,
+        app_id: str,
+        private_key_pem: str,
+        client: httpx.AsyncClient,
+        *,
+        default_installation_id: int | None = None,
+        now: Callable[[], datetime] = _utc_now,
+    ) -> None:
+        self.app_id = app_id
+        self._pem = private_key_pem
+        self._client = client
+        self.default_installation_id = default_installation_id
+        self._now = now
+        self._providers: dict[int, InstallationTokenProvider] = {}
+
+    def provider(self, installation_id: int | None) -> InstallationTokenProvider:
+        iid = installation_id if installation_id is not None else self.default_installation_id
+        if iid is None:
+            raise ValueError("installation_id is required (project has none and no env default)")
+        if iid not in self._providers:
+            self._providers[iid] = InstallationTokenProvider(
+                self.app_id, self._pem, iid, self._client, now=self._now
+            )
+        return self._providers[iid]
+
+    def installation_ids(self) -> list[int]:
+        return list(self._providers)
+
+    async def find(self, repo: str) -> Installation | None:
+        return await find_installation(self.app_id, self._pem, repo, self._client, now=self._now)
 
 
 class InstallationAuth(httpx.Auth):
