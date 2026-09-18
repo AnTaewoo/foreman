@@ -96,3 +96,30 @@ async def test_all_cancelled_is_not_completed(
     await h.pump()
     assert await h.events("epic.completed") == []
     assert await h.events("goal.completed") == []
+
+
+# 배포 전 데이터: Task는 전부 done인데 Goal·Epic은 active (발행자가 없던 시절).
+# control plane 기동 시 complete_all()이 한 번 판정한다
+async def test_complete_all_on_startup(
+    factory: async_sessionmaker[AsyncSession], redis: Redis
+) -> None:
+    h = Harness(factory, redis)
+    await h.publish(*BOOTSTRAP, task_created("T1", [], ["src/a/**"], epic="E1", issue=10))
+    await h.pump()
+    run_id = h.launcher.specs[0].run_id
+    await h.publish(
+        ev(E.TASK_STARTED, "task", "T1", {"run_id": run_id}),
+        ev(E.TASK_COMPLETED, "task", "T1", {"run_id": run_id, "pr_number": 5}),
+        ev(E.PR_MERGED, "pr", "5", {"task_id": "T1", "pr_number": 5}),
+    )
+    # 옛 control plane: projection만 적용하고 완료 판정은 없다
+    while await h.relay.relay_once() > 0:
+        pass
+    await h.bus.poll_once("old", h.projection.handle, consumer="t", project_id="P1")
+    assert await h.events("goal.completed") == []
+
+    fresh = Harness(factory, redis)  # 재시작한 control plane
+    assert await fresh.scheduler.complete_all() == ["E1", GID]
+    await fresh.pump()
+    assert (await _statuses(factory))[0] is GoalStatus.DONE
+    assert await fresh.scheduler.complete_all() == []  # 두 번째 기동은 no-op
