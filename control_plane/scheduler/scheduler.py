@@ -27,7 +27,7 @@ from control_plane.events.schema import UNCHAINED, Actor, EntityType, Event, Eve
 from control_plane.scheduler.launcher import LaunchError, LaunchSpec, WorkerLauncher
 from control_plane.scheduler.queue import Candidate, load_project_tasks, pick_ready
 from control_plane.store import models as m
-from control_plane.store.enums import EpicStatus, TaskStatus
+from control_plane.store.enums import EpicStatus, GoalStatus, TaskStatus
 
 log = structlog.get_logger(__name__)
 
@@ -52,6 +52,18 @@ RELEASERS = frozenset(
         EventType.TASK_CANCELLED,
     }
 )
+# P9.7: Task가 끝났을 수 있는 이벤트 → Goal·Epic 완료 판정 (design §9.4 MVP 1 최소 판정)
+FINISHERS = frozenset({EventType.PR_MERGED, EventType.TASK_COMPLETED, EventType.TASK_CANCELLED})
+_FINISHED = (TaskStatus.DONE, TaskStatus.CANCELLED)
+
+
+def _finished(tasks: list[m.Task]) -> bool:
+    """전부 done/cancelled이고 done ≥ 1 (전부 cancelled는 완료가 아니다)."""
+    return (
+        bool(tasks)
+        and all(t.status in _FINISHED for t in tasks)
+        and any(t.status is TaskStatus.DONE for t in tasks)
+    )
 
 
 def _slugify(text: str) -> str:
@@ -111,6 +123,7 @@ class Scheduler:
         )
         self.in_flight: set[str] = set()  # task_id
         self.activated_epics: set[str] = set()
+        self.completed: set[str] = set()  # P9.7: 발행한 epic/goal id (read-your-writes memo)
         self._run_to_task: dict[str, str] = {}
         self._task_run: dict[str, str] = {}  # task_id → 현재 run_id (오래된 run의 종료를 무시)
 
@@ -123,6 +136,8 @@ class Scheduler:
             self._release(event)
         if event.type in TRIGGERS:
             await self.tick(event.project_id)
+        if event.type in FINISHERS:
+            await self.complete(event.project_id)
 
     async def ingest(self, event: Event, *, message_id: str = "") -> None:
         """워커 발 미서명 이벤트 → append_signed(멱등) + projection 적용.
@@ -287,6 +302,65 @@ class Scheduler:
                 in_flight=len(self.in_flight),
             )
         return assigned
+
+    # ------------------------------------------------------------------ 완료 판정 (P9.7)
+    async def complete(self, project_id: str) -> list[str]:
+        """active Goal의 Task가 전부 done/cancelled이고 done ≥ 1이면 done Task가 있는 Epic마다
+        ``epic.completed``, 이어서 ``goal.completed``. 발행한 id 목록 (epic들, goal 순)."""
+        async with self._factory() as session:
+            goals = (
+                (
+                    await session.execute(
+                        select(m.Goal).where(
+                            m.Goal.project_id == project_id, m.Goal.status == GoalStatus.ACTIVE
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            goal_ids = [g.id for g in goals if g.id not in self.completed]
+            if not goal_ids:
+                return []
+            tasks = (
+                (await session.execute(select(m.Task).where(m.Task.goal_id.in_(goal_ids))))
+                .scalars()
+                .all()
+            )
+            epics = {
+                e.id: e
+                for e in (await session.execute(select(m.Epic).where(m.Epic.goal_id.in_(goal_ids))))
+                .scalars()
+                .all()
+            }
+        published: list[str] = []
+        for goal_id in goal_ids:
+            mine = [t for t in tasks if t.goal_id == goal_id]
+            prev: str | None = None
+            for epic in sorted(
+                (e for e in epics.values() if e.goal_id == goal_id), key=lambda e: (e.order, e.id)
+            ):
+                own = [t for t in mine if t.epic_id == epic.id]
+                if (
+                    epic.status is EpicStatus.ACTIVE  # 이미 done이거나 한 번도 배정되지 않았다
+                    and epic.id not in self.completed
+                    and _finished(own)
+                ):
+                    self.completed.add(epic.id)
+                    prev = await self._emit(
+                        project_id, goal_id, EventType.EPIC_COMPLETED, "epic", epic.id, {}, prev
+                    )
+                    published.append(epic.id)
+            if not _finished(mine):  # Task 없는 Epic은 막지 않는다
+                continue
+            self.completed.add(goal_id)
+            await self._emit(
+                project_id, goal_id, EventType.GOAL_COMPLETED, "goal", goal_id, {}, prev
+            )
+            published.append(goal_id)
+        if published:
+            log.info("scheduler.completed", project_id=project_id, ids=published)
+        return published
 
     def _spec(
         self,
