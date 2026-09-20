@@ -423,30 +423,7 @@
   $("goal-filter").onchange = () => { safeSet("foreman.hideEnded", $("goal-filter").checked ? "1" : ""); renderGoals(); };
   $("events-box").ontoggle = renderEvents;
 
-  // ---- GitHub repo 연결 (POST /projects) + 사전 점검 (GET /projects/check) ------------------
-  function renderCheck(body) {
-    const ul = $("connect-check"); ul.innerHTML = "";
-    for (const it of body.items) {
-      const li = document.createElement("li");
-      li.className = it.ok ? "ok" : it.required === false ? "warn" : "bad"; // 경고는 연결을 막지 않는다
-      li.textContent = `${it.name}: ${it.detail}`; ul.appendChild(li);
-    }
-    if (body.install_url && body.installation_id == null) { // 미설치 → 설치 링크 (P9.11)
-      const li = document.createElement("li"); li.className = "bad";
-      const a = document.createElement("a"); a.href = body.install_url; a.target = "_blank"; a.rel = "noopener";
-      a.textContent = "이 repo에 GitHub App 설치 ↗"; li.appendChild(a); ul.appendChild(li);
-    }
-    if (body.canonical) $("connect-repo").value = body.canonical; // GitHub의 정식 대소문자로 연결
-    return body.ok;
-  }
-  $("connect-check-btn").onclick = () => {
-    const repo = $("connect-repo").value.trim(); if (!repo) return;
-    clearError("connect-error");
-    busy($("connect-check-btn"), "점검 중…", async () => {
-      try { const ok = renderCheck(await api(`/projects/check?repo=${encodeURIComponent(repo)}`)); toast(ok ? "점검 통과 — 연결할 수 있습니다." : "점검 실패 항목이 있습니다.", !ok); }
-      catch (e) { showError("connect-error", e); }
-    });
-  };
+  // ---- GitHub repo 연결 (POST /projects) — 점검은 서버가 한다 (P9.10, P9.20) --------------
   $("connect-form").onsubmit = (ev) => {
     ev.preventDefault();
     const repo = $("connect-repo").value.trim(); if (!repo) return;

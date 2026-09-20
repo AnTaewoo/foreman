@@ -97,7 +97,8 @@ async def test_llm_choices_and_examples(client: httpx.AsyncClient) -> None:
 async def test_static_assets(client: httpx.AsyncClient) -> None:
     js = await client.get("/static/demo.js")
     assert js.status_code == 200 and "fetch(" in js.text
-    assert "renderCheck" not in js.text  # P9.20: 점검 UI 제거 (정식 이름 보정은 POST /projects가 한다)
+    # P9.20: 점검 UI 제거 — 정식 repo 이름 보정은 POST /projects가 한다
+    assert "renderCheck" not in js.text
     # 사용자 보고: 새 버튼이 HTML엔 보이는데 눌리지 않음 = 옛 demo.js 캐시. 항상 재검증하게 한다
     assert "no-cache" in js.headers.get("cache-control", "")
     assert "no-cache" in (await client.get("/")).headers.get("cache-control", "")
@@ -154,7 +155,8 @@ async def test_console_two_step_connect(client: httpx.AsyncClient) -> None:
     js = (await client.get("/static/demo.js")).text
     assert "install_url" in js  # ① 설치 링크는 남는다
     css = (await client.get("/static/demo.css")).text
-    assert ".check" not in css  # P9.20: 점검 목록과 함께 죽은 CSS도 제거
+    # P9.20: 점검 목록과 함께 죽은 CSS도 제거 (.check-inline은 다른 클래스라 남는다)
+    assert "ul.check" not in css and ".check li" not in css
     info = (await client.get("/demo")).json()
     assert "install_url" in info and info["install_url"] is None  # Dry: GitHub 호출 없음
 

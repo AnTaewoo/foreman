@@ -29,8 +29,8 @@
         <span class="small muted">파일이 하나도 없는 빈 저장소는 연결되지 않습니다. 이미 쓰던 저장소가 있으면 그걸 써도 됩니다.</span></li>
       <li><b>Foreman 앱을 그 저장소에 설치합니다</b> — 아래 <b>내 GitHub repo 연결</b>을 펼치고 <b>① GitHub App 설치</b>를 누릅니다. GitHub 화면이 열리면 <b>Only select repositories</b>에서 1단계의 저장소만 고르고 <b>Install</b>.
         <span class="small muted">AI가 그 저장소에 Issue·브랜치·PR을 만들 권한을 받는 단계입니다. 다른 저장소는 건드리지 않습니다.</span></li>
-      <li><b>저장소를 연결합니다</b> — 이 화면으로 돌아와 <b>② repo</b> 칸에 <code>내아이디/저장소이름</code>을 적고 <b>점검</b>을 누릅니다. 목록이 초록 ✔이면 <b>연결</b>을 누릅니다.
-        <span class="small muted">노란 △는 경고일 뿐이라 그냥 연결해도 됩니다. 빨강 ✘이면 1·2단계를 다시 확인하세요.</span></li>
+      <li><b>저장소를 연결합니다</b> — 이 화면으로 돌아와 <b>② repo</b> 칸에 <code>내아이디/저장소이름</code>을 적고 <b>연결</b>을 누릅니다.
+        <span class="small muted">연결되지 않으면 빨간 글씨로 이유를 알려줍니다. 대부분 2단계(앱 설치)를 안 했거나 저장소가 비어 있는 경우입니다.</span></li>
       <li><b>만들고 싶은 것을 한 문장으로 적습니다</b> — <b>새 Goal</b> 칸에 적고 <b>Goal 생성</b>을 누릅니다. 뭘 적을지 막막하면 <b>예시 Goal</b>을 눌러 그대로 써 보세요.
         <span class="small muted">한 번에 기능 하나 정도가 가장 잘 됩니다. 1~3분 뒤 AI가 만든 <b>Plan</b>(작업 계획)이 아래에 올라옵니다.</span></li>
       <li><b>Plan을 읽고 승인합니다</b> — 계획이 괜찮으면 <b>Approve</b>를 누릅니다. 버튼 대신 안내문이 보이면, GitHub에 올라온 Plan 글에 <code>/approve</code>라고 댓글을 다세요. 같은 효과입니다.
@@ -48,7 +48,7 @@
       <details id="connect" class="connect">
         <summary>내 GitHub repo 연결</summary>
         <form id="connect-form">
-          <p class="small steps-inline"><b>①</b> <a id="install-app" href="https://github.com/apps" target="_blank" rel="noopener">GitHub App 설치 ↗</a> — 연결할 repo를 골라 설치 · <b>②</b> repo 입력 → "점검" → "연결"</p>
+          <p class="small steps-inline"><b>①</b> <a id="install-app" href="https://github.com/apps" target="_blank" rel="noopener">GitHub App 설치 ↗</a> — 연결할 repo를 골라 설치 · <b>②</b> repo를 적고 <b>연결</b></p>
           <label class="field"><span>repo (owner/name)</span><input id="connect-repo" placeholder="your-id/your-repo" required></label>
           <div class="row">
             <label class="field"><span>프로젝트 이름</span><input id="connect-name" placeholder="비우면 repo 이름"></label>
@@ -56,12 +56,10 @@
           </div>
           <label class="field" id="connect-token-label" hidden><span>관리 토큰 (서버 소유 repo일 때만)</span><input id="connect-token" type="password" autocomplete="off"></label>
           <div class="row">
-            <button type="button" id="connect-check-btn" class="secondary">점검</button>
             <button type="submit" id="connect-submit">연결</button>
           </div>
           <p id="connect-error" class="error" role="alert" hidden></p>
-          <ul id="connect-check" class="check"></ul>
-          <p class="small muted">repo 조건: App 설치 + 기본 브랜치에 <b>커밋 1개 이상</b>(생성 시 "Add a README file" 체크). Discussions에 <b>Plans</b> 카테고리가 없으면 Plan은 Issue로 올라갑니다(△ 경고, 연결 가능). 연결하면 repo 소유자가 GitHub에서 Plan에 <code>/approve</code> 댓글을 달고 PR을 머지합니다.</p>
+          <p class="small muted">repo 조건: App 설치 + 기본 브랜치에 <b>커밋 1개 이상</b>(생성 시 "Add a README file" 체크). Discussions에 <b>Plans</b> 카테고리가 없으면 Plan은 Issue로 올라갑니다(그래도 연결됩니다). 연결하면 repo 소유자가 GitHub에서 Plan에 <code>/approve</code> 댓글을 달고 PR을 머지합니다.</p>
         </form>
       </details>
 

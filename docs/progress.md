@@ -238,15 +238,16 @@
 | 2026-09-20T10:15 | P9.15 | 착수 | 기본 LLM 프로파일 openai (키 있을 때) + HITL_LLM_DEFAULT_PROFILE 고정 | |
 | 2026-09-20T10:40 | P9.15 | Green+Gate | default_profile: openai 키 있으면 openai, HITL_LLM_DEFAULT_PROFILE로 고정(쓸 수 없는 값 무시), 키 없으면 D-33 그대로; 워커 env(runtime)도 같은 기본; README·runbook·.env.example 반영; make check 577 (E501·format 재시도 2회) | |
 | 2026-09-20T10:45 | P9.15 | 완료 | 보드 done 7eaee78 (반영은 control plane 재시작 필요 — 사용자 확인 대기) | 7eaee78 |
-| 2026-09-20T20:25 | P9.16 | 착수 | 사용 방법 제목 "사용방법 6단계", 데모 아닐 때 계정 안내줄 제거 | |
-| 2026-09-20T20:35 | P9.16 | Green+Gate | summary "사용방법 6단계", demo-note는 데모 모드일 때만; make check 577, node --check ok | |
-| 2026-09-20T20:36 | P9.16 | 완료 | 보드 done | |
-| 2026-09-20T20:45 | P9.17 | 착수+Red | 이벤트 로그 "프로젝트 전체 보기" 제거 | |
-| 2026-09-20T20:50 | P9.17 | Green+Gate | events-all 체크박스·분기·핸들러 제거(잔여 참조 0), 이벤트 로그는 선택 Goal만; make check 577, node --check ok | |
-| 2026-09-20T20:51 | P9.17 | 완료 | 보드 done | |
-| 2026-09-20T21:05 | P9.18 | 착수+Red | 삭제 문구(보관 제거) + 삭제 즉시 반영(untilDeleted) | |
-| 2026-09-20T21:12 | P9.18 | Green+Gate | 콘솔 문구 보관→삭제(버튼·설명·confirm·라벨), untilDeleted로 projection 반영 뒤 reload, README 설명 갱신; make check 577, node --check ok | |
-| 2026-09-20T21:13 | P9.18 | 완료 | 보드 done | |
-| 2026-09-20T21:25 | P9.19 | 착수+Red | 409 detail·취소 사유를 deleted로 (이벤트 필드 archived는 유지) | |
-| 2026-09-20T21:30 | P9.19 | Green+Gate | 409 detail 2개·goal.cancelled.reason을 deleted로, 이벤트 필드/컬럼은 그대로; README 재연결 문구 제거·GitHub 유지 안내 강조; make check 577 | |
-| 2026-09-20T21:31 | P9.19 | 완료 | 보드 done | |
+| 2026-09-20T20:13 | P9.16 | 착수 | 사용 방법 제목 "사용방법 6단계", 데모 아닐 때 계정 안내줄 제거 | |
+| 2026-09-20T20:16 | P9.16 | Green+Gate | summary "사용방법 6단계", demo-note는 데모 모드일 때만; make check 577, node --check ok | |
+| 2026-09-20T20:16 | P9.16 | 완료 | 보드 done | |
+| 2026-09-20T20:17 | P9.17 | 착수+Red | 이벤트 로그 "프로젝트 전체 보기" 제거 | |
+| 2026-09-20T20:18 | P9.17 | Green+Gate | events-all 체크박스·분기·핸들러 제거(잔여 참조 0), 이벤트 로그는 선택 Goal만; make check 577, node --check ok | |
+| 2026-09-20T20:18 | P9.17 | 완료 | 보드 done | |
+| 2026-09-20T20:22 | P9.18 | 착수+Red | 삭제 문구(보관 제거) + 삭제 즉시 반영(untilDeleted) | |
+| 2026-09-20T20:23 | P9.18 | Green+Gate | 콘솔 문구 보관→삭제(버튼·설명·confirm·라벨), untilDeleted로 projection 반영 뒤 reload, README 설명 갱신; make check 577, node --check ok | |
+| 2026-09-20T20:23 | P9.18 | 완료 | 보드 done | |
+| 2026-09-20T20:26 | P9.19 | 착수+Red | 409 detail·취소 사유를 deleted로 (이벤트 필드 archived는 유지) | |
+| 2026-09-20T20:27 | P9.19 | Green+Gate | 409 detail 2개·goal.cancelled.reason을 deleted로, 이벤트 필드/컬럼은 그대로; README 재연결 문구 제거·GitHub 유지 안내 강조; make check 577 | |
+| 2026-09-20T20:27 | P9.19 | 완료 | 보드 done | |
+| 2026-09-20T20:40 | P9.20 | Green+Gate | 연결은 repo 입력 → 연결 한 단계(점검 버튼·목록·renderCheck·죽은 CSS 제거), 실패 이유는 인라인 에러; 삭제 클릭 검증 737ms(브라우저 실측); make check 577 | |
