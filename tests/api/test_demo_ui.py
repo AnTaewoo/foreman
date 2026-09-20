@@ -70,6 +70,9 @@ async def test_first_screen_copy_for_beginners(client: httpx.AsyncClient) -> Non
     assert "처음이라면 이 순서대로" not in html
     for word in ("README", "설치", "연결", "/approve", "Merge"):
         assert word in howto.group(0), word
+    # 사용자 지시 2026-09-20 (P9.21): 2단계의 "Foreman 앱"은 App 페이지로 가는 링크
+    assert 'id="howto-app"' in howto.group(0)
+    assert 'href="https://github.com/apps/foreman-antaewoo"' in howto.group(0)
     # (5) "새 Goal" placeholder에서 "(영어 권장)" 삭제
     assert "영어 권장" not in html
     # P9.16: 데모 모드가 아니면 계정 안내줄을 띄우지 않는다 (demo-note는 데모 모드용으로 남는다)
@@ -154,6 +157,7 @@ async def test_console_two_step_connect(client: httpx.AsyncClient) -> None:
     assert "Issue로" in html  # Plans 카테고리가 없으면 Plan은 Issue로 (조건 안내)
     js = (await client.get("/static/demo.js")).text
     assert "install_url" in js  # ① 설치 링크는 남는다
+    assert "howto-app" in js  # P9.21: 사용 방법 2단계 링크도 같은 install_url로 맞춘다
     css = (await client.get("/static/demo.css")).text
     # P9.20: 점검 목록과 함께 죽은 CSS도 제거 (.check-inline은 다른 클래스라 남는다)
     assert "ul.check" not in css and ".check li" not in css
