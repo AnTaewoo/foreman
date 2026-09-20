@@ -23,7 +23,6 @@ async def test_root_serves_demo_console(client: httpx.AsyncClient) -> None:
         'role="alert"',
         'id="steps"',
         'id="danger"',
-        'id="events-all"',
         'id="goal-filter"',
         'id="ws-banner"',
         'id="reject-box"',
@@ -35,7 +34,15 @@ async def test_root_serves_demo_console(client: httpx.AsyncClient) -> None:
     # 사용자 방향 2026-09-18: 심플하게 — 세부 정보는 접거나 뺀다
     # (보이는 게 많을수록 프런트 오류도 는다)
     assert 'id="events-box"' in r.text and 'id="plan-box"' in r.text and 'id="settings"' in r.text
-    for gone in ('id="goal-meta"', 'id="llm-hint"', "<th>시도</th>", "<th>Issue</th>"):
+    # 사용자 지시 2026-09-20 (P9.17): 이벤트 로그는 선택한 Goal 것만 — "프로젝트 전체 보기" 제거
+    for gone in (
+        'id="goal-meta"',
+        'id="llm-hint"',
+        "<th>시도</th>",
+        "<th>Issue</th>",
+        'id="events-all"',
+        "프로젝트 전체 보기",
+    ):
         assert gone not in r.text, gone
 
 
@@ -95,6 +102,7 @@ async def test_static_assets(client: httpx.AsyncClient) -> None:
     # 사용자 보고 2026-09-19: Goal 생성 직후 상세 GET이 projection 전이라 404 → 오류 알림이 떴다.
     # 404는 "아직 준비 중"으로 보고 알림 없이 재시도한다 (retryGoalSoon)
     assert "retryGoalSoon" in js.text and "e.status === 404" in js.text
+    assert "events-all" not in js.text  # P9.17: 잔여 참조 0
     css = await client.get("/static/demo.css")
     assert css.status_code == 200
     assert "prefers-color-scheme: dark" in css.text and ":focus-visible" in css.text
