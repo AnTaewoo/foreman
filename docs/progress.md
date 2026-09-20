@@ -232,3 +232,4 @@
 | 2026-09-19T06:30 | P9.7 | 보완 | Scheduler.complete_all() — control plane 기동 시 active Goal 프로젝트 전부 판정(배포 전 잔재); make check 570 | |
 | 2026-09-19T08:10 | P9.13 | Red | 라이브 A05F06 재현(research→README→kind:review): 한 번에 코드 Task 1개만, 모르는 kind/role 매핑, 전부 비코드면 coding으로 — import 실패(의도) | |
 | 2026-09-19T08:40 | P9.13 | Green+Gate | coerce_task_enums(검증 전 매핑)+drop_non_code_tasks(role 기준, _without 재배선 공용), 전부 비코드면 coding 유지; make check 574 (test_runtime_applies_due_retries_for_all_projects 부하 시 타임아웃 2회 — 단독·디렉터리 통과, 3회째 전체 통과) | |
+| 2026-09-20T09:10 | P9.14 | 착수 | 콘솔 첫 화면 문구 6가지(부제·사용 방법 6단계·설명 1줄·anthropic 숨김·placeholder·예시 2개 README) | |
