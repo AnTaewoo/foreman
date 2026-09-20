@@ -245,3 +245,4 @@
 | 2026-09-20T20:50 | P9.17 | Green+Gate | events-all 체크박스·분기·핸들러 제거(잔여 참조 0), 이벤트 로그는 선택 Goal만; make check 577, node --check ok | |
 | 2026-09-20T20:51 | P9.17 | 완료 | 보드 done | |
 | 2026-09-20T21:05 | P9.18 | 착수+Red | 삭제 문구(보관 제거) + 삭제 즉시 반영(untilDeleted) | |
+| 2026-09-20T21:12 | P9.18 | Green+Gate | 콘솔 문구 보관→삭제(버튼·설명·confirm·라벨), untilDeleted로 projection 반영 뒤 reload, README 설명 갱신; make check 577, node --check ok | |

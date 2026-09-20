@@ -392,19 +392,31 @@
       catch (e) { showError("detail-error", e); }
     });
   };
+  // DELETE는 outbox까지다(D-46) — 바로 다시 읽으면 삭제한 프로젝트가 그대로 보인다.
+  // 목록에서 빠질 때까지 기다렸다 화면을 다시 그린다 (최대 약 4.5초)
+  async function untilDeleted(id, tries = 15) {
+    for (let i = 0; i < tries; i++) {
+      try {
+        if (!(await api("/projects")).items.some((p) => p.id === id)) return;
+      } catch (_) { return; } // 읽기 실패는 여기서 따지지 않는다 — 어차피 다시 그린다
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  }
   $("delete-project").onclick = () => {
     if (!state.project) return;
     const p = state.project;
-    if (!confirm(`프로젝트 "${p.name}" (${p.repo})를 보관할까요?\n남은 Goal·Task는 취소되고 목록에서 사라집니다. GitHub의 Issue/PR/Discussion과 이벤트 기록은 남습니다.`)) return;
+    if (!confirm(`프로젝트 "${p.name}" (${p.repo})를 삭제할까요?\n남은 Goal·Task는 취소되고 목록에서 사라집니다. GitHub의 Issue/PR/Discussion과 이벤트 기록은 남습니다.`)) return;
     const headers = {};
-    if (state.demo.demo_mode) { // 데모 모드에서는 보관할 때 관리 토큰을 직접 묻는다
+    if (state.demo.demo_mode) { // 데모 모드에서는 삭제할 때 관리 토큰을 직접 묻는다
       const tok = $("connect-token").value.trim() || (prompt("관리 토큰을 입력하세요") || "").trim();
       if (!tok) return; headers["X-Admin-Token"] = tok;
     }
-    busy($("delete-project"), "보관 중…", async () => {
+    busy($("delete-project"), "삭제 중…", async () => {
       try {
         await api(`/projects/${p.id}`, { method: "DELETE", headers });
-        safeSet("foreman.project", ""); setUrl({ project: null, goal: null }); location.reload();
+        safeSet("foreman.project", ""); setUrl({ project: null, goal: null });
+        await untilDeleted(p.id);
+        location.reload();
       } catch (e) { toast(e.message, true); }
     });
   };
