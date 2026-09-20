@@ -55,11 +55,16 @@ async def test_first_screen_copy_for_beginners(client: httpx.AsyncClient) -> Non
     assert howto, "details.howto"
     steps = re.findall(r"<li>", howto.group(0))
     assert len(steps) == 6, len(steps)
-    assert "6단계" in howto.group(0)
+    # 사용자 지시 2026-09-20 (P9.16): 상자 제목은 "사용방법 6단계"만
+    assert "<summary>사용방법 6단계</summary>" in howto.group(0)
+    assert "처음이라면 이 순서대로" not in html
     for word in ("README", "설치", "점검", "연결", "/approve", "Merge"):
         assert word in howto.group(0), word
     # (5) "새 Goal" placeholder에서 "(영어 권장)" 삭제
     assert "영어 권장" not in html
+    # P9.16: 데모 모드가 아니면 계정 안내줄을 띄우지 않는다 (demo-note는 데모 모드용으로 남는다)
+    js = (await client.get("/static/demo.js")).text
+    assert "로 기록됩니다" not in js and 'id="demo-note"' in html
 
 
 async def test_llm_choices_and_examples(client: httpx.AsyncClient) -> None:
