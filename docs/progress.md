@@ -251,3 +251,4 @@
 | 2026-09-20T20:27 | P9.19 | Green+Gate | 409 detail 2개·goal.cancelled.reason을 deleted로, 이벤트 필드/컬럼은 그대로; README 재연결 문구 제거·GitHub 유지 안내 강조; make check 577 | |
 | 2026-09-20T20:27 | P9.19 | 완료 | 보드 done | |
 | 2026-09-20T20:40 | P9.20 | Green+Gate | 연결은 repo 입력 → 연결 한 단계(점검 버튼·목록·renderCheck·죽은 CSS 제거), 실패 이유는 인라인 에러; 삭제 클릭 검증 737ms(브라우저 실측); make check 577 | |
+| 2026-09-20T20:41 | P9.20 | 완료 | 보드 done (docs/progress.md의 P9.16~P9.19 시각을 실제 커밋 시각으로 정정) | |
