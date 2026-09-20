@@ -14,7 +14,7 @@ async def test_root_serves_demo_console(client: httpx.AsyncClient) -> None:
     assert r.headers["content-type"].startswith("text/html")
     assert 'id="goals"' in r.text and "/static/demo.js" in r.text
     assert 'id="project"' in r.text  # 프로젝트 선택 (repo가 둘 이상일 때, ?project=<id> 딥링크)
-    assert 'id="connect-form"' in r.text and 'id="connect-check"' in r.text  # repo 연결 + 점검
+    assert 'id="connect-form"' in r.text  # repo 연결 (P9.20: 점검 단계는 없다)
     assert 'id="delete-project"' in r.text  # 프로젝트 삭제 (D-54)
     assert 'id="llm"' in r.text  # LLM 프로파일 선택 (D-57)
     # 콘솔 UI 리뷰 2026-09-18: 인라인 에러, 진행 단계, 위험 구역, 이벤트·Goal 필터, 접근성
@@ -43,6 +43,8 @@ async def test_root_serves_demo_console(client: httpx.AsyncClient) -> None:
         'id="events-all"',
         "프로젝트 전체 보기",
         "보관",  # 사용자 지시 2026-09-20 (P9.18): 삭제를 "보관"이라 부르지 않는다
+        "점검",  # 사용자 지시 2026-09-20 (P9.20): 연결은 한 단계 — 점검 버튼 없음
+        'id="connect-check"',
     ):
         assert gone not in r.text, gone
 
@@ -66,7 +68,7 @@ async def test_first_screen_copy_for_beginners(client: httpx.AsyncClient) -> Non
     # 사용자 지시 2026-09-20 (P9.16): 상자 제목은 "사용방법 6단계"만
     assert "<summary>사용방법 6단계</summary>" in howto.group(0)
     assert "처음이라면 이 순서대로" not in html
-    for word in ("README", "설치", "점검", "연결", "/approve", "Merge"):
+    for word in ("README", "설치", "연결", "/approve", "Merge"):
         assert word in howto.group(0), word
     # (5) "새 Goal" placeholder에서 "(영어 권장)" 삭제
     assert "영어 권장" not in html
@@ -95,7 +97,7 @@ async def test_llm_choices_and_examples(client: httpx.AsyncClient) -> None:
 async def test_static_assets(client: httpx.AsyncClient) -> None:
     js = await client.get("/static/demo.js")
     assert js.status_code == 200 and "fetch(" in js.text
-    assert "canonical" in js.text  # 인계서 #4: 점검이 돌려준 정식 repo 이름으로 연결
+    assert "renderCheck" not in js.text  # P9.20: 점검 UI 제거 (정식 이름 보정은 POST /projects가 한다)
     # 사용자 보고: 새 버튼이 HTML엔 보이는데 눌리지 않음 = 옛 demo.js 캐시. 항상 재검증하게 한다
     assert "no-cache" in js.headers.get("cache-control", "")
     assert "no-cache" in (await client.get("/")).headers.get("cache-control", "")
@@ -150,9 +152,9 @@ async def test_console_two_step_connect(client: httpx.AsyncClient) -> None:
     assert 'id="install-app"' in html and "App 설치" in html
     assert "Issue로" in html  # Plans 카테고리가 없으면 Plan은 Issue로 (조건 안내)
     js = (await client.get("/static/demo.js")).text
-    assert "install_url" in js and "required === false" in js
+    assert "install_url" in js  # ① 설치 링크는 남는다
     css = (await client.get("/static/demo.css")).text
-    assert ".check li.warn" in css
+    assert ".check" not in css  # P9.20: 점검 목록과 함께 죽은 CSS도 제거
     info = (await client.get("/demo")).json()
     assert "install_url" in info and info["install_url"] is None  # Dry: GitHub 호출 없음
 
