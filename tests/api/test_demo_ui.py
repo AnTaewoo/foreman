@@ -15,9 +15,9 @@ async def test_root_serves_demo_console(client: httpx.AsyncClient) -> None:
     assert 'id="goals"' in r.text and "/static/demo.js" in r.text
     assert 'id="project"' in r.text  # 프로젝트 선택 (repo가 둘 이상일 때, ?project=<id> 딥링크)
     assert 'id="connect-form"' in r.text and 'id="connect-check"' in r.text  # repo 연결 + 점검
-    assert 'id="delete-project"' in r.text  # 프로젝트 삭제(보관) (D-54)
+    assert 'id="delete-project"' in r.text  # 프로젝트 삭제 (D-54)
     assert 'id="llm"' in r.text  # LLM 프로파일 선택 (D-57)
-    # 콘솔 UI 리뷰 2026-09-18: 인라인 에러, 진행 단계, 위험 구역(보관), 이벤트·Goal 필터, 접근성
+    # 콘솔 UI 리뷰 2026-09-18: 인라인 에러, 진행 단계, 위험 구역, 이벤트·Goal 필터, 접근성
     for needle in (
         'id="goal-error"',
         'role="alert"',
@@ -42,6 +42,7 @@ async def test_root_serves_demo_console(client: httpx.AsyncClient) -> None:
         "<th>Issue</th>",
         'id="events-all"',
         "프로젝트 전체 보기",
+        "보관",  # 사용자 지시 2026-09-20 (P9.18): 삭제를 "보관"이라 부르지 않는다
     ):
         assert gone not in r.text, gone
 
@@ -103,6 +104,8 @@ async def test_static_assets(client: httpx.AsyncClient) -> None:
     # 404는 "아직 준비 중"으로 보고 알림 없이 재시도한다 (retryGoalSoon)
     assert "retryGoalSoon" in js.text and "e.status === 404" in js.text
     assert "events-all" not in js.text  # P9.17: 잔여 참조 0
+    # P9.18: 삭제 문구 + projection 반영까지 기다렸다 다시 읽는다 (D-46)
+    assert "보관" not in js.text and "untilDeleted" in js.text
     css = await client.get("/static/demo.css")
     assert css.status_code == 200
     assert "prefers-color-scheme: dark" in css.text and ":focus-visible" in css.text
