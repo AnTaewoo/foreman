@@ -291,7 +291,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P9.11 | Plans 카테고리 없으면 Plan을 Issue로 + 콘솔 2단계(App 설치 → repo 연결) | P9.10 | done (백엔드 e24e42c) | 534bac6 |
 | P9.12 | 콘솔 Approve는 승인자일 때만 + demo_up docker 그룹 (§6 2026-09-19 P9.12) | P9.11 | done | e825651 |
 | P9.13 | 분해: 모르는 kind/role 매핑 + 비코드 Task 제거 (§6 2026-09-19 P9.13) | P9.12 | done | (this) |
-| P9.14 | 콘솔 첫 화면 문구: 부제 제거, 사용 방법 6단계(초보자용), Goal 설명 한 줄, LLM 선택에서 anthropic 숨김, 예시 Goal 2개(README 포함) (§6 2026-09-20 P9.14) | P9.13 | running | |
+| P9.14 | 콘솔 첫 화면 문구: 부제 제거, 사용 방법 6단계(초보자용), Goal 설명 한 줄, LLM 선택에서 anthropic 숨김, 예시 Goal 2개(README 포함) (§6 2026-09-20 P9.14) | P9.13 | done | be71201 |
 | **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending (배포 대기 — 사용자 sudo 단계) | docs/pc/PC-9.md |
 
 ---
