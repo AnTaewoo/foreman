@@ -299,7 +299,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P9.19 | 사람이 보는 메시지에서 archived/보관 제거 — 409 detail과 취소 사유를 deleted로 (§6 2026-09-20 P9.19) | P9.18 | done | 2b43fdf |
 | P9.20 | 콘솔 repo 연결에서 "점검" 단계 제거 — 입력하고 바로 연결 (§6 2026-09-20 P9.20) | P9.19 | done | 147428a |
 | P9.21 | 사용 방법 2단계의 "Foreman 앱"을 App 페이지 링크로 (§6 2026-09-20 P9.21) | P9.20 | done | 045c88d |
-| P9.22 | 사용 방법 1단계에 Discussions·Plans 카테고리 선택 안내 (§6 2026-09-20 P9.22) | P9.21 | running | |
+| P9.22 | 사용 방법 1단계에 Discussions·Plans 카테고리 선택 안내 (§6 2026-09-20 P9.22) | P9.21 | done | 11cf1a6 |
 | **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending (배포 대기 — 사용자 sudo 단계) | docs/pc/PC-9.md |
 
 ---
