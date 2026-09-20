@@ -287,11 +287,11 @@
     scheduleEvents(); refreshSoon();
   }
   function scheduleEvents() { if (!state.evFrame) state.evFrame = requestAnimationFrame(() => { state.evFrame = 0; renderEvents(); }); }
-  // 기본은 선택한 Goal의 이벤트만(correlation_id = goal id). "프로젝트 전체 보기"로 전부
+  // 선택한 Goal의 이벤트만 (correlation_id = goal id). P9.17: "프로젝트 전체 보기"는 제거했다
   function renderEvents() {
     if (!$("events-box").open) return; // 접혀 있으면 그리지 않는다 (펼칠 때 그린다)
-    const all = $("events-all").checked, gid = state.goalId;
-    const mine = (e) => all || !gid || e.correlation_id === gid || (e.payload && e.payload.goal_id === gid) || e.subject.id === gid;
+    const gid = state.goalId;
+    const mine = (e) => !gid || e.correlation_id === gid || (e.payload && e.payload.goal_id === gid) || e.subject.id === gid;
     const rows = state.events.filter(mine).slice(-200).reverse();
     const ul = $("events"); ul.innerHTML = "";
     if (!rows.length) { ul.innerHTML = '<li class="muted">아직 이벤트가 없습니다.</li>'; return; }
@@ -409,7 +409,6 @@
     });
   };
   $("goal-filter").onchange = () => { safeSet("foreman.hideEnded", $("goal-filter").checked ? "1" : ""); renderGoals(); };
-  $("events-all").onchange = renderEvents;
   $("events-box").ontoggle = renderEvents;
 
   // ---- GitHub repo 연결 (POST /projects) + 사전 점검 (GET /projects/check) ------------------
