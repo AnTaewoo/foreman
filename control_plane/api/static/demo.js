@@ -99,9 +99,10 @@
     const demo = !!state.demo.demo_mode;
     $("connect-token-label").hidden = !demo; $("demo-tag").hidden = !demo;
     if (state.demo.install_url) $("install-app").href = state.demo.install_url; // P9.11 공개 App
+    // 사용자 지시 2026-09-20(P9.16): 데모 모드가 아니면 계정 안내를 띄우지 않는다
     $("demo-note").textContent = demo
       ? `데모 모드: 프로젝트당 동시에 진행되는 Goal ${state.demo.max_running_goals}개, 시간당 ${state.demo.goals_per_hour}개까지. 승인자 계정 "${state.demo.user_id}"로 동작합니다.`
-      : `이 콘솔의 승인·생성은 계정 "${state.demo.user_id}"로 기록됩니다.`;
+      : "";
   }
   // D-57: LLM 프로파일 목록 (ollama/openai). 키 없는 것은 비활성
   async function loadLlm() {
