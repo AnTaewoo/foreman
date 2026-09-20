@@ -237,3 +237,4 @@
 | 2026-09-20T09:58 | P9.14 | 완료 | 보드 done be71201 | be71201 |
 | 2026-09-20T10:15 | P9.15 | 착수 | 기본 LLM 프로파일 openai (키 있을 때) + HITL_LLM_DEFAULT_PROFILE 고정 | |
 | 2026-09-20T10:40 | P9.15 | Green+Gate | default_profile: openai 키 있으면 openai, HITL_LLM_DEFAULT_PROFILE로 고정(쓸 수 없는 값 무시), 키 없으면 D-33 그대로; 워커 env(runtime)도 같은 기본; README·runbook·.env.example 반영; make check 577 (E501·format 재시도 2회) | |
+| 2026-09-20T10:45 | P9.15 | 완료 | 보드 done 7eaee78 (반영은 control plane 재시작 필요 — 사용자 확인 대기) | 7eaee78 |
