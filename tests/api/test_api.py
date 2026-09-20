@@ -532,7 +532,7 @@ async def test_llm_profiles_endpoint_and_goal_llm(
     )
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://t") as c:
         info = (await c.get("/llm")).json()
-        assert info["default"] == "ollama"
+        assert info["default"] == "openai"  # P9.15: 키가 있으면 openai가 기본
         by = {p["name"]: p for p in info["profiles"]}
         assert by["openai"]["available"] is True and by["anthropic"]["available"] is False
         assert "model" in by["ollama"] and "api_key" not in str(info)
@@ -553,7 +553,21 @@ async def test_llm_profiles_endpoint_and_goal_llm(
         assert r.status_code == 400 and "not available" in r.json()["detail"]
         r = await c.post(f"/projects/{pid}/goals", json={"title": "g"})  # 생략 → 기본 프로파일
         assert r.status_code == 202
-        assert (await events_of(factory, "goal.created"))[-1].payload.get("llm") == "ollama"
+        assert (await events_of(factory, "goal.created"))[-1].payload.get("llm") == "openai"
+    # HITL_LLM_DEFAULT_PROFILE로 기본값을 되돌릴 수 있다 (P9.15)
+    app2 = create_app(
+        Settings(
+            _env_file=None,
+            llm_provider="openai_compat",
+            openai_api_key="sk-x",
+            llm_default_profile="ollama",
+        ),
+        factory=factory,
+        redis=redis,
+        llm_probe=ok_probe,
+    )
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app2), base_url="http://t") as c:
+        assert (await c.get("/llm")).json()["default"] == "ollama"
 
 
 # OpenAI 프로브 진단 #4: 프로파일 호환성 오류(예: max_tokens 400)는 Goal 생성 즉시 400으로 알리고

@@ -379,7 +379,7 @@ def test_llm_profiles_and_get_provider_by_profile() -> None:
     }  # fmt: skip
     assert profiles["openai"]["model"] == "gpt-5.6-luna" and profiles["openai"]["available"] is True
     assert profiles["anthropic"]["available"] is False  # 키 없음
-    assert default_profile(cfg) == "ollama"  # llm_provider=openai_compat → ollama
+    assert default_profile(cfg) == "openai"  # P9.15: openai 키가 있으면 openai가 기본
     p = get_provider(cfg, profile="openai")
     assert isinstance(p, OllamaCompatProvider) and p.model == "gpt-5.6-luna"
     assert p.base_url.startswith("https://api.openai.com")
@@ -388,6 +388,48 @@ def test_llm_profiles_and_get_provider_by_profile() -> None:
     with pytest.raises(ProviderConfigError, match="unknown"):
         get_provider(cfg, profile="nope")
     assert isinstance(get_provider(cfg), OllamaCompatProvider)  # profile 없음 → 기본
+
+
+# P9.15 (사용자 결정 2026-09-20): 기본 프로파일은 openai 키가 있으면 openai.
+# HITL_LLM_DEFAULT_PROFILE로 고정할 수 있고, 쓸 수 없는 값이면 무시한다. 키가 없으면 기존 규칙(D-33).
+def test_default_profile_prefers_openai_and_honours_override() -> None:
+    from pydantic import SecretStr
+
+    from agents.llm import default_profile
+
+    def cfg(**kw: object) -> SimpleNamespace:
+        base = dict(
+            llm_provider="openai_compat",
+            llm_base_url="http://localhost:11434/v1",
+            llm_model="qwen2.5-coder:14b",
+            llm_api_key=SecretStr("ollama"),
+            openai_api_key=SecretStr(""),
+            openai_model="gpt-5.6-luna",
+            openai_base_url="https://api.openai.com/v1",
+            anthropic_api_key=SecretStr(""),
+            anthropic_model="claude-opus-5",
+            llm_default_profile="",
+        )
+        base.update(kw)
+        return SimpleNamespace(**base)
+
+    key = SecretStr("sk-openai")
+    # 키가 있으면 llm_provider와 무관하게 openai
+    assert default_profile(cfg(openai_api_key=key)) == "openai"
+    assert default_profile(cfg(openai_api_key=key, llm_provider="anthropic")) == "openai"
+    assert (
+        default_profile(cfg(openai_api_key=key, anthropic_api_key=SecretStr("sk-a"))) == "openai"
+    )
+    # 고정값이 이기고, 쓸 수 없는 값(키 없는 anthropic·오타)은 무시한다
+    assert default_profile(cfg(openai_api_key=key, llm_default_profile="ollama")) == "ollama"
+    assert default_profile(cfg(openai_api_key=key, llm_default_profile="anthropic")) == "openai"
+    assert default_profile(cfg(openai_api_key=key, llm_default_profile="nope")) == "openai"
+    # 키가 없으면 예전 그대로
+    assert default_profile(cfg()) == "ollama"
+    assert default_profile(cfg(llm_provider="anthropic")) == "ollama"
+    assert default_profile(cfg(llm_provider="anthropic", anthropic_api_key=SecretStr("sk-a"))) == (
+        "anthropic"
+    )
 
 
 # P9 (OpenAI 프로브 진단 #1·#3): gpt-5.6 계열은 max_tokens 대신 max_completion_tokens를 요구하고,
