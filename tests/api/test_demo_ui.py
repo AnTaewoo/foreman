@@ -73,6 +73,10 @@ async def test_first_screen_copy_for_beginners(client: httpx.AsyncClient) -> Non
     # 사용자 지시 2026-09-20 (P9.21): 2단계의 "Foreman 앱"은 App 페이지로 가는 링크
     assert 'id="howto-app"' in howto.group(0)
     assert 'href="https://github.com/apps/foreman-antaewoo"' in howto.group(0)
+    # 사용자 결정 2026-09-20 (P9.22): Discussions·Plans는 선택 안내로 1단계에 (없으면 Issue)
+    step1 = howto.group(0).split("<li>")[1]
+    for word in ("Discussions", "Plans", "선택", "Issue"):
+        assert word in step1, word
     # (5) "새 Goal" placeholder에서 "(영어 권장)" 삭제
     assert "영어 권장" not in html
     # P9.16: 데모 모드가 아니면 계정 안내줄을 띄우지 않는다 (demo-note는 데모 모드용으로 남는다)

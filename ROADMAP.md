@@ -299,6 +299,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P9.19 | 사람이 보는 메시지에서 archived/보관 제거 — 409 detail과 취소 사유를 deleted로 (§6 2026-09-20 P9.19) | P9.18 | done | 2b43fdf |
 | P9.20 | 콘솔 repo 연결에서 "점검" 단계 제거 — 입력하고 바로 연결 (§6 2026-09-20 P9.20) | P9.19 | done | 147428a |
 | P9.21 | 사용 방법 2단계의 "Foreman 앱"을 App 페이지 링크로 (§6 2026-09-20 P9.21) | P9.20 | done | 045c88d |
+| P9.22 | 사용 방법 1단계에 Discussions·Plans 카테고리 선택 안내 (§6 2026-09-20 P9.22) | P9.21 | running | |
 | **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending (배포 대기 — 사용자 sudo 단계) | docs/pc/PC-9.md |
 
 ---
@@ -307,6 +308,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 
 | 일시 | Task | 사유 | 옵션 / 필요한 조치 |
 |---|---|---|---|
+| 2026-09-20 | (기록) P9.22 Discussions·Plans 안내 | 사용자 결정 | "discussion이랑 category(plans) 관련이 없음" → 옵션 중 "6단계에 **선택** 안내로 추가"를 골랐다(필수 단계로 넣거나 아예 빼는 안은 기각). 1단계 밑에 한 줄: Settings → Discussions를 켜고 Plans 카테고리를 만들면 Plan이 Discussion으로, 없으면 Issue로 올라간다(P9.11) — 안 해도 된다고 분명히 적는다. 단계 수는 6개 그대로 |
 | 2026-09-20 | (기록) P9.21 사용 방법 2단계 링크 | 사용자 지시 | "6단계 중 2번 foreman을 a태그로 하고 https://github.com/apps/foreman-antaewoo 링크". `#howto-app`으로 두고 기본 href는 그 주소를 그대로 박되, `/demo`의 `install_url`(P9.11: `GET /app` slug에서 만든 설치 링크)이 있으면 `#install-app`과 같이 그 값으로 바꾼다 — Dry 모드(install_url=null)에서도 링크가 살아 있게 |
 | 2026-09-20 | (기록) P9.20 연결에서 점검 제거 | 사용자 지시 | "github 연결 부분에서 점검 빼자". 중복이라 안전하다 — `POST /projects`(P9.10)가 이미 서버에서 같은 `run_check`를 돌려 installation을 탐지하고(미설치 400 + 설치 링크), 필수 항목 실패는 400 "repo check failed — …"로, 정식 대소문자는 `report.canonical`로 보정한다. 따라서 콘솔은 repo를 적고 **연결** 하나만 누르면 되고, 실패 이유는 `#connect-error`에 그대로 나온다. 지운 것: `#connect-check-btn`, `<ul id="connect-check">`, `renderCheck()`와 그 핸들러, 죽은 CSS(`ul.check`, `.check li.ok/bad/warn`), 사용 방법 3단계·① ② 안내의 "점검" 문구. `GET /projects/check` API는 남긴다(테스트·디버깅용, 콘솔만 안 쓴다) |
 | 2026-09-20 | (기록) P9.19 삭제 용어 통일 | 사용자 결정 | "다시 연결하는 걸 안 하다 보니까 그냥 삭제로 둬. 그대신 github는 삭제 안 된다는 문구는 계속 남겨" — P9.18의 남은 질문(영어 메시지)에 대한 답. 사람이 읽는 문자열 3개를 deleted로: `project is archived`(goals.py 409), `project is already archived`(projects.py 409), `goal.cancelled.reason = "project archived"` → `project deleted`. 이벤트 **필드**는 그대로다 — `project.updated{archived: true}`와 `ProjectOut.archived_at`, `include_archived` 쿼리, DB 컬럼은 유지(스키마 동결 규칙, 값만 바뀐 것은 reason 문자열뿐). README에서 "같은 repo를 다시 연결할 수 있습니다"는 뺀다(쓰지 않는 경로). GitHub Issue/PR/Discussion·이벤트 기록이 남는다는 안내는 콘솔 2곳(위험 구역 설명·confirm)과 README에 그대로 둔다 |
