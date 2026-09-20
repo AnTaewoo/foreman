@@ -293,6 +293,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P9.13 | 분해: 모르는 kind/role 매핑 + 비코드 Task 제거 (§6 2026-09-19 P9.13) | P9.12 | done | (this) |
 | P9.14 | 콘솔 첫 화면 문구: 부제 제거, 사용 방법 6단계(초보자용), Goal 설명 한 줄, LLM 선택에서 anthropic 숨김, 예시 Goal 2개(README 포함) (§6 2026-09-20 P9.14) | P9.13 | done | be71201 |
 | P9.15 | 기본 LLM 프로파일 = openai (키 있을 때), `HITL_LLM_DEFAULT_PROFILE`로 고정 가능 (§6 2026-09-20 P9.15) | P9.14 | done | 7eaee78 |
+| P9.16 | 콘솔 문구: 사용 방법 제목 "사용방법 6단계", 데모 모드가 아니면 계정 안내줄 제거 (§6 2026-09-20 P9.16) | P9.15 | running | |
 | **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending (배포 대기 — 사용자 sudo 단계) | docs/pc/PC-9.md |
 
 ---
@@ -301,6 +302,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 
 | 일시 | Task | 사유 | 옵션 / 필요한 조치 |
 |---|---|---|---|
+| 2026-09-20 | (기록) P9.16 콘솔 문구 2건 | 사용자 지시 | 라이브 Goal을 돌리며 나온 지시: (1) 사용 방법 상자 제목을 "사용 방법 — 처음이라면 이 순서대로 (6단계)" → **"사용방법 6단계"** (본문 6단계는 그대로 — 사용자가 옵션 중 "제목만"을 골랐다) (2) `#demo-note`의 "이 콘솔의 승인·생성은 계정 "judge"로 기록됩니다" 줄 삭제 — 데모 모드일 때의 한도 안내는 남긴다(데모 모드는 현재 off라 화면에는 아무것도 안 나온다). `<p id="demo-note">`는 데모 모드용으로 유지 |
 | 2026-09-20 | (기록) P9.15 기본 LLM 프로파일 | 사용자 결정 | P9.14 보고 뒤 사용자 지시 "LLM 기본값도 openai로 바꿔줘". `default_profile()`은 D-33 `llm_provider`에서만 유도해서 **openai를 가리킬 값이 아예 없었다**(anthropic|openai_compat뿐, openai_compat → ollama) → `.env`만으로는 불가능, 코드 변경이 필요. 결정: (1) openai 키가 있으면 기본 프로파일 = `openai` (2) `llm_default_profile`(`HITL_LLM_DEFAULT_PROFILE`, 기본 빈 값=자동)로 고정 가능 — 쓸 수 없는 값이면 무시하고 자동 규칙으로 (되돌리기를 코드 수정 없이 하려고. `.env`는 사용자 것이라 건드리지 않는다) (3) 키가 없으면 기존 규칙 그대로(openai_compat → ollama, anthropic 키 있으면 anthropic, 없으면 ollama). 영향: 콘솔 기본 선택, `llm` 없이 만든 Goal, `runtime.profile_env`의 워커 env. 워커 이미지는 재빌드 불필요(`worker/entrypoint.py`는 `WORKER_LLM_*` env만 읽고 `default_profile`을 부르지 않는다) — control plane 재시작만 필요 |
 | 2026-09-20 | (기록) P9.14 콘솔 첫 화면 문구 | 사용자 지시 | 심사자(처음 오는 사람)가 읽고 그대로 따라 하도록 첫 화면 문구를 고친다. 지시 6가지: (1) h1의 부제 "HITL Multi-Agent Dev Platform" 제거(데모 배지는 유지) (2) "사용 방법"을 3단계 → **6단계**로, repo 준비·App 설치·연결까지 포함해 쉬운 말로 (3) 맨 위 설명(`p.lead`) 한 줄로 간결하게 (4) LLM 선택에서 `anthropic` 제거 (5) "새 Goal" placeholder에서 "(영어 권장)" 삭제 (6) 예시 Goal을 2개로 줄이고 둘 다 README.md 작성 문구 포함. (4)는 콘솔 선택지에서만 숨긴다 — `agents/llm`의 PROFILES·`/llm` 응답·`POST /goals` 검증은 그대로(D-57 유지, 서버 설정으로 다시 쓸 수 있게). (6)의 README Task는 P9.13(모르는 kind → feature/coding 매핑) 덕에 코드 Task로 살아남는다 |
 | 2026-09-19 | (기록) P9.13 분해 kind 정규화 + 비코드 Task 제거 | 사용자 결정 | 라이브 Goal …A05F06("README 작성"): Plan은 Task 1개인데 분해가 research(모든 파일 소유) → README 작성 → `kind:"review"` 최종 검토 3개로 쪼갰고, 스키마에 없는 "review"로 2회 모두 검증 실패 → goal.blocked. 결정: (1) 검증 전에 모르는 kind/role을 매핑(검토·확인류 → research/review, 그 밖 → feature/coding, 대소문자 무시)하고 `changes`에 기록 (2) MVP 1에는 Coding Agent뿐 → role이 research/review/architect인 Task는 버리고(kind만 research인 coding Task는 파일을 바꾸므로 유지) 의존을 재배선(`strip_dependency_tasks`와 같은 방식). 전부 비코드면 버리지 않고 coding/feature로 바꾼다(빈 Goal 방지). 프롬프트는 바꾸지 않는다(프롬프트는 세트로만 조정) |
