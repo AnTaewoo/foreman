@@ -187,7 +187,9 @@ make migrate                         # alembic upgrade head
 make worker-image                    # foreman-worker:dev 빌드 (Scheduler가 이 이미지로 워커를 띄운다)
 ```
 
-LLM은 세 프로파일 중 키가 있는 것을 콘솔에서 Goal마다 고릅니다(D-57). `HITL_LLM_PROVIDER`는 기본 선택만 정합니다.
+LLM은 키가 있는 프로파일 중에서 콘솔이 Goal마다 고릅니다(D-57; 콘솔 선택지는 `ollama`·`openai`).
+고르지 않았을 때의 기본은 **openai 키가 있으면 `openai`**, 없으면 `HITL_LLM_PROVIDER`에서 유도합니다
+(`openai_compat` → `ollama`). `HITL_LLM_DEFAULT_PROFILE=ollama`처럼 고정할 수도 있습니다.
 
 ```
 HITL_LLM_PROVIDER=openai_compat    HITL_LLM_MODEL=qwen2.5-coder:14b   # 프로파일 ollama (로컬, 항상 사용 가능)

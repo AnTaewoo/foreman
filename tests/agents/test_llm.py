@@ -391,7 +391,8 @@ def test_llm_profiles_and_get_provider_by_profile() -> None:
 
 
 # P9.15 (사용자 결정 2026-09-20): 기본 프로파일은 openai 키가 있으면 openai.
-# HITL_LLM_DEFAULT_PROFILE로 고정할 수 있고, 쓸 수 없는 값이면 무시한다. 키가 없으면 기존 규칙(D-33).
+# HITL_LLM_DEFAULT_PROFILE로 고정할 수 있고, 쓸 수 없는 값이면 무시한다.
+# 키가 없으면 기존 규칙(D-33) 그대로.
 def test_default_profile_prefers_openai_and_honours_override() -> None:
     from pydantic import SecretStr
 
@@ -417,9 +418,7 @@ def test_default_profile_prefers_openai_and_honours_override() -> None:
     # 키가 있으면 llm_provider와 무관하게 openai
     assert default_profile(cfg(openai_api_key=key)) == "openai"
     assert default_profile(cfg(openai_api_key=key, llm_provider="anthropic")) == "openai"
-    assert (
-        default_profile(cfg(openai_api_key=key, anthropic_api_key=SecretStr("sk-a"))) == "openai"
-    )
+    assert default_profile(cfg(openai_api_key=key, anthropic_api_key=SecretStr("sk-a"))) == "openai"
     # 고정값이 이기고, 쓸 수 없는 값(키 없는 anthropic·오타)은 무시한다
     assert default_profile(cfg(openai_api_key=key, llm_default_profile="ollama")) == "ollama"
     assert default_profile(cfg(openai_api_key=key, llm_default_profile="anthropic")) == "openai"

@@ -88,9 +88,21 @@ def available_profiles(settings: object) -> list[dict[str, object]]:
 
 
 def default_profile(settings: object) -> str:
-    """`llm_provider`(D-33)에서 유도: openai_compat → ollama, anthropic → anthropic."""
+    """콘솔의 기본 선택이자 Goal이 ``llm``을 생략했을 때 쓰는 프로파일.
+
+    P9.15(사용자 결정 2026-09-20): openai 키가 있으면 ``openai``.
+    ``llm_default_profile``(``HITL_LLM_DEFAULT_PROFILE``)로 고정할 수 있고,
+    쓸 수 없는 값(키 없는 프로파일·오타)이면 무시한다.
+    키가 없으면 기존 규칙(D-33 ``llm_provider``): openai_compat → ollama, anthropic → anthropic.
+    """
+    usable = {str(p["name"]) for p in available_profiles(settings) if p["available"]}
+    forced = str(getattr(settings, "llm_default_profile", "") or "")
+    if forced in usable:
+        return forced
+    if "openai" in usable:
+        return "openai"
     kind = str(getattr(settings, "llm_provider", "anthropic") or "anthropic")
-    if kind == "anthropic" and not _secret(getattr(settings, "anthropic_api_key", "")):
+    if kind == "anthropic" and "anthropic" not in usable:
         return "ollama"  # 키 없는 anthropic 기본값은 고를 수 없으니 항상 가능한 ollama로
     return "ollama" if kind == "openai_compat" else "anthropic"
 

@@ -344,7 +344,17 @@ def test_worker_llm_env_per_profile(redis: Redis) -> None:
         openai_api_key="sk-openai",
         openai_model="gpt-5.6-luna",
     )
-    assert worker_llm_env(s)["WORKER_LLM_MODEL"] == "qwen2.5-coder:14b"
+    # P9.15: 프로파일을 안 주면 기본 프로파일 — openai 키가 있으므로 openai
+    assert worker_llm_env(s)["WORKER_LLM_MODEL"] == "gpt-5.6-luna"
+    local = Settings(
+        _env_file=None,
+        llm_provider="openai_compat",
+        llm_model="qwen2.5-coder:14b",
+        openai_api_key="sk-openai",
+        openai_model="gpt-5.6-luna",
+        llm_default_profile="ollama",  # 고정하면 예전처럼 로컬 모델
+    )
+    assert worker_llm_env(local)["WORKER_LLM_MODEL"] == "qwen2.5-coder:14b"
     env = worker_llm_env(s, profile="openai")
     assert env["WORKER_LLM_PROVIDER"] == "openai_compat"
     assert env["WORKER_LLM_MODEL"] == "gpt-5.6-luna" and env["WORKER_LLM_API_KEY"] == "sk-openai"
@@ -353,7 +363,7 @@ def test_worker_llm_env_per_profile(redis: Redis) -> None:
     )  # 원격은 host.docker.internal 치환 없음
     assert env["WORKER_LLM_TOKEN_PARAM"] == "max_completion_tokens"  # OpenAI 프로브 진단 #1
     assert env["WORKER_LLM_MAX_TOKENS"] == "16384"  # 진단 #3: 추론 토큰 예산
-    base = worker_llm_env(s)
+    base = worker_llm_env(local)  # ollama는 max_tokens, 예산 미지정
     assert base["WORKER_LLM_TOKEN_PARAM"] == "max_tokens" and "WORKER_LLM_MAX_TOKENS" not in base
     launcher = build_launcher(s, redis)
     spec = LaunchSpec(
@@ -365,4 +375,5 @@ def test_worker_llm_env_per_profile(redis: Redis) -> None:
         task_id="T", run_id="R", project_id="P", goal_id="G", branch="ai/x", repo_url="/tmp/x",
         task_json={}, timeout_min=1,
     )  # fmt: skip
-    assert launcher.env_for(spec2)["WORKER_LLM_MODEL"] == "qwen2.5-coder:14b"
+    assert launcher.env_for(spec2)["WORKER_LLM_MODEL"] == "gpt-5.6-luna"  # 프로파일 없음 → 기본
+    assert build_launcher(local, redis).env_for(spec2)["WORKER_LLM_MODEL"] == "qwen2.5-coder:14b"

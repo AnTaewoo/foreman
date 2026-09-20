@@ -95,6 +95,7 @@ uv run python -c "from control_plane.api.app import app; a = app(); print('app o
 | `HITL_LLM_PROVIDER` | `anthropic` \| `openai_compat`(Ollama) (D-33) | `anthropic` |
 | `HITL_LLM_BASE_URL` / `HITL_LLM_MODEL` / `HITL_LLM_API_KEY` | openai_compat 엔드포인트·모델·키(Ollama는 아무 값) | `http://localhost:11434/v1`, `qwen2.5-coder:7b`, `ollama` |
 | `HITL_ANTHROPIC_API_KEY` / `HITL_ANTHROPIC_MODEL` | Anthropic 키·모델(provider가 anthropic일 때 필수) | 없음, `claude-opus-5` |
+| `HITL_LLM_DEFAULT_PROFILE` | 기본 프로파일 고정 (`ollama`\|`openai`\|`anthropic`). 비우면 자동 — openai 키가 있으면 `openai`, 없으면 `HITL_LLM_PROVIDER`에서 유도 (P9.15) | 비움 |
 | `HITL_GITHUB_APP_ID` / `HITL_GITHUB_APP_PRIVATE_KEY` / `HITL_GITHUB_INSTALLATION_ID` | GitHub App(실 연결 §3b). PEM은 개행을 `\n`으로 | 비움 |
 | `HITL_GITHUB_WEBHOOK_SECRET` | 웹훅 HMAC(`X-Hub-Signature-256`) 검증. 비어 있으면 웹훅은 503(D-50) — Dry·로컬은 API 승인을 쓴다 | 비움 |
 | `HITL_LOG_LEVEL` / `HITL_LOG_FORMAT` | 로깅 | `INFO`, `console` |

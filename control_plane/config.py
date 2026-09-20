@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-5.6"
     openai_base_url: str = "https://api.openai.com/v1"
     openai_max_tokens: int = 16384  # 추론 토큰 포함 completion 예산
+    # P9.15: 기본 프로파일 고정. 빈 값 = 자동(openai 키가 있으면 openai, 없으면 D-33 규칙)
+    llm_default_profile: str = ""
     # D-39: 비용 = 토큰 × 단가(USD per 1M tokens). 기본 0 → cost_usd 0. 단가표를 코드에 박지 않는다
     llm_price_in_per_mtok: float = 0.0
     llm_price_out_per_mtok: float = 0.0
