@@ -331,10 +331,23 @@
   }, 10000);
 
   // ---- actions ---------------------------------------------------------
+  // 선택한 Goal이 아직 projection에 없으면 1초 간격으로 최대 15번 다시 읽는다 (그 사이 다른 Goal을 고르면 멈춤)
+  function retryGoalSoon(id, left = 15) {
+    setTimeout(async () => {
+      if (state.goalId !== id || state.goal) return;
+      try { await loadGoals(); await loadGoal(); } catch (e) {
+        if (e.status === 404 && left > 1) retryGoalSoon(id, left - 1);
+        else toast(e.message, true);
+      }
+    }, 1000);
+  }
   async function selectGoal(id, byUser = false) {
     state.goalId = id; state.goal = null; setUrl({ goal: id }); clearError("detail-error"); $("reject-box").hidden = true;
     renderGoals(); renderEvents();
-    try { await loadGoal(); } catch (e) { toast(e.message, true); }
+    try { await loadGoal(); } catch (e) {
+      // 생성 직후에는 projection이 아직 반영되지 않아 404가 난다 → 오류가 아니라 "준비 중". 알림 없이 재시도
+      if (e.status === 404) retryGoalSoon(id); else toast(e.message, true);
+    }
     // 1열 레이아웃(모바일)에서는 상세가 화면 아래에 생긴다 → 선택하면 그리로 이동
     if (byUser && window.matchMedia("(max-width: 900px)").matches) $("detail").scrollIntoView({ behavior: "smooth", block: "start" });
   }

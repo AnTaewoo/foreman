@@ -45,6 +45,9 @@ async def test_static_assets(client: httpx.AsyncClient) -> None:
     assert "no-cache" in js.headers.get("cache-control", "")
     assert "no-cache" in (await client.get("/")).headers.get("cache-control", "")
     assert "STATUS_LABEL" in js.text and "scrollIntoView" in js.text and "replaceState" in js.text
+    # 사용자 보고 2026-09-19: Goal 생성 직후 상세 GET이 projection 전이라 404 → 오류 알림이 떴다.
+    # 404는 "아직 준비 중"으로 보고 알림 없이 재시도한다 (retryGoalSoon)
+    assert "retryGoalSoon" in js.text and "e.status === 404" in js.text
     css = await client.get("/static/demo.css")
     assert css.status_code == 200
     assert "prefers-color-scheme: dark" in css.text and ":focus-visible" in css.text
