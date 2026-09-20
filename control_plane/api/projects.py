@@ -123,7 +123,8 @@ class ProjectDeleted(BaseModel):
 
 @router.delete("/{project_id}", status_code=202, dependencies=[AdminDep])
 async def delete_project(project_id: str, state: StateDep, user: UserDep) -> ProjectDeleted:
-    """D-54: 삭제 = 보관. 미완 Goal·Task를 취소하고 project.updated{archived: true}를 낸다.
+    """D-54: 삭제는 archived_at을 찍는 soft delete. 미완 Goal·Task를 취소하고
+    project.updated{archived: true}를 낸다(이벤트 필드는 동결).
     이벤트·GitHub Issue/PR/Discussion은 그대로 남는다. 같은 repo는 다시 연결할 수 있다."""
     from control_plane.api.goals import cancel_goal_cascade
     from control_plane.store.enums import GoalStatus
@@ -132,7 +133,7 @@ async def delete_project(project_id: str, state: StateDep, user: UserDep) -> Pro
     if view is None:
         raise HTTPException(404, "project not found")
     if view.archived_at is not None:
-        raise HTTPException(409, "project is already archived")
+        raise HTTPException(409, "project is already deleted")  # P9.19
     async with state.factory() as s:
         open_goals = (
             (
@@ -150,7 +151,7 @@ async def delete_project(project_id: str, state: StateDep, user: UserDep) -> Pro
         )
     cancelled: list[str] = []
     for gid in open_goals:
-        await cancel_goal_cascade(state, project_id, gid, user, "project archived")
+        await cancel_goal_cascade(state, project_id, gid, user, "project deleted")
         cancelled.append(gid)
     await publish(
         state,

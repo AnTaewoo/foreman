@@ -109,7 +109,7 @@ async def create_goal(
     if project is None:
         raise HTTPException(404, "project not found")
     if project.archived_at is not None:  # D-54
-        raise HTTPException(409, "project is archived")
+        raise HTTPException(409, "project is deleted")  # P9.19: 사람이 읽는 말은 deleted
     await goal_quota(state, project_id)  # 데모 모드 한도 (P9.3)
     from agents.llm import available_profiles, default_profile
 

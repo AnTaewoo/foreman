@@ -234,7 +234,7 @@ curl -s "$API/projects/$PID/events?since=0" | jq '.items[].type'                
 
 읽기 API는 projection 반영(control plane이 떠 있으면 수 초) 후 값이 보입니다. 쓰기 직후의 `GET /projects/{id}`와
 `POST /goals`는 이벤트로 존재를 확인하므로 바로 됩니다. 결과는 `git -C $REPO branch`(`ai/*` 브랜치, Dry 머지 후 `main`
-전진)로 봅니다. 실행 중인 워커는 `docker ps --filter name=foreman-worker-`(종료 시 `--rm`). 전체 목록: `GET /projects`(`{items: [...]}`), `GET /projects/{id}/tasks?status=`. 프로젝트 삭제는 `DELETE /projects/{id}` — 남은 Goal·Task를 취소하고 목록에서 뺍니다. 이벤트 기록과 GitHub Issue/PR/Discussion은 남고, 같은 repo를 다시 연결할 수 있습니다.
+전진)로 봅니다. 실행 중인 워커는 `docker ps --filter name=foreman-worker-`(종료 시 `--rm`). 전체 목록: `GET /projects`(`{items: [...]}`), `GET /projects/{id}/tasks?status=`. 프로젝트 삭제는 `DELETE /projects/{id}` — 남은 Goal·Task를 취소하고 목록에서 뺍니다. **GitHub의 Issue/PR/Discussion과 이벤트 기록은 지워지지 않습니다.**
 
 #### 4. 실 GitHub 연결
 

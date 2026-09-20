@@ -248,3 +248,4 @@
 | 2026-09-20T21:12 | P9.18 | Green+Gate | 콘솔 문구 보관→삭제(버튼·설명·confirm·라벨), untilDeleted로 projection 반영 뒤 reload, README 설명 갱신; make check 577, node --check ok | |
 | 2026-09-20T21:13 | P9.18 | 완료 | 보드 done | |
 | 2026-09-20T21:25 | P9.19 | 착수+Red | 409 detail·취소 사유를 deleted로 (이벤트 필드 archived는 유지) | |
+| 2026-09-20T21:30 | P9.19 | Green+Gate | 409 detail 2개·goal.cancelled.reason을 deleted로, 이벤트 필드/컬럼은 그대로; README 재연결 문구 제거·GitHub 유지 안내 강조; make check 577 | |
