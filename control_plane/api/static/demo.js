@@ -98,7 +98,10 @@
     try { state.demo = await api("/demo"); } catch (_) { /* 데모 모드 아님 */ }
     const demo = !!state.demo.demo_mode;
     $("connect-token-label").hidden = !demo; $("demo-tag").hidden = !demo;
-    if (state.demo.install_url) $("install-app").href = state.demo.install_url; // P9.11 공개 App
+    // P9.11 공개 App 설치 링크 — 사용 방법 2단계 링크도 같은 곳으로 (P9.21, 없으면 App 페이지 그대로)
+    if (state.demo.install_url) {
+      $("install-app").href = state.demo.install_url; $("howto-app").href = state.demo.install_url;
+    }
     // 사용자 지시 2026-09-20(P9.16): 데모 모드가 아니면 계정 안내를 띄우지 않는다
     $("demo-note").textContent = demo
       ? `데모 모드: 프로젝트당 동시에 진행되는 Goal ${state.demo.max_running_goals}개, 시간당 ${state.demo.goals_per_hour}개까지. 승인자 계정 "${state.demo.user_id}"로 동작합니다.`
