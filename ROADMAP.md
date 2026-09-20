@@ -296,6 +296,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P9.16 | 콘솔 문구: 사용 방법 제목 "사용방법 6단계", 데모 모드가 아니면 계정 안내줄 제거 (§6 2026-09-20 P9.16) | P9.15 | done | c1a3ca8 |
 | P9.17 | 이벤트 로그의 "프로젝트 전체 보기" 체크박스 제거 (§6 2026-09-20 P9.17) | P9.16 | done | 344eee6 |
 | P9.18 | 콘솔: 프로젝트 삭제를 "보관"이라 부르지 않기 + 삭제가 바로 반영(projection 대기) (§6 2026-09-20 P9.18) | P9.17 | done | 64787b2 |
+| P9.19 | 사람이 보는 메시지에서 archived/보관 제거 — 409 detail과 취소 사유를 deleted로 (§6 2026-09-20 P9.19) | P9.18 | running | |
 | **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending (배포 대기 — 사용자 sudo 단계) | docs/pc/PC-9.md |
 
 ---
@@ -304,6 +305,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 
 | 일시 | Task | 사유 | 옵션 / 필요한 조치 |
 |---|---|---|---|
+| 2026-09-20 | (기록) P9.19 삭제 용어 통일 | 사용자 결정 | "다시 연결하는 걸 안 하다 보니까 그냥 삭제로 둬. 그대신 github는 삭제 안 된다는 문구는 계속 남겨" — P9.18의 남은 질문(영어 메시지)에 대한 답. 사람이 읽는 문자열 3개를 deleted로: `project is archived`(goals.py 409), `project is already archived`(projects.py 409), `goal.cancelled.reason = "project archived"` → `project deleted`. 이벤트 **필드**는 그대로다 — `project.updated{archived: true}`와 `ProjectOut.archived_at`, `include_archived` 쿼리, DB 컬럼은 유지(스키마 동결 규칙, 값만 바뀐 것은 reason 문자열뿐). README에서 "같은 repo를 다시 연결할 수 있습니다"는 뺀다(쓰지 않는 경로). GitHub Issue/PR/Discussion·이벤트 기록이 남는다는 안내는 콘솔 2곳(위험 구역 설명·confirm)과 README에 그대로 둔다 |
 | 2026-09-20 | (기록) P9.18 삭제 문구·즉시 반영 | 사용자 지시 | "삭제 로직을 보관이라 표현하지 말고 그냥 삭제라고 말해", "삭제시 바로 적용되도록 해 — 현재는 새로고침을 해야 적용됨". (1) 콘솔 문구에서 보관 → 삭제(버튼·설명·confirm·진행 라벨). 무엇이 남는지(이벤트 기록·GitHub Issue/PR/Discussion)는 그대로 알린다 — 동작은 D-54 그대로(archived_at, 같은 repo 재연결 가능). `DELETE /projects/{id}`의 영어 메시지("project is already archived")와 설계 문서의 D-54 용어는 그대로 둔다(내부 용어, 기존 테스트 계약). (2) 새로고침이 필요했던 원인: DELETE는 outbox까지고 projection은 비동기(D-46) → 곧바로 `location.reload()`하면 목록에 그대로 보인다. `untilDeleted()`가 `GET /projects`에서 그 id가 빠질 때까지 300ms × 최대 15회 기다린 뒤 reload |
 | 2026-09-20 | (기록) P9.17 이벤트 로그 필터 제거 | 사용자 지시 | "이벤트 로그 내 프로젝트 전체보기 지워". `#events-all` 체크박스와 `renderEvents`의 `all` 분기, `onchange` 핸들러를 모두 지운다(잔여 참조 0) → 이벤트 로그는 **선택한 Goal의 이벤트만** 보여준다. 2026-09-18 콘솔 단순화("보이는 게 많을수록 프런트 오류도 는다")와 같은 방향 |
 | 2026-09-20 | (기록) P9.16 콘솔 문구 2건 | 사용자 지시 | 라이브 Goal을 돌리며 나온 지시: (1) 사용 방법 상자 제목을 "사용 방법 — 처음이라면 이 순서대로 (6단계)" → **"사용방법 6단계"** (본문 6단계는 그대로 — 사용자가 옵션 중 "제목만"을 골랐다) (2) `#demo-note`의 "이 콘솔의 승인·생성은 계정 "judge"로 기록됩니다" 줄 삭제 — 데모 모드일 때의 한도 안내는 남긴다(데모 모드는 현재 off라 화면에는 아무것도 안 나온다). `<p id="demo-note">`는 데모 모드용으로 유지 |

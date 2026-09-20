@@ -493,7 +493,7 @@ async def test_delete_project_archives_and_cancels(
     assert body["id"] == pid and body["cancelled_goals"] == [gid]
     cancelled = await events_of(factory, "goal.cancelled")
     assert [e.subject_id for e in cancelled] == [gid]
-    assert cancelled[0].payload["by"] == "alice" and "archived" in cancelled[0].payload["reason"]
+    assert cancelled[0].payload["by"] == "alice" and "deleted" in cancelled[0].payload["reason"]
     assert sorted(e.subject_id for e in await events_of(factory, "task.cancelled")) == ["T1", "T2"]
     upd = await events_of(factory, "project.updated")
     assert len(upd) == 1 and upd[0].payload == {"archived": True, "by": "alice"}
@@ -505,12 +505,14 @@ async def test_delete_project_archives_and_cancels(
     got = await client.get(f"/projects/{pid}")
     assert got.status_code == 200 and got.json()["archived_at"] is not None
     r = await client.post(f"/projects/{pid}/goals", json={"title": "again"})
-    assert r.status_code == 409 and "archived" in r.json()["detail"]
-    # D-45의 repo 유일성은 보관된 프로젝트를 세지 않는다
+    # P9.19: 사람이 읽는 메시지는 deleted (이벤트 필드 archived는 그대로)
+    assert r.status_code == 409 and "deleted" in r.json()["detail"]
+    # D-45의 repo 유일성은 삭제된 프로젝트를 세지 않는다
     r = await client.post("/projects", json={"name": "demo2", "repo": REPO})
     assert r.status_code == 201, r.text
-    # 두 번째 DELETE는 409 (이미 보관)
-    assert (await client.delete(f"/projects/{pid}")).status_code == 409
+    # 두 번째 DELETE는 409 (이미 삭제됨)
+    again = await client.delete(f"/projects/{pid}")
+    assert again.status_code == 409 and "already deleted" in again.json()["detail"]
     assert (await client.delete("/projects/01UNKNOWN00000000000000000")).status_code == 404
 
 
