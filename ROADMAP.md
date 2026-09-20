@@ -293,7 +293,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P9.13 | 분해: 모르는 kind/role 매핑 + 비코드 Task 제거 (§6 2026-09-19 P9.13) | P9.12 | done | (this) |
 | P9.14 | 콘솔 첫 화면 문구: 부제 제거, 사용 방법 6단계(초보자용), Goal 설명 한 줄, LLM 선택에서 anthropic 숨김, 예시 Goal 2개(README 포함) (§6 2026-09-20 P9.14) | P9.13 | done | be71201 |
 | P9.15 | 기본 LLM 프로파일 = openai (키 있을 때), `HITL_LLM_DEFAULT_PROFILE`로 고정 가능 (§6 2026-09-20 P9.15) | P9.14 | done | 7eaee78 |
-| P9.16 | 콘솔 문구: 사용 방법 제목 "사용방법 6단계", 데모 모드가 아니면 계정 안내줄 제거 (§6 2026-09-20 P9.16) | P9.15 | running | |
+| P9.16 | 콘솔 문구: 사용 방법 제목 "사용방법 6단계", 데모 모드가 아니면 계정 안내줄 제거 (§6 2026-09-20 P9.16) | P9.15 | done | c1a3ca8 |
 | **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending (배포 대기 — 사용자 sudo 단계) | docs/pc/PC-9.md |
 
 ---
