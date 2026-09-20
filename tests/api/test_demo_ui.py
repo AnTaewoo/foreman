@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import httpx
 import pytest
 
@@ -35,6 +37,46 @@ async def test_root_serves_demo_console(client: httpx.AsyncClient) -> None:
     assert 'id="events-box"' in r.text and 'id="plan-box"' in r.text and 'id="settings"' in r.text
     for gone in ('id="goal-meta"', 'id="llm-hint"', "<th>시도</th>", "<th>Issue</th>"):
         assert gone not in r.text, gone
+
+
+# 사용자 지시 2026-09-20 (P9.14): 처음 오는 사람이 읽고 그대로 따라 하도록 첫 화면 문구를 고친다.
+async def test_first_screen_copy_for_beginners(client: httpx.AsyncClient) -> None:
+    html = (await client.get("/")).text
+    # (1) h1 부제 제거 — 데모 배지(id="demo-tag")는 demo.js가 쓰므로 남는다
+    assert "Multi-Agent Dev Platform" not in html and "HITL" not in html
+    assert 'id="demo-tag"' in html
+    # (3) 맨 위 설명은 한 줄로 간결하게 (태그 뺀 길이 100자 이하)
+    lead = re.search(r'<p class="lead">(.*?)</p>', html, re.S)
+    assert lead, "p.lead"
+    lead_text = " ".join(re.sub(r"<[^>]+>", "", lead.group(1)).split())
+    assert 0 < len(lead_text) <= 100, lead_text
+    # (2) 사용 방법: 3단계 → 6단계, repo 준비부터 머지까지. 제목의 숫자와 <li> 수가 같아야 한다
+    howto = re.search(r'<details class="howto".*?</details>', html, re.S)
+    assert howto, "details.howto"
+    steps = re.findall(r"<li>", howto.group(0))
+    assert len(steps) == 6, len(steps)
+    assert "6단계" in howto.group(0)
+    for word in ("README", "설치", "점검", "연결", "/approve", "Merge"):
+        assert word in howto.group(0), word
+    # (5) "새 Goal" placeholder에서 "(영어 권장)" 삭제
+    assert "영어 권장" not in html
+
+
+async def test_llm_choices_and_examples(client: httpx.AsyncClient) -> None:
+    js = (await client.get("/static/demo.js")).text
+    # (4) 콘솔 LLM 선택지에서 anthropic 제거 (서버의 /llm·PROFILES는 그대로 — D-57)
+    assert "HIDDEN_LLM" in js and '"anthropic"' in js
+    assert [p["name"] for p in (await client.get("/llm")).json()["profiles"]] == [
+        "ollama",
+        "openai",
+        "anthropic",
+    ]
+    # (6) 예시 Goal 2개, 둘 다 README.md 작성까지 시킨다
+    block = re.search(r"const EXAMPLES = \[(.*?)\];", js, re.S)
+    assert block, "EXAMPLES"
+    examples = re.findall(r'"([^"]+)"', block.group(1))
+    assert len(examples) == 2, examples
+    assert all("README.md" in e for e in examples), examples
 
 
 async def test_static_assets(client: httpx.AsyncClient) -> None:
