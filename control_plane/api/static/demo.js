@@ -3,12 +3,14 @@
  * WS 이벤트가 오면 500ms 디바운스로 goal/tasks를 다시 읽는다(읽기는 projection 반영 후). */
 (() => {
   const $ = (id) => document.getElementById(id);
-  // 등급 A(boundary.md): 공유 파일 없이 모듈당 Task 하나, 3개 이하 — 지금 구조가 안정적으로 완주하는 형태
+  // 등급 A(boundary.md): 공유 파일 없이 모듈당 Task 하나, 3개 이하 — 지금 구조가 안정적으로 완주하는 형태.
+  // 사용자 지시 2026-09-20(P9.14): 2개만, 둘 다 README.md 작성까지 (문서 Task는 P9.13 매핑으로 코드 Task가 된다)
   const EXAMPLES = [
-    "Add a maths helpers module with add and mul functions and tests",
-    "Add a slugify(text) utility module that lowercases and hyphenates, with tests",
-    "Add a greet(name) helper module returning 'Hello, <name>!' with tests",
+    "Add a slugify(text) utility module that lowercases and hyphenates, with tests, and document it in README.md",
+    "Add a maths helpers module with add and mul functions and tests, and add a usage section to README.md",
   ];
+  // 사용자 지시 2026-09-20(P9.14): 콘솔 선택지에서만 뺀다 — /llm 응답과 PROFILES(D-57)는 그대로
+  const HIDDEN_LLM = ["anthropic"];
   const STATUS_LABEL = {
     draft: "준비 중", planning: "Plan 작성 중", awaiting_plan_approval: "승인 대기", active: "진행 중",
     done: "완료", cancelled: "취소됨", blocked: "막힘", failed: "실패", pending: "대기", ready: "배정 대기",
@@ -101,12 +103,12 @@
       ? `데모 모드: 프로젝트당 동시에 진행되는 Goal ${state.demo.max_running_goals}개, 시간당 ${state.demo.goals_per_hour}개까지. 승인자 계정 "${state.demo.user_id}"로 동작합니다.`
       : `이 콘솔의 승인·생성은 계정 "${state.demo.user_id}"로 기록됩니다.`;
   }
-  // D-57: LLM 프로파일 목록 (ollama/openai/anthropic). 키 없는 것은 비활성
+  // D-57: LLM 프로파일 목록 (ollama/openai). 키 없는 것은 비활성
   async function loadLlm() {
     try {
       const info = await api("/llm");
       const sel = $("llm"); sel.innerHTML = "";
-      for (const p of info.profiles) {
+      for (const p of info.profiles.filter((x) => !HIDDEN_LLM.includes(x.name))) {
         const o = document.createElement("option");
         o.value = p.name; o.disabled = !p.available;
         o.textContent = `${p.name} — ${p.model}${p.available ? "" : " (키 없음)"}`;

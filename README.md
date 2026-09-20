@@ -130,8 +130,9 @@ App이 받는 권한: Contents·Issues·Pull requests·Discussions **쓰기**, M
 
 #### 4) Goal 만들기
 
-만들 기능을 **한 문장**으로 적고(영어 권장) LLM을 고른 뒤 **"Goal 생성"**. 예:
-`Add a slugify(text) helper in src/utils.py with pytest tests`.
+만들 기능을 **한 문장**으로 적고 LLM을 고른 뒤 **"Goal 생성"**. 무엇을 적을지 막막하면 콘솔의 **예시 Goal**을
+누르면 그대로 채워집니다. 예: `Add a slugify(text) utility module that lowercases and hyphenates, with tests, and
+document it in README.md`.
 어느 정도 크기의 Goal이 잘 되는지는 [`docs/boundary.md`](docs/boundary.md)에 있습니다 — 파일 몇 개, 테스트로 확인할 수
 있는 기능이 가장 안정적입니다.
 

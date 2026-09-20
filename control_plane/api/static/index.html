@@ -12,11 +12,8 @@
   <div id="ws-banner" class="banner" role="alert" hidden>실시간 연결이 끊겼습니다. 다시 연결하는 중입니다 — 화면이 최신이 아닐 수 있습니다.</div>
   <header class="top">
     <div>
-      <h1>Foreman <span class="muted">HITL Multi-Agent Dev Platform<span id="demo-tag" hidden> · 데모</span></span></h1>
-      <p class="lead">
-        Goal 한 문장 → AI 에이전트 팀이 <b>Plan → Issue → 브랜치 → PR</b>을 만들고,
-        사람은 <b>Plan 승인</b>과 <b>PR 머지</b>만 합니다.
-      </p>
+      <h1>Foreman<span class="muted" id="demo-tag" hidden> · 데모</span></h1>
+      <p class="lead">만들 기능을 한 문장으로 적으면 AI가 <b>Plan → Issue → 코드 → PR</b>까지 만듭니다. 사람은 <b>Plan 승인</b>과 <b>PR 머지</b>만 합니다.</p>
     </div>
     <nav class="links" aria-label="바로가기">
       <a id="repo-link" href="#" target="_blank" rel="noopener" hidden>대상 GitHub repo ↗</a>
@@ -26,11 +23,20 @@
   </header>
 
   <details class="howto" id="howto">
-    <summary>사용 방법 (3단계)</summary>
+    <summary>사용 방법 — 처음이라면 이 순서대로 (6단계)</summary>
     <ol>
-      <li><b>Goal 만들기</b> — 만들 기능을 한 문장으로 적고 "Goal 생성". 잠시 뒤 Plan이 올라옵니다.</li>
-      <li><b>Plan 승인</b> — Plan 본문을 읽고 <b>Approve</b>. Task가 GitHub Issue로 만들어지고 워커 컨테이너가 코드를 씁니다.</li>
-      <li><b>PR 머지</b> — Task마다 draft PR이 생깁니다. <b>머지는 repo 소유자가 GitHub에서</b> 합니다. 머지되면 Task가 완료되고 다음 Task가 배정됩니다.</li>
+      <li><b>내 GitHub 저장소를 준비합니다</b> — AI가 코드를 써 넣을 곳입니다. 새로 만든다면 GitHub의 <b>New repository</b> 화면에서 <b>Add a README file</b>에 체크하세요.
+        <span class="small muted">파일이 하나도 없는 빈 저장소는 연결되지 않습니다. 이미 쓰던 저장소가 있으면 그걸 써도 됩니다.</span></li>
+      <li><b>Foreman 앱을 그 저장소에 설치합니다</b> — 아래 <b>내 GitHub repo 연결</b>을 펼치고 <b>① GitHub App 설치</b>를 누릅니다. GitHub 화면이 열리면 <b>Only select repositories</b>에서 1단계의 저장소만 고르고 <b>Install</b>.
+        <span class="small muted">AI가 그 저장소에 Issue·브랜치·PR을 만들 권한을 받는 단계입니다. 다른 저장소는 건드리지 않습니다.</span></li>
+      <li><b>저장소를 연결합니다</b> — 이 화면으로 돌아와 <b>② repo</b> 칸에 <code>내아이디/저장소이름</code>을 적고 <b>점검</b>을 누릅니다. 목록이 초록 ✔이면 <b>연결</b>을 누릅니다.
+        <span class="small muted">노란 △는 경고일 뿐이라 그냥 연결해도 됩니다. 빨강 ✘이면 1·2단계를 다시 확인하세요.</span></li>
+      <li><b>만들고 싶은 것을 한 문장으로 적습니다</b> — <b>새 Goal</b> 칸에 적고 <b>Goal 생성</b>을 누릅니다. 뭘 적을지 막막하면 <b>예시 Goal</b>을 눌러 그대로 써 보세요.
+        <span class="small muted">한 번에 기능 하나 정도가 가장 잘 됩니다. 1~3분 뒤 AI가 만든 <b>Plan</b>(작업 계획)이 아래에 올라옵니다.</span></li>
+      <li><b>Plan을 읽고 승인합니다</b> — 계획이 괜찮으면 <b>Approve</b>를 누릅니다. 버튼 대신 안내문이 보이면, GitHub에 올라온 Plan 글에 <code>/approve</code>라고 댓글을 다세요. 같은 효과입니다.
+        <span class="small muted">승인해야 작업이 시작됩니다. 내용이 마음에 안 들면 <b>Reject</b>로 이 Goal을 접고 문장을 바꿔 다시 만드세요.</span></li>
+      <li><b>PR을 확인하고 머지합니다</b> — 작업마다 PR(코드 변경 제안)이 생깁니다. GitHub에서 <b>Files changed</b>로 내용을 보고 괜찮으면 <b>Merge pull request</b>를 누르세요.
+        <span class="small muted">머지는 저장소 주인만 할 수 있습니다. 하나 머지할 때마다 다음 작업이 시작되고, 전부 끝나면 Goal이 <b>완료</b>가 됩니다.</span></li>
     </ol>
     <p class="muted small" id="demo-note"></p>
   </details>
@@ -61,7 +67,7 @@
 
       <form id="goal-form">
         <label class="field"><span>새 Goal</span>
-          <input id="goal-title" name="title" maxlength="300" placeholder="만들 기능을 한 문장으로 (영어 권장)" required>
+          <input id="goal-title" name="title" maxlength="300" placeholder="만들 기능을 한 문장으로" required>
         </label>
         <details class="examples-box">
           <summary class="small">예시 Goal</summary>
