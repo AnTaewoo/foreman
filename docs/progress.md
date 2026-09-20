@@ -254,3 +254,4 @@
 | 2026-09-20T20:41 | P9.20 | 완료 | 보드 done (docs/progress.md의 P9.16~P9.19 시각을 실제 커밋 시각으로 정정) | |
 | 2026-09-20T20:50 | P9.21 | Green+Gate | 사용 방법 2단계 "Foreman 앱" → App 페이지 앵커(#howto-app), install_url 있으면 같은 링크로 교체; make check 577 | |
 | 2026-09-20T20:51 | P9.21 | 완료 | 보드 done | |
+| 2026-09-20T20:58 | P9.22 | Green+Gate | 1단계에 Discussions·Plans 선택 안내(없으면 Issue); make check 577 | |
