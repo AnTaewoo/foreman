@@ -296,7 +296,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P9.16 | 콘솔 문구: 사용 방법 제목 "사용방법 6단계", 데모 모드가 아니면 계정 안내줄 제거 (§6 2026-09-20 P9.16) | P9.15 | done | c1a3ca8 |
 | P9.17 | 이벤트 로그의 "프로젝트 전체 보기" 체크박스 제거 (§6 2026-09-20 P9.17) | P9.16 | done | 344eee6 |
 | P9.18 | 콘솔: 프로젝트 삭제를 "보관"이라 부르지 않기 + 삭제가 바로 반영(projection 대기) (§6 2026-09-20 P9.18) | P9.17 | done | 64787b2 |
-| P9.19 | 사람이 보는 메시지에서 archived/보관 제거 — 409 detail과 취소 사유를 deleted로 (§6 2026-09-20 P9.19) | P9.18 | running | |
+| P9.19 | 사람이 보는 메시지에서 archived/보관 제거 — 409 detail과 취소 사유를 deleted로 (§6 2026-09-20 P9.19) | P9.18 | done | 2b43fdf |
 | **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending (배포 대기 — 사용자 sudo 단계) | docs/pc/PC-9.md |
 
 ---

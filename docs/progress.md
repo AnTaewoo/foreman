@@ -249,3 +249,4 @@
 | 2026-09-20T21:13 | P9.18 | 완료 | 보드 done | |
 | 2026-09-20T21:25 | P9.19 | 착수+Red | 409 detail·취소 사유를 deleted로 (이벤트 필드 archived는 유지) | |
 | 2026-09-20T21:30 | P9.19 | Green+Gate | 409 detail 2개·goal.cancelled.reason을 deleted로, 이벤트 필드/컬럼은 그대로; README 재연결 문구 제거·GitHub 유지 안내 강조; make check 577 | |
+| 2026-09-20T21:31 | P9.19 | 완료 | 보드 done | |
