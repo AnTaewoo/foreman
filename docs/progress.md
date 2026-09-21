@@ -268,3 +268,6 @@
 | 2026-09-21T14:43 | P9.25 | Green | nested_project_root + 러너 Plan 전 취소(repo_subfolder); make test 594; 캐시 repo 14개 중 RhythmTasker만 감지 | 71010cf |
 | 2026-09-21T14:44 | P9.25 | Gate+완료 | make check 594 exit 0, 보드 done, control plane 재시작으로 라이브 반영 | 71010cf |
 | 2026-09-21T14:48 | P9.26 | 착수 | Goal 숨기기 필터: 선택된 Goal 예외 제거 + 선택 이동 | |
+| 2026-09-21T14:49 | P9.26 | Red | test_hide_ended_goals_applies_to_selected_goal — visibleGoals에 state.goalId 예외 | 3a2097b |
+| 2026-09-21T14:49 | P9.26 | Green | visibleGoals 예외 제거 + keepSelectionVisible/clearGoal + 부팅 ?goal= 필터 | 3975fe8 |
+| 2026-09-21T14:50 | P9.26 | Gate+완료 | 1차 fail(ruff format 따옴표) → 2차 make check 595 exit 0; 보드 done; 정적 파일이라 재시작 없이 라이브 | 3975fe8 |
