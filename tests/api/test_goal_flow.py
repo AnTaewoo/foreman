@@ -626,3 +626,39 @@ async def test_resolve_project_prefers_live_newest_and_ignores_case(
         await pump()
     ref = await service.resolve_project("org/demo")
     assert ref is not None and ref.project_id == new and new != old
+
+
+# P9.25: 프로젝트가 하위 폴더 하나에 있으면 Plan(LLM) 전에 Goal을 취소하고 이유를 남긴다
+async def test_nested_project_cancels_goal_before_plan(
+    factory: async_sessionmaker[AsyncSession], redis: Redis, pump: Pump, tmp_path: Path
+) -> None:
+    repo = tmp_path / "repo"
+    for f in ("RhythmTasker/requirements.txt", "RhythmTasker/tests/test_a.py", "README.md"):
+        (repo / f).parent.mkdir(parents=True, exist_ok=True)
+        (repo / f).write_text("x\n")
+    provider = FakeProvider(script=[PLAN_JSON, DECOMPOSE_JSON])
+    runner = GoalRunner(
+        factory=factory,
+        bus=EventBus(redis),
+        provider=provider,
+        github=DryRunGitHubClient(),
+        discussions=DryRunDiscussionsClient(),
+        checkpointer=MemorySaver(),
+        repo_path_for=lambda _repo: repo,
+        min_tasks=1,
+    )
+    app1 = create_app(
+        Settings(_env_file=None, github_webhook_secret=SECRET),
+        factory=factory,
+        redis=redis,
+        runner=runner,
+    )
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app1), base_url="http://t") as c:
+        pid, gid = await start_goal(c, pump, runner)
+        g = (await c.get(f"/projects/{pid}/goals/{gid}")).json()
+    assert g["status"] == "cancelled"
+    ev = (await events_of(factory, "goal.cancelled"))[-1]
+    assert ev.payload["reason"].startswith("repo_subfolder") and ev.payload["by"] == "system"
+    assert "'RhythmTasker/'" in ev.payload["reason"]
+    assert provider.calls == []  # LLM 호출 0 — Plan 전에 멈춘다
+    assert await events_of(factory, "goal.plan_proposed") == []
