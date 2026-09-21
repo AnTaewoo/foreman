@@ -184,3 +184,18 @@ async def test_demo_info_install_url_cached(monkeypatch: pytest.MonkeyPatch) -> 
     assert await cache.get(object()) == await cache.get(object())
     assert calls == ["app"]
     assert await app_mod.InstallUrl(dry_run=True).get(object()) is None
+
+
+# 사용자 지적 2026-09-21 (P9.26): "완료된 goal 숨기기 안먹힌다" — 선택된 Goal을 예외로 남겨
+# Goal이 하나뿐인데 취소된 프로젝트에선 체크해도 변화가 없었다(선택은 ?goal=로 새로고침에도 유지)
+async def test_hide_ended_goals_applies_to_selected_goal(client: httpx.AsyncClient) -> None:
+    js = (await client.get("/static/demo.js")).text
+    visible = re.search(r"const visibleGoals = \(\) =>(.*?);\n", js)
+    assert visible, "visibleGoals"
+    assert "state.goalId" not in visible.group(1)  # 선택된 Goal도 숨긴다
+    # 체크하면 숨겨진 선택을 보이는 첫 Goal로 옮기고, 없으면 상세를 닫는다
+    assert "function clearGoal" in js and 'setUrl({ goal: null })' in js
+    onchange = re.search(r'\$\("goal-filter"\)\.onchange = (.*?)\n', js)
+    assert onchange and "keepSelectionVisible" in onchange.group(1)
+    # 부팅: ?goal=도 필터를 따른다
+    assert "visibleGoals().find((g) => g.id === wanted)" in js
