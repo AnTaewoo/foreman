@@ -388,3 +388,40 @@ async def test_runtime_wires_pusher_only_in_real_mode(
         real.repo_cache.url_for("org/demo")
         == "https://x-access-token:ghs_x@github.com/org/demo.git"
     )
+
+
+# P9.24: 환경 실패(repo 의존성이 워커에 없음) → Issue에 원인과 할 일을 한 번 안내
+async def test_pr_opener_posts_environment_comment(
+    factory: async_sessionmaker[AsyncSession], redis: Redis, tmp_path: Path
+) -> None:
+    from control_plane.pr_opener import PrOpener
+
+    repo = str(tmp_path)
+    await publish_all(
+        factory, redis, [*bootstrap("P1", "G1", repo), task_created("P1", "G1", "T1", ["a/**"], 12)]
+    )
+    await project_all(factory, redis, "P1")
+    github = DryRunGitHubClient()
+    opener = PrOpener(factory, EventBus(redis), github)
+    blocked = ev(
+        "P1",
+        EventType.TASK_BLOCKED,
+        "task",
+        "T1",
+        {
+            "reason": "environment",
+            "run_id": "R1",
+            "modules": {"hypothesis": ["RhythmTasker/tests/test_task_properties.py"]},
+            "test_output": "E   ModuleNotFoundError: No module named 'hypothesis'",
+        },
+        correlation_id="G1",
+        actor=AGENT,
+    )
+    await opener.handle(delivery(blocked))
+    comments = github.snapshot()["repos"][repo]["issues"][12]["comments"]
+    assert len(comments) == 1 and comments[0]["key"] == "environment:R1"
+    body = comments[0]["body"]
+    assert "실행 환경" in body and "`hypothesis`" in body
+    assert "RhythmTasker/tests/test_task_properties.py" in body
+    await opener.handle(delivery(blocked))
+    assert len(github.snapshot()["repos"][repo]["issues"][12]["comments"]) == 1
