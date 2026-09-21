@@ -35,6 +35,7 @@ from control_plane.orchestrator.graph import (
     build_graph,
     open_postgres_checkpointer,
 )
+from control_plane.orchestrator.repo_layout import nested_project_root
 from control_plane.orchestrator.state import OrchestratorState, initial_state
 from control_plane.repo_cache import RepoUnavailable
 from control_plane.store import models as m
@@ -206,6 +207,10 @@ class GoalRunner:
             if self.token_provider is not None:  # D-41: 동기 clone 전에 토큰을 신선하게 (PC-7 발견)
                 await self.token_provider.prepare(repo_full_name)  # P9.9: 그 repo의 installation
             repo_path = await asyncio.to_thread(self._repo_path_for, repo_full_name)
+            nested = await asyncio.to_thread(nested_project_root, Path(repo_path))
+            if nested is not None:  # P9.25: Plan(LLM) 전에 멈춘다 — 경로·테스트가 전부 어긋난다
+                await self._cancel_nested(project_id, goal_id, nested)
+                return
             state = initial_state(
                 project_id=project_id,
                 goal_id=goal_id,
@@ -252,6 +257,25 @@ class GoalRunner:
                 )
             except Exception as pub_exc:  # 취소 발행마저 실패하면 로그만 (DB 다운 등)
                 log.error("runner.cancel_failed", goal_id=goal_id, error=repr(pub_exc))
+
+    async def _cancel_nested(self, project_id: str, goal_id: str, folder: str) -> None:
+        reason = (
+            f"repo_subfolder: 프로젝트 파일이 '{folder}/' 폴더 안에 있습니다. Foreman은 repo "
+            "루트를 프로젝트 루트로 씁니다 — 파일을 루트로 옮긴 뒤 새 Goal을 만들어 주세요."
+        )
+        log.warning("runner.repo_subfolder", goal_id=goal_id, folder=folder)
+        self.errors[goal_id] = reason
+        await self.publish(
+            Event(
+                project_id=project_id,
+                actor=Actor(type="system", id="orchestrator"),
+                type=EventType.GOAL_CANCELLED,
+                subject=Subject(entity="goal", id=goal_id),
+                payload={"reason": reason, "by": "system"},
+                correlation_id=goal_id,
+                causation_id=None,
+            )
+        )
 
     def _after_invoke(self, project_id: str, goal_id: str, out: dict[str, Any]) -> None:
         if "__interrupt__" in out:
