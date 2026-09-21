@@ -303,6 +303,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P9.23 | 분해: 문서를 쓰는 research Task는 유지, 고아 test-only Task는 구현 dependent에 합침 (§6 2026-09-21 P9.23) | P9.22 | done | 1752588 |
 | P9.24 | 워커: 기존 테스트의 외부 모듈 누락(환경 문제)은 재시도 없이 `task.blocked{environment}` + Issue 안내 (§6 2026-09-21 P9.24) | P9.23 | done | f847841 |
 | P9.25 | 러너: 프로젝트 파일이 하위 폴더 하나에만 있으면 Plan 전에 Goal 취소 + 사유 `repo_subfolder` (§6 2026-09-21 P9.25) | P9.24 | done | 71010cf |
+| P9.26 | 콘솔: "취소·완료된 Goal 숨기기"가 선택된 Goal도 숨기고 선택을 옮김 (§6 2026-09-21 P9.26) | P9.25 | running | |
 | **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending (배포 대기 — 사용자 sudo 단계) | docs/pc/PC-9.md |
 
 ---
@@ -311,6 +312,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 
 | 일시 | Task | 사유 | 옵션 / 필요한 조치 |
 |---|---|---|---|
+| 2026-09-21 | (기록) P9.26 Goal 숨기기 필터 | 사용자 지적 | "취소 또는 완료된 goal 숨기기 안먹힌다". 원인: `visibleGoals`가 선택된 Goal을 예외로 남기고(`|| g.id === state.goalId`), 선택은 `?goal=`로 새로고침에도 유지 → Goal이 하나뿐인데 취소된 프로젝트(melpes)에선 체크해도 변화 없음. 수정: 예외 제거, 체크 시 선택된 Goal이 숨겨지면 보이는 첫 Goal로 옮기고 없으면 상세를 닫고 `?goal=`을 지운다; 부팅 때 `?goal=`도 필터를 따른다 |
 | 2026-09-21 | (기록) P9.25 하위 폴더 repo 차단 | 사용자 결정 | "하위폴더 감지되면 goal 취소시키고 이유에 하위폴더 추가" + 제안한 시점·조건 수락. 러너가 clone 직후, Plan LLM 호출 전에 `nested_project_root(repo_path)` — 루트에 코드 파일·manifest(`requirements*.txt`, `pyproject.toml`, `package.json` 등)·`src`/`tests`가 없고, 그런 표식을 가진 최상위 폴더가 **정확히 하나**일 때만 그 폴더 이름. 감지되면 `goal.cancelled{reason: "repo_subfolder: …'<폴더>/'…", by: system}` (P6.6 repo_unavailable과 같은 경로, 콘솔 이벤트 로그에 사유가 그대로). 후보가 둘 이상·루트에 코드가 있으면 막지 않는다(fullstack Test2처럼 루트 app.py + frontend/). 하위 폴더를 실제로 지원(project_root)하는 것은 설계 §10.3 결정 대기. 같은 날 melpes Goal …FR5A5B는 사용자 지시로 운영자 취소 |
 | 2026-09-21 | (기록) P9.24 조정 | 구현 조정 | 착수 전 제안한 "연결 시 기준선 점검(`pytest --collect-only`)"은 뺐다 — 연결 시점에 대상 repo 코드를 돌리려면 control plane이 실행하거나 연결 때 워커를 띄워야 해서 설계 §10.3 변경이다. 대신 워커가 첫 테스트 실패에서 판정(`missing_environment_modules`: 이번 run이 안 쓴 파일 + repo에 없는 모듈의 ModuleNotFoundError) → `task.blocked{environment, modules}` (Scheduler 재시도 없음, projection RUNNING→BLOCKED) + PrOpener Issue 코멘트 `environment:<run>`. 라이브 RhythmTasker였다면 편집 3회×run 3회 대신 첫 테스트(~15초)에서 멈추고 원인 코멘트. 워커 이미지 재빌드 필요(agents/ 변경) |
 | 2026-09-21 | (기록) P9.23·P9.24 외부 repo 라이브 막힘 | 사용자 지시 | melpes/RhythmTasker Goal …FR5A5B(openai): Issue #2(T-2) 3회 `tests_failed` → blocked, #3~#6 대기. 원인 3개: (1) repo 기존 테스트가 `hypothesis` import — 워커에 없음(대상 repo 의존성 미설치, ENVIRONMENT_CONTRACT) (2) 코드가 `RhythmTasker/` 하위 폴더 — 플래너는 루트 가정 (3) 분해가 T-1(research, `spec.md` 작성)을 P9.13 규칙으로 버려 T-2(test 계약)의 의존이 비고, 합치기 규칙은 의존이 없으면 건너뛰어 통과 불가능한 test-only Task가 첫 Task로 남음. 사용자 결정 "1,2 먼저": **P9.23** = (3) 분해 규칙 보완, **P9.24** = 환경 실패를 재시도 없이 차단·안내. (1) 의존성 설치·(2) 하위 폴더 루트 감지는 워커 환경 계약(설계 §10.3) 변경이라 사용자 결정 대기 |

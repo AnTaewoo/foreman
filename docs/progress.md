@@ -267,3 +267,4 @@
 | 2026-09-21T14:42 | P9.25 | Red | test_repo_layout 6개(ModuleNotFoundError repo_layout) + goal_flow 1개(awaiting_plan_approval ≠ cancelled) | 87ddc0c |
 | 2026-09-21T14:43 | P9.25 | Green | nested_project_root + 러너 Plan 전 취소(repo_subfolder); make test 594; 캐시 repo 14개 중 RhythmTasker만 감지 | 71010cf |
 | 2026-09-21T14:44 | P9.25 | Gate+완료 | make check 594 exit 0, 보드 done, control plane 재시작으로 라이브 반영 | 71010cf |
+| 2026-09-21T14:48 | P9.26 | 착수 | Goal 숨기기 필터: 선택된 Goal 예외 제거 + 선택 이동 | |
