@@ -190,7 +190,8 @@
 
   // ---- render ----------------------------------------------------------
   const hideEnded = () => $("goal-filter").checked;
-  const visibleGoals = () => state.goals.filter((g) => !hideEnded() || !ENDED.includes(g.status) || g.id === state.goalId);
+  // P9.26: 선택된 Goal도 예외 없이 — 숨겨지면 keepSelectionVisible이 선택을 옮긴다
+  const visibleGoals = () => state.goals.filter((g) => !hideEnded() || !ENDED.includes(g.status));
   function renderGoals() {
     const ul = $("goals"); ul.innerHTML = "";
     const waiting = state.goals.filter((g) => g.status === "awaiting_plan_approval").length;
@@ -347,6 +348,16 @@
       }
     }, 1000);
   }
+  // P9.26: 필터로 숨긴 Goal을 계속 열어 두지 않는다 — 보이는 첫 Goal로, 없으면 상세를 닫는다
+  function clearGoal() {
+    state.goalId = null; state.goal = null; state.tasks = []; setUrl({ goal: null });
+    $("detail").hidden = true; renderGoals(); renderEvents();
+  }
+  function keepSelectionVisible() {
+    const visible = visibleGoals();
+    if (!state.goalId || visible.some((g) => g.id === state.goalId)) return;
+    if (visible.length) selectGoal(visible[0].id); else clearGoal();
+  }
   async function selectGoal(id, byUser = false) {
     state.goalId = id; state.goal = null; setUrl({ goal: id }); clearError("detail-error"); $("reject-box").hidden = true;
     renderGoals(); renderEvents();
@@ -423,7 +434,7 @@
       } catch (e) { toast(e.message, true); }
     });
   };
-  $("goal-filter").onchange = () => { safeSet("foreman.hideEnded", $("goal-filter").checked ? "1" : ""); renderGoals(); };
+  $("goal-filter").onchange = () => { safeSet("foreman.hideEnded", $("goal-filter").checked ? "1" : ""); renderGoals(); keepSelectionVisible(); };
   $("events-box").ontoggle = renderEvents;
 
   // ---- GitHub repo 연결 (POST /projects) — 점검은 서버가 한다 (P9.10, P9.20) --------------
@@ -460,7 +471,7 @@
       if (!state.project) return;
       await loadGoals(); await loadEvents();
       const wanted = new URLSearchParams(location.search).get("goal");
-      const first = state.goals.find((g) => g.id === wanted) || visibleGoals()[0];
+      const first = visibleGoals().find((g) => g.id === wanted) || visibleGoals()[0];
       if (first) await selectGoal(first.id);
       connectWs();
     } catch (e) { toast(`초기화 실패: ${e.message}`, true); }
