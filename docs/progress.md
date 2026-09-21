@@ -256,3 +256,4 @@
 | 2026-09-20T20:51 | P9.21 | 완료 | 보드 done | |
 | 2026-09-20T20:58 | P9.22 | Green+Gate | 1단계에 Discussions·Plans 선택 안내(없으면 Issue); make check 577 | |
 | 2026-09-20T20:59 | P9.22 | 완료 | 보드 done | |
+| 2026-09-21T14:22 | P9.23 | 착수 | 분해: 문서 research Task 유지 + 고아 test-only를 구현 dependent에 합침 (라이브 FR5A5B) | |

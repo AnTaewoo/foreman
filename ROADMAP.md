@@ -300,6 +300,8 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P9.20 | 콘솔 repo 연결에서 "점검" 단계 제거 — 입력하고 바로 연결 (§6 2026-09-20 P9.20) | P9.19 | done | 147428a |
 | P9.21 | 사용 방법 2단계의 "Foreman 앱"을 App 페이지 링크로 (§6 2026-09-20 P9.21) | P9.20 | done | 045c88d |
 | P9.22 | 사용 방법 1단계에 Discussions·Plans 카테고리 선택 안내 (§6 2026-09-20 P9.22) | P9.21 | done | 11cf1a6 |
+| P9.23 | 분해: 문서를 쓰는 research Task는 유지, 고아 test-only Task는 구현 dependent에 합침 (§6 2026-09-21 P9.23) | P9.22 | running | |
+| P9.24 | 워커: 기존 테스트의 외부 모듈 누락(환경 문제)은 재시도 없이 `task.blocked{environment}` + Issue 안내 (§6 2026-09-21 P9.24) | P9.23 | todo | |
 | **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending (배포 대기 — 사용자 sudo 단계) | docs/pc/PC-9.md |
 
 ---
@@ -308,6 +310,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 
 | 일시 | Task | 사유 | 옵션 / 필요한 조치 |
 |---|---|---|---|
+| 2026-09-21 | (기록) P9.23·P9.24 외부 repo 라이브 막힘 | 사용자 지시 | melpes/RhythmTasker Goal …FR5A5B(openai): Issue #2(T-2) 3회 `tests_failed` → blocked, #3~#6 대기. 원인 3개: (1) repo 기존 테스트가 `hypothesis` import — 워커에 없음(대상 repo 의존성 미설치, ENVIRONMENT_CONTRACT) (2) 코드가 `RhythmTasker/` 하위 폴더 — 플래너는 루트 가정 (3) 분해가 T-1(research, `spec.md` 작성)을 P9.13 규칙으로 버려 T-2(test 계약)의 의존이 비고, 합치기 규칙은 의존이 없으면 건너뛰어 통과 불가능한 test-only Task가 첫 Task로 남음. 사용자 결정 "1,2 먼저": **P9.23** = (3) 분해 규칙 보완, **P9.24** = 환경 실패를 재시도 없이 차단·안내. (1) 의존성 설치·(2) 하위 폴더 루트 감지는 워커 환경 계약(설계 §10.3) 변경이라 사용자 결정 대기 |
 | 2026-09-20 | (기록) P9.22 Discussions·Plans 안내 | 사용자 결정 | "discussion이랑 category(plans) 관련이 없음" → 옵션 중 "6단계에 **선택** 안내로 추가"를 골랐다(필수 단계로 넣거나 아예 빼는 안은 기각). 1단계 밑에 한 줄: Settings → Discussions를 켜고 Plans 카테고리를 만들면 Plan이 Discussion으로, 없으면 Issue로 올라간다(P9.11) — 안 해도 된다고 분명히 적는다. 단계 수는 6개 그대로 |
 | 2026-09-20 | (기록) P9.21 사용 방법 2단계 링크 | 사용자 지시 | "6단계 중 2번 foreman을 a태그로 하고 https://github.com/apps/foreman-antaewoo 링크". `#howto-app`으로 두고 기본 href는 그 주소를 그대로 박되, `/demo`의 `install_url`(P9.11: `GET /app` slug에서 만든 설치 링크)이 있으면 `#install-app`과 같이 그 값으로 바꾼다 — Dry 모드(install_url=null)에서도 링크가 살아 있게 |
 | 2026-09-20 | (기록) P9.20 연결에서 점검 제거 | 사용자 지시 | "github 연결 부분에서 점검 빼자". 중복이라 안전하다 — `POST /projects`(P9.10)가 이미 서버에서 같은 `run_check`를 돌려 installation을 탐지하고(미설치 400 + 설치 링크), 필수 항목 실패는 400 "repo check failed — …"로, 정식 대소문자는 `report.canonical`로 보정한다. 따라서 콘솔은 repo를 적고 **연결** 하나만 누르면 되고, 실패 이유는 `#connect-error`에 그대로 나온다. 지운 것: `#connect-check-btn`, `<ul id="connect-check">`, `renderCheck()`와 그 핸들러, 죽은 CSS(`ul.check`, `.check li.ok/bad/warn`), 사용 방법 3단계·① ② 안내의 "점검" 문구. `GET /projects/check` API는 남긴다(테스트·디버깅용, 콘솔만 안 쓴다) |
