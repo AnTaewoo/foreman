@@ -263,3 +263,4 @@
 | 2026-09-21T14:25 | P9.24 | 착수 | 워커: 기존 테스트의 외부 모듈 누락 → 재시도 없이 task.blocked{environment} + Issue 안내 | |
 | 2026-09-21T14:26 | P9.24 | Red | test_coding_environment 4개 + pr_opener 1개; ImportError missing_environment_modules / 코멘트 없음 | 3a56925 |
 | 2026-09-21T14:29 | P9.24 | Green+Gate+완료 | task.blocked{environment} + Issue 코멘트; make check 587 exit 0; 보드 done (조정: 연결 시 기준선 점검 → 첫 실패 판정) | f847841 |
+| 2026-09-21T14:41 | P9.25 | 착수 | 하위 폴더 repo → Plan 전 Goal 취소(repo_subfolder); melpes Goal 운영자 취소 완료 | |
