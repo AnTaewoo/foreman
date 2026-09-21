@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Any, TypedDict, cast
@@ -57,6 +58,39 @@ def annotate_test_output(exit_code: int, output: str) -> str:
             "owned tests/ path (see owned_paths); write them, then implement]"
         )
     return output
+
+
+_FRAME_RE = re.compile(r"^([\w./-]+\.py):\d+: in ")
+_MISSING_RE = re.compile(r"^E\s+ModuleNotFoundError: No module named '([\w.]+)'")
+
+
+def _repo_has_module(worktree: Path, top: str) -> bool:
+    for _dir, dirs, files in os.walk(worktree):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        if top in dirs or f"{top}.py" in files:
+            return True
+    return False
+
+
+def missing_environment_modules(
+    output: str, worktree: Path, touched: list[str]
+) -> dict[str, list[str]]:
+    """P9.24: 편집으로 못 고치는 실패 — 이번 run이 안 건드린 파일이 repo에 없는 모듈을 import.
+    {모듈: [그 모듈을 import한 파일]}. repo 안 모듈이나 에이전트가 쓴 파일의 누락은 제외."""
+    found: dict[str, list[str]] = {}
+    frame: str | None = None
+    for line in output.splitlines():
+        if m := _FRAME_RE.match(line):
+            frame = m.group(1)
+        elif (m := _MISSING_RE.match(line)) and frame is not None:
+            module, file = m.group(1).split(".")[0], frame
+            frame = None
+            if file in touched or _repo_has_module(worktree, module):
+                continue
+            files = found.setdefault(module, [])
+            if file not in files:
+                files.append(file)
+    return found
 
 
 SYSTEM_PROMPT = load_prompt(
@@ -132,6 +166,8 @@ class CodingState(TypedDict, total=False):
     error: str | None
     denied_files: list[str]
     dependency_files: list[str]
+    touched: list[str]  # P9.24: 이번 run에서 쓴 파일 (편집 누적)
+    environment: dict[str, list[str]]  # P9.24: 누락 외부 모듈 → import한 파일
     summary: str
     tokens_in: int
     tokens_out: int
@@ -284,7 +320,16 @@ class CodingAgent(BaseAgent):
                 return {"attempt": attempt, "denied_files": unowned, "outcome": "failed"}
             for f in plan.files:
                 await fs.write(f.path, f.content)
-            return {"attempt": attempt, "edit": plan.model_dump(), "denied_files": []}
+            touched = list(state.get("touched") or [])
+            touched += [
+                ctx.relative(f.path) for f in plan.files if ctx.relative(f.path) not in touched
+            ]
+            return {
+                "attempt": attempt,
+                "edit": plan.model_dump(),
+                "denied_files": [],
+                "touched": touched,
+            }
 
         def route_after_edit(state: CodingState) -> str:
             if state.get("denied_files"):
@@ -346,11 +391,22 @@ class CodingAgent(BaseAgent):
             output = annotate_test_output(
                 result.exit_code, (result.stdout + "\n" + result.stderr).strip()
             )
-            return {"tests_passed": result.exit_code == 0, "test_output": output}
+            env: dict[str, list[str]] = {}
+            if result.exit_code != 0:
+                env = missing_environment_modules(
+                    output, ctx.worktree, list(state.get("touched") or [])
+                )
+            return {
+                "tests_passed": result.exit_code == 0,
+                "test_output": output,
+                "environment": env,
+            }
 
         def route_after_tests(state: CodingState) -> str:
             if state.get("tests_passed"):
                 return "push"
+            if state.get("environment"):
+                return "environment"  # P9.24: 편집으로 못 고친다 — 재시도 없이 멈춘다
             return "edit" if int(state.get("attempt", 0)) < input.task.max_attempts else "fail"
 
         async def fail(state: CodingState) -> dict[str, Any]:
@@ -379,6 +435,26 @@ class CodingAgent(BaseAgent):
             return {
                 "outcome": "failed",
                 "error": f"tests failed after {state.get('attempt')} edit rounds",
+            }
+
+        async def environment(state: CodingState) -> dict[str, Any]:
+            modules = dict(state.get("environment") or {})
+            await emit(
+                EventType.TASK_BLOCKED,
+                "task",
+                input.task.id,
+                {
+                    "run_id": input.run_id,
+                    "reason": "environment",
+                    "attempt": input.task.attempt,
+                    "edit_rounds": int(state.get("attempt", 0)),
+                    "modules": modules,
+                    "test_output": str(state.get("test_output") or "")[-2000:],
+                },
+            )
+            return {
+                "outcome": "blocked",
+                "error": f"environment: missing modules {sorted(modules)}",
             }
 
         async def push(state: CodingState) -> dict[str, Any]:
@@ -426,6 +502,7 @@ class CodingAgent(BaseAgent):
             ("commit", commit),
             ("run_tests", run_tests),
             ("fail", fail),
+            ("environment", environment),
             ("push", push),
             ("summarize", summarize),
         ):
@@ -451,9 +528,12 @@ class CodingAgent(BaseAgent):
         g.add_edge("needs_decision", END)
         g.add_edge("commit", "run_tests")
         g.add_conditional_edges(
-            "run_tests", route_after_tests, {"push": "push", "edit": "edit", "fail": "fail"}
+            "run_tests",
+            route_after_tests,
+            {"push": "push", "edit": "edit", "fail": "fail", "environment": "environment"},
         )
         g.add_edge("fail", END)
+        g.add_edge("environment", END)
         g.add_edge("push", "summarize")
         g.add_edge("summarize", END)
         graph = g.compile()

@@ -171,6 +171,9 @@ class PrOpener:
     async def _handle_blocked(self, event: Event) -> None:
         """3차 라이브 #2: needs_decision 안내 코멘트는 워커(Dry)가 아니라 control plane이 올린다."""
         payload = event.payload
+        if payload.get("reason") == "environment":
+            await self._handle_environment(event)
+            return
         if payload.get("reason") != "needs_decision":
             return
         run_id = str(payload.get("run_id") or "")
@@ -193,6 +196,35 @@ class PrOpener:
             project.repo_full_name, task.issue_number, body, key=f"needs-decision:{run_id}"
         )
         log.info("pr_opener.needs_decision_reported", task_id=task.id, run_id=run_id)
+
+    async def _handle_environment(self, event: Event) -> None:
+        """P9.24: repo가 워커에 없는 패키지를 import — 재시도로 못 고친다, 원인을 안내."""
+        payload = event.payload
+        run_id = str(payload.get("run_id") or "")
+        key = (event.project_id, event.subject.id, f"environment:{run_id}")
+        if key in self._failed_seen:
+            return
+        async with self._factory() as s:
+            task = await s.get(m.Task, event.subject.id)
+            project = await s.get(m.Project, event.project_id)
+        if task is None or project is None or task.issue_number is None:
+            return
+        self._failed_seen.add(key)
+        modules = payload.get("modules") or {}
+        lines = "\n".join(
+            f"- `{mod}` ← " + ", ".join(f"`{f}`" for f in files) for mod, files in modules.items()
+        )
+        body = (
+            "**실행 환경 문제로 멈췄습니다** — 이 repo의 기존 파일이 Foreman 워커에 설치되지 않은 "
+            f"패키지를 import해서 테스트(`pytest -q`)를 실행할 수 없습니다.\n\n{lines}\n\n"
+            "워커는 Python 3.12 + pytest·flask·httpx·pydantic·sqlalchemy만 갖고 있고, repo의 "
+            "requirements·pyproject를 설치하지 않습니다. 코드를 고쳐서 해결되는 문제가 아니라 "
+            "재시도하지 않았습니다. 위 패키지가 없어도 도는 repo에서 다시 시도해 주세요."
+        )
+        await self._github.comment(
+            project.repo_full_name, task.issue_number, body, key=f"environment:{run_id}"
+        )
+        log.info("pr_opener.environment_reported", task_id=task.id, run_id=run_id)
 
     async def _handle_failed(self, event: Event) -> None:
         """P9 bug #5: push the failed attempt WIP branch and comment the test tail (no PR)."""
