@@ -257,3 +257,7 @@
 | 2026-09-20T20:58 | P9.22 | Green+Gate | 1단계에 Discussions·Plans 선택 안내(없으면 Issue); make check 577 | |
 | 2026-09-20T20:59 | P9.22 | 완료 | 보드 done | |
 | 2026-09-21T14:22 | P9.23 | 착수 | 분해: 문서 research Task 유지 + 고아 test-only를 구현 dependent에 합침 (라이브 FR5A5B) | |
+| 2026-09-21T14:23 | P9.23 | Red | test_decompose_orphans 5개, 라이브 FR5A5B 재현 2 fail(분해 결과가 라이브와 동일) | e6f1583 |
+| 2026-09-21T14:24 | P9.23 | Green | 문서 research 유지(role coding, kind research) + 고아 test-only를 구현 dependent에 합침(사이클 가드); make test 582 | 1752588 |
+| 2026-09-21T14:25 | P9.23 | Gate+완료 | make check 582 exit 0, 보드 done | 1752588 |
+| 2026-09-21T14:25 | P9.24 | 착수 | 워커: 기존 테스트의 외부 모듈 누락 → 재시도 없이 task.blocked{environment} + Issue 안내 | |

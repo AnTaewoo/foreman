@@ -300,8 +300,8 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P9.20 | 콘솔 repo 연결에서 "점검" 단계 제거 — 입력하고 바로 연결 (§6 2026-09-20 P9.20) | P9.19 | done | 147428a |
 | P9.21 | 사용 방법 2단계의 "Foreman 앱"을 App 페이지 링크로 (§6 2026-09-20 P9.21) | P9.20 | done | 045c88d |
 | P9.22 | 사용 방법 1단계에 Discussions·Plans 카테고리 선택 안내 (§6 2026-09-20 P9.22) | P9.21 | done | 11cf1a6 |
-| P9.23 | 분해: 문서를 쓰는 research Task는 유지, 고아 test-only Task는 구현 dependent에 합침 (§6 2026-09-21 P9.23) | P9.22 | running | |
-| P9.24 | 워커: 기존 테스트의 외부 모듈 누락(환경 문제)은 재시도 없이 `task.blocked{environment}` + Issue 안내 (§6 2026-09-21 P9.24) | P9.23 | todo | |
+| P9.23 | 분해: 문서를 쓰는 research Task는 유지, 고아 test-only Task는 구현 dependent에 합침 (§6 2026-09-21 P9.23) | P9.22 | done | 1752588 |
+| P9.24 | 워커: 기존 테스트의 외부 모듈 누락(환경 문제)은 재시도 없이 `task.blocked{environment}` + Issue 안내 (§6 2026-09-21 P9.24) | P9.23 | running | |
 | **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending (배포 대기 — 사용자 sudo 단계) | docs/pc/PC-9.md |
 
 ---
