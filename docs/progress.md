@@ -264,3 +264,6 @@
 | 2026-09-21T14:26 | P9.24 | Red | test_coding_environment 4개 + pr_opener 1개; ImportError missing_environment_modules / 코멘트 없음 | 3a56925 |
 | 2026-09-21T14:29 | P9.24 | Green+Gate+완료 | task.blocked{environment} + Issue 코멘트; make check 587 exit 0; 보드 done (조정: 연결 시 기준선 점검 → 첫 실패 판정) | f847841 |
 | 2026-09-21T14:41 | P9.25 | 착수 | 하위 폴더 repo → Plan 전 Goal 취소(repo_subfolder); melpes Goal 운영자 취소 완료 | |
+| 2026-09-21T14:42 | P9.25 | Red | test_repo_layout 6개(ModuleNotFoundError repo_layout) + goal_flow 1개(awaiting_plan_approval ≠ cancelled) | 87ddc0c |
+| 2026-09-21T14:43 | P9.25 | Green | nested_project_root + 러너 Plan 전 취소(repo_subfolder); make test 594; 캐시 repo 14개 중 RhythmTasker만 감지 | 71010cf |
+| 2026-09-21T14:44 | P9.25 | Gate+완료 | make check 594 exit 0, 보드 done, control plane 재시작으로 라이브 반영 | 71010cf |
