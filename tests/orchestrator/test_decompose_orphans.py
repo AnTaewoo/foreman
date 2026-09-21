@@ -44,7 +44,9 @@ def live_fr5a5b() -> dict[str, Any]:
         "tasks": [
             _task(T1, "research", ["spec.md"], [], role="research"),
             _task(T2, "test", ["tests/test_rhythm_model.py"], [T1], role="test"),
-            _task(T3, "feature", ["src/core/rhythm_model.py", "tests/test_rhythm_model.py"], [T1, T2]),
+            _task(
+                T3, "feature", ["src/core/rhythm_model.py", "tests/test_rhythm_model.py"], [T1, T2]
+            ),
             _task(
                 T4, "feature",
                 ["src/core/bpm_controller.py", "tests/test_bpm_controller_properties.py"], [T3],
@@ -134,7 +136,8 @@ async def test_reverse_merge_skips_when_it_would_create_a_cycle() -> None:
         "epics": [{"title": "E", "order": 1, "summary": "s"}],
         "tasks": [
             _task("Contract", "test", ["tests/test_engine.py"], [], role="test"),
-            _task("Fixtures", "feature", ["src/fixtures.py", "tests/test_fixtures.py"], ["Contract"]),
+            _task("Fixtures", "feature", ["src/fixtures.py", "tests/test_fixtures.py"],
+                  ["Contract"]),
             _task("Engine", "feature", ["src/engine.py", "tests/test_engine.py"],
                   ["Contract", "Fixtures"]),
         ],

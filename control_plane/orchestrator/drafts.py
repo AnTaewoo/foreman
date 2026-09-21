@@ -444,20 +444,40 @@ def _is_non_code(t: TaskDraft) -> bool:
     return t.role_required in _NON_CODE_ROLES
 
 
+_DOC_FILE_RE = re.compile(r"(^|/)docs?/|\.(md|rst|adoc)$", re.I)
+
+
+def _writes_own_doc(t: TaskDraft, tasks: list[TaskDraft]) -> bool:
+    """P9.23: 문서만, 그것도 혼자 소유하면 산출물이 있는 일 (라이브 FR5A5B T-1 ``spec.md``).
+    소스를 함께 소유하거나(A05F06 조사) 남의 문서를 소유하면(README 검토) 버릴 Task."""
+    others = {p for o in tasks if o is not t for p in o.owned_paths}
+    return bool(t.owned_paths) and all(
+        _DOC_FILE_RE.search(p) and p not in others for p in t.owned_paths
+    )
+
+
 def drop_non_code_tasks(result: DecomposeResult) -> tuple[DecomposeResult, list[str]]:
     """P9.13: MVP 1에는 Coding Agent뿐 — 조사·검토 Task는 버리고 의존을 재배선한다.
-    전부 비코드면 버리지 않고 coding/feature로 바꾼다(빈 Goal 방지)."""
+    전부 비코드면 버리지 않고 coding/feature로 바꾼다(빈 Goal 방지).
+    P9.23: 제 문서를 쓰는 Task는 role만 coding으로 — kind research라 테스트 경로는 안 요구한다."""
     tasks = list(result.tasks)
+    kept_docs = [t for t in tasks if _is_non_code(t) and _writes_own_doc(t, tasks)]
+    for t in kept_docs:
+        t.role_required, t.kind = "coding", "research"
+    doc_notes = [f"kept doc task '{t.title}' as coding (owns {t.owned_paths})" for t in kept_docs]
     non_code = [t for t in tasks if _is_non_code(t)]
     if not non_code:
-        return result, []
+        return result, doc_notes
     if len(non_code) == len(tasks):
         for t in tasks:
             t.role_required, t.kind = "coding", "feature"
-        return result, [f"only non-code tasks — kept as coding: {[t.title for t in tasks]}"]
+        return result, [
+            *doc_notes,
+            f"only non-code tasks — kept as coding: {[t.title for t in tasks]}",
+        ]
     dropped = {t.title: list(t.depends_on) for t in non_code}
     kept = [t for t in tasks if t.title not in dropped]
-    notes = [
+    notes = doc_notes + [
         f"dropped non-code task '{t.title}' (role {t.role_required}, kind {t.kind})"
         for t in non_code
     ]
@@ -504,6 +524,24 @@ def _owns_stem(c: TaskDraft, stems: set[str]) -> bool:
     )
 
 
+def _implementing_dependent(
+    tasks: list[TaskDraft], t: TaskDraft, stems: set[str]
+) -> TaskDraft | None:
+    """t에 의존하며 t가 시험하는 모듈(또는 같은 테스트 파일)을 소유한 구현 Task (P9.23).
+    합친 뒤 t의 다른 dependent가 그 Task를 가리키므로, 그 Task가 그들에 닿으면(사이클) 없음."""
+    dependents = [o for o in tasks if o is not t and t.title in o.depends_on]
+    shared = set(t.owned_paths)
+    for d in dependents:
+        if all(is_test_path(p) for p in d.owned_paths):
+            continue
+        if not (_owns_stem(d, stems) or shared & set(d.owned_paths)):
+            continue
+        if any(_reaches(tasks, d.title, o.title) for o in dependents if o is not d):
+            return None
+        return d
+    return None
+
+
 def merge_test_only_tasks(result: DecomposeResult) -> tuple[DecomposeResult, list[str]]:
     """테스트만 소유하고 구현 Task 하나에 의존하는 Task는 그 구현 Task에 합친다 (패턴 2)."""
     notes: list[str] = []
@@ -512,19 +550,27 @@ def merge_test_only_tasks(result: DecomposeResult) -> tuple[DecomposeResult, lis
     merged_into: dict[str, str] = {}
     for t in list(tasks):
         only_tests = bool(t.owned_paths) and all(is_test_path(p) for p in t.owned_paths)
-        if not (only_tests or _is_test_task(t)) or not t.depends_on:
+        if not (only_tests or _is_test_task(t)):
             continue
         candidates = [by_title[d] for d in t.depends_on if d in by_title and by_title[d] is not t]
         candidates = [c for c in candidates if not all(is_test_path(p) for p in c.owned_paths)]
-        if not candidates:
-            continue
         # 3차 라이브 #3: 의존이 여럿이면 test_<stem>과 맞는 모듈을 소유한 Task로, 없으면 마지막
         stems = {
             re.sub(r"^test_|_test$", "", pth.replace("\\", "/").split("/")[-1][:-3])
             for pth in t.owned_paths
             if pth.endswith(".py")
         }
-        target = next((c for c in candidates if _owns_stem(c, stems)), candidates[-1])
+        target = next((c for c in candidates if _owns_stem(c, stems)), None)
+        if target is None:  # P9.23: 먼저 쓰는 테스트 계약 → 그 모듈을 구현하는 dependent로
+            target = _implementing_dependent(tasks, t, stems)
+            if target is not None:
+                target.depends_on = [d for d in target.depends_on if d != t.title] + [
+                    d for d in t.depends_on if d != target.title and d not in target.depends_on
+                ]
+        if target is None and candidates:
+            target = candidates[-1]
+        if target is None:
+            continue
         for p in t.owned_paths:
             if p not in target.owned_paths:
                 target.owned_paths.append(p)
