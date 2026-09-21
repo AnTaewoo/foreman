@@ -194,7 +194,7 @@ async def test_hide_ended_goals_applies_to_selected_goal(client: httpx.AsyncClie
     assert visible, "visibleGoals"
     assert "state.goalId" not in visible.group(1)  # 선택된 Goal도 숨긴다
     # 체크하면 숨겨진 선택을 보이는 첫 Goal로 옮기고, 없으면 상세를 닫는다
-    assert "function clearGoal" in js and 'setUrl({ goal: null })' in js
+    assert "function clearGoal" in js and "setUrl({ goal: null })" in js
     onchange = re.search(r'\$\("goal-filter"\)\.onchange = (.*?)\n', js)
     assert onchange and "keepSelectionVisible" in onchange.group(1)
     # 부팅: ?goal=도 필터를 따른다
