@@ -63,3 +63,26 @@ def test_empty_or_readme_only_repo_is_not_nested(tmp_path: Path) -> None:
     (tmp_path / ".git").mkdir()
     (tmp_path / ".git" / "config").write_text("x")
     assert nested_project_root(tmp_path) is None
+
+
+def test_code_in_other_top_level_folder_is_not_nested(tmp_path: Path) -> None:
+    """P9.27 라이브(hjunhuh/homebrew-cask): ``cmd/``에 .rb 하나, 코드는 ``Casks/a/*.rb`` 깊이에."""
+    make(
+        tmp_path,
+        [
+            "README.md",
+            ".rubocop.yml",
+            "Casks/a/alfred.rb",
+            "Casks/b/brave.rb",
+            "cmd/find-appcast.rb",
+            "developer/bin/generate_cask_token",
+            "doc/cask_language_reference.md",
+        ],
+    )
+    assert nested_project_root(tmp_path) is None
+
+
+def test_non_code_sibling_folder_keeps_detection(tmp_path: Path) -> None:
+    """코드 없는 형제 폴더(assets/)는 판단을 바꾸지 않는다."""
+    make(tmp_path, ["README.md", "assets/logo.png", "app/main.py", "app/requirements.txt"])
+    assert nested_project_root(tmp_path) == "app"
