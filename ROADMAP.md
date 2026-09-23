@@ -304,7 +304,7 @@ P4 Coding Agent+Worker ─PC-4─► P5 API+e2e ─(PC-5 pending, D-40)─► P6
 | P9.24 | 워커: 기존 테스트의 외부 모듈 누락(환경 문제)은 재시도 없이 `task.blocked{environment}` + Issue 안내 (§6 2026-09-21 P9.24) | P9.23 | done | f847841 |
 | P9.25 | 러너: 프로젝트 파일이 하위 폴더 하나에만 있으면 Plan 전에 Goal 취소 + 사유 `repo_subfolder` (§6 2026-09-21 P9.25) | P9.24 | done | 71010cf |
 | P9.26 | 콘솔: "취소·완료된 Goal 숨기기"가 선택된 Goal도 숨기고 선택을 옮김 (§6 2026-09-21 P9.26) | P9.25 | done | 3975fe8 |
-| P9.27 | 러너: `repo_subfolder` 오탐 수정 — 다른 최상위 폴더에 코드가 있으면 하위 폴더 repo가 아님 (§6 2026-09-23 P9.27) | P9.26 | running | |
+| P9.27 | 러너: `repo_subfolder` 오탐 수정 — 다른 최상위 폴더에 코드가 있으면 하위 폴더 repo가 아님 (§6 2026-09-23 P9.27) X
 | **PC-9** | 심사자 워크스루(시크릿 창): showcase 링크, Goal 생성→승인→Issue→PR→머지→done 실시간, 429/401, 재시작 복원, ping | P9.6 | pending (배포 대기 — 사용자 sudo 단계) | docs/pc/PC-9.md |
 
 ---

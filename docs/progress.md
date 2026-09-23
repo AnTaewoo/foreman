@@ -272,3 +272,6 @@
 | 2026-09-21T14:49 | P9.26 | Green | visibleGoals 예외 제거 + keepSelectionVisible/clearGoal + 부팅 ?goal= 필터 | 3975fe8 |
 | 2026-09-21T14:50 | P9.26 | Gate+완료 | 1차 fail(ruff format 따옴표) → 2차 make check 595 exit 0; 보드 done; 정적 파일이라 재시작 없이 라이브 | 3975fe8 |
 | 2026-09-23T19:37 | P9.27 | 착수 | homebrew-cask Goal 16개가 repo_subfolder 'cmd/' 오탐으로 취소 — 감지 규칙 수정 | |
+| 2026-09-23T19:38 | P9.27 | Red | homebrew-cask 레이아웃 테스트 — 'cmd' 반환 | 2fce97e |
+| 2026-09-23T19:38 | P9.27 | Green | 형제 최상위 폴더의 깊은 코드도 셈(os.walk); 캐시 repo 15개 중 RhythmTasker만 감지 | 494bae8 |
+| 2026-09-23T19:38 | P9.27 | Gate+완료 | make check 597 exit 0; 보드 done; 라이브는 control plane 재시작 필요 | 494bae8 |
